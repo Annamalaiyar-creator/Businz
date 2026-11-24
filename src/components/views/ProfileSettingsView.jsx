@@ -1,22 +1,38 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Building2, Globe, Calendar, Clock, Upload, Search, Filter,
-  CheckCircle2, AlertTriangle, Layers, ShieldCheck, Bell, Users,
-  CreditCard, Link2, Sliders, ChevronDown, Save, Sparkles, Check,
-  Laptop, Mail, MessageSquare, Briefcase, Lock, Database, ArrowRight,
-  User, KeyRound, Shield, CheckCircle
+  Building2, ShieldCheck, Bell, CreditCard, Link2,
+  Save, Check, User, KeyRound, Shield, CheckCircle, ArrowRight,
+  Sliders, Globe, MessageSquare, Mail, Share2, Lock, AlertCircle,
+  RefreshCw, CheckCircle2, ArrowLeft
 } from 'lucide-react';
+import ZohoConfigModal from './ZohoConfigModal';
+import IndiaMartSettingsView from '../crm/IndiaMartSettingsView';
 
 export default function ProfileSettingsView({ userRole, onNavigateTab }) {
   const [activeTab, setActiveTab] = useState('general');
-  const [searchQuery, setSearchQuery] = useState('');
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [busy, setBusy] = useState(false);
 
+  // Subview inside Integrations tab (e.g. 'indiamart')
+  const [activeIntegrationSubView, setActiveIntegrationSubView] = useState(null);
+
+  // Zoho modal & live status
+  const [isZohoModalOpen, setIsZohoModalOpen] = useState(false);
+  const [zohoConfig, setZohoConfig] = useState(null);
+  const [isTestingZoho, setIsTestingZoho] = useState(false);
+  const [zohoTestResult, setZohoTestResult] = useState(null);
+
   // Read stored user profile details
-  const storedEmpCode = localStorage.getItem('controlroom_logged_emp_id') || localStorage.getItem('controlroom_logged_user_emp_code') || '';
+  const storedEmpCode = localStorage.getItem('controlroom_logged_emp_id') || localStorage.getItem('controlroom_logged_user_emp_code') || 'TA-001';
   const storedName = localStorage.getItem('controlroom_logged_user_name') || userRole || 'User';
   const storedEmail = localStorage.getItem('controlroom_logged_user_email') || localStorage.getItem('controlroom_logged_user') || (storedEmpCode ? `${storedEmpCode.toLowerCase()}@businz.com` : 'user@businz.com');
+
+  // Check if current user is Technical Administrator (TA)
+  const isTA = (
+    userRole === 'Technical Administrator' ||
+    userRole === 'Tech Support' ||
+    (storedEmpCode && (storedEmpCode.toUpperCase().startsWith('TA') || storedEmpCode.toUpperCase().includes('ADMIN')))
+  );
 
   const [profile, setProfile] = useState({
     name: storedName,
@@ -58,6 +74,48 @@ export default function ProfileSettingsView({ userRole, onNavigateTab }) {
     confirmPassword: ''
   });
 
+  // Fetch live Zoho configuration on mount
+  useEffect(() => {
+    let isMounted = true;
+    const fetchZohoConfig = async () => {
+      try {
+        const res = await fetch('/api/zoho/config');
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted && data.config) {
+            setZohoConfig(data.config);
+          }
+        }
+      } catch (err) {
+        console.warn('Could not fetch Zoho config:', err.message);
+      }
+    };
+    fetchZohoConfig();
+    return () => { isMounted = false; };
+  }, []);
+
+  const handleTestZoho = async () => {
+    setIsTestingZoho(true);
+    setZohoTestResult(null);
+    try {
+      const res = await fetch('/api/zoho/test-connection', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      });
+      const data = await res.json();
+      if (data.success) {
+        setZohoTestResult({ success: true, message: `Connected & Verified: ${data.organization?.name || 'Zoho Books Org'}` });
+      } else {
+        setZohoTestResult({ success: false, message: data.message || 'Connection test failed' });
+      }
+    } catch (err) {
+      setZohoTestResult({ success: false, message: err.message });
+    } finally {
+      setIsTestingZoho(false);
+    }
+  };
+
   const handleSaveProfile = (e) => {
     e?.preventDefault();
     setBusy(true);
@@ -65,7 +123,7 @@ export default function ProfileSettingsView({ userRole, onNavigateTab }) {
       localStorage.setItem('controlroom_logged_user_name', profile.name);
       localStorage.setItem('vrm_user_name', profile.name);
       setSavedSuccess(true);
-      setTimeout(() => setSavedSuccess(false), 3000);
+      setTimeout(() => setSavedSuccess(false), 3500);
     } finally {
       setBusy(false);
     }
@@ -73,468 +131,721 @@ export default function ProfileSettingsView({ userRole, onNavigateTab }) {
 
   const handleSaveWorkspace = (e) => {
     e?.preventDefault();
+    if (!isTA) return;
     setBusy(true);
     try {
       localStorage.setItem('businz_workspace_settings', JSON.stringify(workspace));
       setSavedSuccess(true);
-      setTimeout(() => setSavedSuccess(false), 3000);
+      setTimeout(() => setSavedSuccess(false), 3500);
     } finally {
       setBusy(false);
     }
   };
 
-  const tabs = [
-    { key: 'general', label: 'General & Profile', icon: User },
+  const handleResetProfile = () => {
+    setProfile({
+      name: storedName,
+      empCode: storedEmpCode,
+      email: storedEmail,
+      role: userRole || 'Technical Administrator',
+      phone: '+91 98765 43210',
+      department: 'Operations & Engineering'
+    });
+  };
+
+  const navItems = [
+    { key: 'general', label: 'Personal Profile', icon: User },
     { key: 'workspace', label: 'Workspace Details', icon: Building2 },
     { key: 'notifications', label: 'Notifications', icon: Bell },
-    { key: 'privacy', label: 'Privacy & Security', icon: ShieldCheck },
-    { key: 'integrations', label: 'Integrations Hub', icon: Link2 },
+    { key: 'privacy', label: 'Privacy & Security', icon: KeyRound },
+    { key: 'integrations', label: 'Integrations Hub', icon: Link2, badge: '5 Active' },
     { key: 'billing', label: 'Subscription & License', icon: CreditCard }
   ];
 
+  const currentTabLabel = navItems.find(n => n.key === activeTab)?.label || 'Settings';
+
   return (
     <div style={{
-      maxWidth: '1100px',
-      margin: '0 auto',
+      width: '100%',
       display: 'flex',
       flexDirection: 'column',
-      gap: '24px',
+      gap: '20px',
       fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif",
       color: '#0F172A',
       boxSizing: 'border-box'
     }}>
-      {/* 1. Header Section */}
+      {/* 1. Breadcrumb, Header & Action Bar */}
       <div style={{
-        backgroundColor: '#FFFFFF',
-        borderRadius: '16px',
-        border: '1px solid #E2E8F0',
-        padding: '20px 24px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
         flexWrap: 'wrap',
-        gap: '16px',
-        boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
-        background: 'linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 100%)'
+        gap: '16px'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-          <div style={{
-            width: '46px',
-            height: '46px',
-            borderRadius: '12px',
-            background: 'linear-gradient(135deg, #0E7490 0%, #155E75 100%)',
-            color: '#FFFFFF',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '18px',
-            fontWeight: '800',
-            boxShadow: '0 4px 12px rgba(14, 116, 144, 0.25)'
-          }}>
-            {profile.name.charAt(0).toUpperCase()}
-          </div>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <h1 style={{ fontSize: '20px', fontWeight: '800', color: '#0F172A', margin: 0 }}>
-                Profile & Workspace Settings
-              </h1>
-              <span style={{
-                fontSize: '11px',
-                fontWeight: '800',
-                backgroundColor: '#ECFEFF',
-                color: '#0E7490',
-                border: '1px solid #CFFAFE',
-                padding: '2px 8px',
-                borderRadius: '12px'
-              }}>
-                {userRole || 'Active User'}
-              </span>
-            </div>
-            <p style={{ fontSize: '12.5px', color: '#64748B', margin: '3px 0 0 0', fontWeight: '500' }}>
-              Manage personal profile details, organization workspace settings, notification preferences, and integrations.
-            </p>
-          </div>
-        </div>
-
-        {savedSuccess && (
+        <div>
           <div style={{
             display: 'flex',
             alignItems: 'center',
             gap: '6px',
-            backgroundColor: '#F0FDF4',
-            border: '1px solid #BBF7D0',
-            color: '#166534',
-            padding: '6px 14px',
-            borderRadius: '8px',
             fontSize: '12px',
-            fontWeight: '700'
+            color: '#94A3B8',
+            fontWeight: '600',
+            marginBottom: '4px'
           }}>
-            <CheckCircle size={15} color="#16A34A" /> Settings saved successfully
+            <span>BUSINZ</span>
+            <span>/</span>
+            <span style={{ color: '#0E7490', fontWeight: '700' }}>Settings</span>
+            <span>/</span>
+            <span>{currentTabLabel}</span>
           </div>
-        )}
-      </div>
+          <h1 style={{
+            fontSize: '22px',
+            fontWeight: '800',
+            color: '#0F172A',
+            margin: 0,
+            letterSpacing: '-0.02em'
+          }}>
+            Account & Workspace Settings
+          </h1>
+        </div>
 
-      {/* 2. Sub-navigation Tabs */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '24px',
-        borderBottom: '1px solid #E2E8F0',
-        overflowX: 'auto',
-        whiteSpace: 'nowrap'
-      }}>
-        {tabs.map(tab => {
-          const isActive = activeTab === tab.key;
-          const TabIcon = tab.icon;
-          return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          {savedSuccess && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              backgroundColor: '#F0FDF4',
+              border: '1px solid #BBF7D0',
+              color: '#166534',
+              padding: '6px 14px',
+              borderRadius: '10px',
+              fontSize: '12px',
+              fontWeight: '700'
+            }}>
+              <CheckCircle size={15} color="#16A34A" /> Settings saved successfully
+            </div>
+          )}
+
+          {activeTab === 'general' && (
             <button
-              key={tab.key}
               type="button"
-              onClick={() => setActiveTab(tab.key)}
+              onClick={handleSaveProfile}
+              disabled={busy}
               style={{
-                background: 'none',
+                padding: '8px 18px',
+                backgroundColor: '#0E7490',
+                color: '#FFFFFF',
                 border: 'none',
-                padding: '12px 2px',
-                fontSize: '14px',
-                fontWeight: isActive ? '700' : '500',
-                color: isActive ? '#0E7490' : '#64748B',
+                borderRadius: '10px',
+                fontSize: '12.5px',
+                fontWeight: '700',
                 cursor: 'pointer',
-                borderBottom: isActive ? '2px solid #0E7490' : '2px solid transparent',
-                marginBottom: '-1px',
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: '8px',
-                transition: 'all 0.15s ease'
+                gap: '6px',
+                boxShadow: '0 1px 3px rgba(14, 116, 144, 0.25)'
               }}
             >
-              <TabIcon size={16} />
-              {tab.label}
+              <Save size={14} /> Save Profile Changes
             </button>
-          );
-        })}
+          )}
+
+          {activeTab === 'workspace' && isTA && (
+            <button
+              type="button"
+              onClick={handleSaveWorkspace}
+              disabled={busy}
+              style={{
+                padding: '8px 18px',
+                backgroundColor: '#0E7490',
+                color: '#FFFFFF',
+                border: 'none',
+                borderRadius: '10px',
+                fontSize: '12.5px',
+                fontWeight: '700',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                boxShadow: '0 1px 3px rgba(14, 116, 144, 0.25)'
+              }}
+            >
+              <Save size={14} /> Save Workspace Changes
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* 3. TAB: GENERAL & PROFILE */}
-      {activeTab === 'general' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
+      {/* 2. Main 3-Column Enterprise Grid Layout */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '260px minmax(0, 1fr) 340px',
+        gap: '20px',
+        alignItems: 'start',
+        width: '100%'
+      }}>
+
+        {/* ========================================================= */}
+        {/* COLUMN 1: LEFT NAVIGATION MENU */}
+        {/* ========================================================= */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'minmax(220px, 280px) 1fr',
-            gap: '32px',
-            alignItems: 'start',
-            paddingBottom: '28px',
-            borderBottom: '1px solid #F1F5F9'
+            backgroundColor: '#FFFFFF',
+            borderRadius: '16px',
+            border: '1px solid #E2E8F0',
+            padding: '12px',
+            boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '4px'
           }}>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '15px', fontWeight: '700', color: '#0F172A' }}>
-                <User size={16} color="#0E7490" />
-                <span>Personal Profile</span>
-              </div>
-              <p style={{ fontSize: '13px', color: '#64748B', margin: '6px 0 0 0', lineHeight: 1.4 }}>
-                Your personal details, contact info, and role assignment.
-              </p>
+            <div style={{
+              padding: '6px 12px 10px 12px',
+              fontSize: '11px',
+              fontWeight: '800',
+              color: '#94A3B8',
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em'
+            }}>
+              Settings Menu
             </div>
 
-            <div style={{
-              background: '#FFFFFF',
-              border: '1px solid #E2E8F0',
-              borderRadius: '12px',
-              padding: '24px',
-              maxWidth: '580px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '16px'
-            }}>
-              <div>
-                <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569', display: 'block', marginBottom: '6px' }}>
-                  Full Name
-                </label>
-                <input
-                  type="text"
-                  value={profile.name}
-                  onChange={(e) => setProfile(p => ({ ...p, name: e.target.value }))}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: '8px',
-                    border: '1px solid #CBD5E1',
-                    fontSize: '13.5px',
-                    fontWeight: '600',
-                    color: '#0F172A',
-                    boxSizing: 'border-box'
-                  }}
-                />
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-                <div>
-                  <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569', display: 'block', marginBottom: '6px' }}>
-                    Employee Code
-                  </label>
-                  <input
-                    type="text"
-                    disabled
-                    value={profile.empCode}
-                    style={{
-                      width: '100%',
-                      padding: '8px 12px',
-                      borderRadius: '8px',
-                      border: '1px solid #E2E8F0',
-                      backgroundColor: '#F8FAFC',
-                      fontSize: '13.5px',
-                      color: '#64748B',
-                      boxSizing: 'border-box'
-                    }}
-                  />
-                </div>
-                <div>
-                  <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569', display: 'block', marginBottom: '6px' }}>
-                    Role / Position
-                  </label>
-                  <input
-                    type="text"
-                    disabled
-                    value={profile.role}
-                    style={{
-                      width: '100%',
-                      padding: '8px 12px',
-                      borderRadius: '8px',
-                      border: '1px solid #E2E8F0',
-                      backgroundColor: '#F8FAFC',
-                      fontSize: '13.5px',
-                      color: '#64748B',
-                      boxSizing: 'border-box'
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569', display: 'block', marginBottom: '6px' }}>
-                  Official Email Address
-                </label>
-                <input
-                  type="email"
-                  value={profile.email}
-                  onChange={(e) => setProfile(p => ({ ...p, email: e.target.value }))}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: '8px',
-                    border: '1px solid #CBD5E1',
-                    fontSize: '13.5px',
-                    color: '#0F172A',
-                    boxSizing: 'border-box'
-                  }}
-                />
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
+            {navItems.map(tab => {
+              const isActive = activeTab === tab.key;
+              const TabIcon = tab.icon;
+              return (
                 <button
+                  key={tab.key}
                   type="button"
-                  onClick={handleSaveProfile}
-                  disabled={busy}
+                  onClick={() => {
+                    setActiveTab(tab.key);
+                    setActiveIntegrationSubView(null);
+                  }}
                   style={{
-                    padding: '8px 18px',
-                    backgroundColor: '#0E7490',
-                    color: '#FFFFFF',
+                    width: '100%',
+                    textAlign: 'left',
+                    padding: '10px 12px',
+                    borderRadius: '10px',
+                    fontSize: '12.5px',
+                    fontWeight: isActive ? '700' : '600',
+                    color: isActive ? '#FFFFFF' : '#475569',
+                    backgroundColor: isActive ? '#0E7490' : 'transparent',
                     border: 'none',
-                    borderRadius: '8px',
-                    fontSize: '13px',
-                    fontWeight: '700',
                     cursor: 'pointer',
-                    display: 'inline-flex',
+                    display: 'flex',
                     alignItems: 'center',
-                    gap: '6px'
+                    justifyContent: 'space-between',
+                    transition: 'all 0.15s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isActive) e.currentTarget.style.backgroundColor = '#F8FAFC';
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isActive) e.currentTarget.style.backgroundColor = 'transparent';
                   }}
                 >
-                  <Save size={14} /> Save Profile Changes
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <TabIcon size={16} color={isActive ? '#FFFFFF' : '#64748B'} />
+                    <span>{tab.label}</span>
+                  </div>
+                  {isActive ? (
+                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#FFFFFF' }} />
+                  ) : tab.badge ? (
+                    <span style={{
+                      fontSize: '10px',
+                      fontWeight: '700',
+                      backgroundColor: '#ECFDF5',
+                      color: '#059669',
+                      padding: '2px 6px',
+                      borderRadius: '6px'
+                    }}>
+                      {tab.badge}
+                    </span>
+                  ) : null}
                 </button>
-              </div>
-            </div>
+              );
+            })}
           </div>
         </div>
-      )}
 
-      {/* 4. TAB: WORKSPACE DETAILS */}
-      {activeTab === 'workspace' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'minmax(220px, 280px) 1fr',
-            gap: '32px',
-            alignItems: 'start',
-            paddingBottom: '28px',
-            borderBottom: '1px solid #F1F5F9'
-          }}>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '15px', fontWeight: '700', color: '#0F172A' }}>
-                <Building2 size={16} color="#0E7490" />
-                <span>Organization Identity</span>
+
+        {/* ========================================================= */}
+        {/* COLUMN 2: CENTER FORM PANELS */}
+        {/* ========================================================= */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+
+          {/* TAB 1: PERSONAL PROFILE */}
+          {activeTab === 'general' && (
+            <>
+              <div style={{
+                backgroundColor: '#FFFFFF',
+                borderRadius: '16px',
+                border: '1px solid #E2E8F0',
+                padding: '24px',
+                boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '20px'
+              }}>
+                <div style={{ borderBottom: '1px solid #F1F5F9', paddingBottom: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <h3 style={{ fontSize: '15px', fontWeight: '800', color: '#0F172A', margin: 0 }}>
+                      Personal Information
+                    </h3>
+                    <p style={{ fontSize: '12.5px', color: '#64748B', margin: '4px 0 0 0' }}>
+                      Manage your profile display details and official contact channels.
+                    </p>
+                  </div>
+                  <span style={{
+                    fontSize: '11px',
+                    fontWeight: '700',
+                    color: '#0E7490',
+                    backgroundColor: '#ECFEFF',
+                    padding: '3px 10px',
+                    borderRadius: '8px'
+                  }}>
+                    Editable
+                  </span>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div style={{ gridColumn: 'span 2' }}>
+                    <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569', display: 'block', marginBottom: '6px' }}>
+                      Full Name
+                    </label>
+                    <input
+                      type="text"
+                      value={profile.name}
+                      onChange={(e) => setProfile(p => ({ ...p, name: e.target.value }))}
+                      style={{
+                        width: '100%',
+                        padding: '9px 12px',
+                        borderRadius: '10px',
+                        border: '1px solid #CBD5E1',
+                        fontSize: '13px',
+                        fontWeight: '600',
+                        color: '#0F172A',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569', display: 'block', marginBottom: '6px' }}>
+                      Official Email Address
+                    </label>
+                    <input
+                      type="email"
+                      value={profile.email}
+                      onChange={(e) => setProfile(p => ({ ...p, email: e.target.value }))}
+                      style={{
+                        width: '100%',
+                        padding: '9px 12px',
+                        borderRadius: '10px',
+                        border: '1px solid #CBD5E1',
+                        fontSize: '13px',
+                        color: '#0F172A',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569', display: 'block', marginBottom: '6px' }}>
+                      Contact Number
+                    </label>
+                    <input
+                      type="text"
+                      value={profile.phone}
+                      onChange={(e) => setProfile(p => ({ ...p, phone: e.target.value }))}
+                      style={{
+                        width: '100%',
+                        padding: '9px 12px',
+                        borderRadius: '10px',
+                        border: '1px solid #CBD5E1',
+                        fontSize: '13px',
+                        color: '#0F172A',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                  </div>
+
+                  <div style={{ gridColumn: 'span 2' }}>
+                    <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569', display: 'block', marginBottom: '6px' }}>
+                      Assigned Department
+                    </label>
+                    <input
+                      type="text"
+                      value={profile.department}
+                      onChange={(e) => setProfile(p => ({ ...p, department: e.target.value }))}
+                      style={{
+                        width: '100%',
+                        padding: '9px 12px',
+                        borderRadius: '10px',
+                        border: '1px solid #CBD5E1',
+                        fontSize: '13px',
+                        color: '#0F172A',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                  </div>
+                </div>
               </div>
-              <p style={{ fontSize: '13px', color: '#64748B', margin: '6px 0 0 0', lineHeight: 1.4 }}>
-                Company legal name, enterprise branding, and industry classification.
-              </p>
-            </div>
 
+              {/* Organization Credentials Box */}
+              <div style={{
+                backgroundColor: '#FFFFFF',
+                borderRadius: '16px',
+                border: '1px solid #E2E8F0',
+                padding: '20px 24px',
+                boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '14px'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <h3 style={{ fontSize: '14px', fontWeight: '800', color: '#0F172A', margin: 0 }}>
+                      System Credentials & Identity
+                    </h3>
+                    <p style={{ fontSize: '12px', color: '#64748B', margin: '3px 0 0 0' }}>
+                      Managed securely by organizational authorization.
+                    </p>
+                  </div>
+                  <span style={{ fontSize: '11px', fontWeight: '700', color: '#94A3B8' }}>Read-Only</span>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                  <div style={{
+                    padding: '12px 14px',
+                    backgroundColor: '#F8FAFC',
+                    borderRadius: '10px',
+                    border: '1px solid #E2E8F0',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between'
+                  }}>
+                    <div>
+                      <div style={{ fontSize: '10.5px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase' }}>Employee Code</div>
+                      <div style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A', fontFamily: 'monospace', marginTop: '2px' }}>
+                        {profile.empCode || 'TA-001'}
+                      </div>
+                    </div>
+                    <span style={{ fontSize: '10px', fontWeight: '700', backgroundColor: '#E2E8F0', color: '#475569', padding: '2px 8px', borderRadius: '6px' }}>
+                      Internal
+                    </span>
+                  </div>
+
+                  <div style={{
+                    padding: '12px 14px',
+                    backgroundColor: '#F8FAFC',
+                    borderRadius: '10px',
+                    border: '1px solid #E2E8F0',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between'
+                  }}>
+                    <div>
+                      <div style={{ fontSize: '10.5px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase' }}>Assigned Access Role</div>
+                      <div style={{ fontSize: '13px', fontWeight: '800', color: '#0E7490', marginTop: '2px' }}>
+                        {profile.role}
+                      </div>
+                    </div>
+                    <span style={{ fontSize: '10px', fontWeight: '700', backgroundColor: '#ECFEFF', color: '#0E7490', padding: '2px 8px', borderRadius: '6px' }}>
+                      Superadmin
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div style={{
+                backgroundColor: '#FFFFFF',
+                borderRadius: '14px',
+                border: '1px solid #E2E8F0',
+                padding: '14px 20px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between'
+              }}>
+                <span style={{ fontSize: '12px', color: '#64748B' }}>
+                  Unsaved changes will be discarded on navigation.
+                </span>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button
+                    type="button"
+                    onClick={handleResetProfile}
+                    style={{
+                      padding: '8px 16px',
+                      backgroundColor: 'transparent',
+                      color: '#64748B',
+                      border: '1px solid #E2E8F0',
+                      borderRadius: '8px',
+                      fontSize: '12.5px',
+                      fontWeight: '700',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Reset
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveProfile}
+                    disabled={busy}
+                    style={{
+                      padding: '8px 20px',
+                      backgroundColor: '#0E7490',
+                      color: '#FFFFFF',
+                      border: 'none',
+                      borderRadius: '8px',
+                      fontSize: '12.5px',
+                      fontWeight: '700',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <Save size={14} /> Save Profile Changes
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* TAB 2: WORKSPACE DETAILS (TA ONLY LOCK) */}
+          {activeTab === 'workspace' && (
             <div style={{
-              background: '#FFFFFF',
+              backgroundColor: '#FFFFFF',
+              borderRadius: '16px',
               border: '1px solid #E2E8F0',
-              borderRadius: '12px',
               padding: '24px',
-              maxWidth: '580px',
+              boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
               display: 'flex',
               flexDirection: 'column',
-              gap: '16px'
+              gap: '18px'
             }}>
-              <div>
-                <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569', display: 'block', marginBottom: '6px' }}>
-                  Workspace / Company Name
-                </label>
-                <input
-                  type="text"
-                  value={workspace.name}
-                  onChange={(e) => setWorkspace(w => ({ ...w, name: e.target.value }))}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: '8px',
-                    border: '1px solid #CBD5E1',
-                    fontSize: '13.5px',
-                    fontWeight: '600',
-                    color: '#0F172A',
-                    boxSizing: 'border-box'
-                  }}
-                />
-              </div>
-
-              <div>
-                <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569', display: 'block', marginBottom: '6px' }}>
-                  Industry Sector
-                </label>
-                <input
-                  type="text"
-                  value={workspace.industry}
-                  onChange={(e) => setWorkspace(w => ({ ...w, industry: e.target.value }))}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: '8px',
-                    border: '1px solid #CBD5E1',
-                    fontSize: '13.5px',
-                    color: '#0F172A',
-                    boxSizing: 'border-box'
-                  }}
-                />
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+              <div style={{ borderBottom: '1px solid #F1F5F9', paddingBottom: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
-                  <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569', display: 'block', marginBottom: '6px' }}>
-                    Timezone
-                  </label>
-                  <input
-                    type="text"
-                    value={workspace.timezone}
-                    onChange={(e) => setWorkspace(w => ({ ...w, timezone: e.target.value }))}
-                    style={{
-                      width: '100%',
-                      padding: '8px 12px',
-                      borderRadius: '8px',
-                      border: '1px solid #CBD5E1',
-                      fontSize: '13px',
-                      color: '#0F172A',
-                      boxSizing: 'border-box'
-                    }}
-                  />
+                  <h3 style={{ fontSize: '15px', fontWeight: '800', color: '#0F172A', margin: 0 }}>
+                    Organization Identity & Workspace Details
+                  </h3>
+                  <p style={{ fontSize: '12.5px', color: '#64748B', margin: '4px 0 0 0' }}>
+                    Legal company identity, enterprise timezone, and system formatting.
+                  </p>
                 </div>
-                <div>
-                  <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569', display: 'block', marginBottom: '6px' }}>
-                    Language
-                  </label>
-                  <input
-                    type="text"
-                    value={workspace.language}
-                    onChange={(e) => setWorkspace(w => ({ ...w, language: e.target.value }))}
-                    style={{
-                      width: '100%',
-                      padding: '8px 12px',
-                      borderRadius: '8px',
-                      border: '1px solid #CBD5E1',
-                      fontSize: '13px',
-                      color: '#0F172A',
-                      boxSizing: 'border-box'
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
-                <button
-                  type="button"
-                  onClick={handleSaveWorkspace}
-                  disabled={busy}
-                  style={{
-                    padding: '8px 18px',
-                    backgroundColor: '#0E7490',
-                    color: '#FFFFFF',
-                    border: 'none',
-                    borderRadius: '8px',
-                    fontSize: '13px',
+                {isTA ? (
+                  <span style={{
+                    fontSize: '11px',
                     fontWeight: '700',
-                    cursor: 'pointer',
+                    color: '#0E7490',
+                    backgroundColor: '#ECFEFF',
+                    padding: '3px 10px',
+                    borderRadius: '8px',
                     display: 'inline-flex',
                     alignItems: 'center',
-                    gap: '6px'
-                  }}
-                >
-                  <Save size={14} /> Save Workspace Settings
-                </button>
+                    gap: '4px'
+                  }}>
+                    <ShieldCheck size={13} /> TA Full Edit Access
+                  </span>
+                ) : (
+                  <span style={{
+                    fontSize: '11px',
+                    fontWeight: '700',
+                    color: '#991B1B',
+                    backgroundColor: '#FEF2F2',
+                    padding: '3px 10px',
+                    borderRadius: '8px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}>
+                    <Lock size={13} /> Locked (TA Only)
+                  </span>
+                )}
+              </div>
+
+              {!isTA && (
+                <div style={{
+                  padding: '12px 16px',
+                  backgroundColor: '#FFFBEB',
+                  border: '1px solid #FDE68A',
+                  borderRadius: '10px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  fontSize: '12.5px',
+                  color: '#92400E',
+                  fontWeight: '600'
+                }}>
+                  <Lock size={16} color="#D97706" />
+                  <span>Workspace details are locked. Only the Technical Administrator (TA) can modify and save these enterprise settings.</span>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569', display: 'block', marginBottom: '6px' }}>
+                    Workspace / Legal Name
+                  </label>
+                  <input
+                    type="text"
+                    disabled={!isTA}
+                    value={workspace.name}
+                    onChange={(e) => setWorkspace(w => ({ ...w, name: e.target.value }))}
+                    style={{
+                      width: '100%',
+                      padding: '9px 12px',
+                      borderRadius: '10px',
+                      border: '1px solid #CBD5E1',
+                      fontSize: '13px',
+                      fontWeight: '600',
+                      color: isTA ? '#0F172A' : '#64748B',
+                      backgroundColor: isTA ? '#FFFFFF' : '#F8FAFC',
+                      boxSizing: 'border-box',
+                      cursor: isTA ? 'text' : 'not-allowed'
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569', display: 'block', marginBottom: '6px' }}>
+                    Industry Sector
+                  </label>
+                  <input
+                    type="text"
+                    disabled={!isTA}
+                    value={workspace.industry}
+                    onChange={(e) => setWorkspace(w => ({ ...w, industry: e.target.value }))}
+                    style={{
+                      width: '100%',
+                      padding: '9px 12px',
+                      borderRadius: '10px',
+                      border: '1px solid #CBD5E1',
+                      fontSize: '13px',
+                      color: isTA ? '#0F172A' : '#64748B',
+                      backgroundColor: isTA ? '#FFFFFF' : '#F8FAFC',
+                      boxSizing: 'border-box',
+                      cursor: isTA ? 'text' : 'not-allowed'
+                    }}
+                  />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                  <div>
+                    <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569', display: 'block', marginBottom: '6px' }}>
+                      Timezone
+                    </label>
+                    <input
+                      type="text"
+                      disabled={!isTA}
+                      value={workspace.timezone}
+                      onChange={(e) => setWorkspace(w => ({ ...w, timezone: e.target.value }))}
+                      style={{
+                        width: '100%',
+                        padding: '9px 12px',
+                        borderRadius: '10px',
+                        border: '1px solid #CBD5E1',
+                        fontSize: '13px',
+                        color: isTA ? '#0F172A' : '#64748B',
+                        backgroundColor: isTA ? '#FFFFFF' : '#F8FAFC',
+                        boxSizing: 'border-box',
+                        cursor: isTA ? 'text' : 'not-allowed'
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569', display: 'block', marginBottom: '6px' }}>
+                      Language
+                    </label>
+                    <input
+                      type="text"
+                      disabled={!isTA}
+                      value={workspace.language}
+                      onChange={(e) => setWorkspace(w => ({ ...w, language: e.target.value }))}
+                      style={{
+                        width: '100%',
+                        padding: '9px 12px',
+                        borderRadius: '10px',
+                        border: '1px solid #CBD5E1',
+                        fontSize: '13px',
+                        color: isTA ? '#0F172A' : '#64748B',
+                        backgroundColor: isTA ? '#FFFFFF' : '#F8FAFC',
+                        boxSizing: 'border-box',
+                        cursor: isTA ? 'text' : 'not-allowed'
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {isTA && (
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px' }}>
+                    <button
+                      type="button"
+                      onClick={handleSaveWorkspace}
+                      disabled={busy}
+                      style={{
+                        padding: '8px 20px',
+                        backgroundColor: '#0E7490',
+                        color: '#FFFFFF',
+                        border: 'none',
+                        borderRadius: '8px',
+                        fontSize: '12.5px',
+                        fontWeight: '700',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}
+                    >
+                      <Save size={14} /> Save Workspace Settings
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
-          </div>
-        </div>
-      )}
+          )}
 
-      {/* 5. TAB: NOTIFICATIONS */}
-      {activeTab === 'notifications' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'minmax(220px, 280px) 1fr',
-            gap: '32px',
-            alignItems: 'start'
-          }}>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '15px', fontWeight: '700', color: '#0F172A' }}>
-                <Bell size={16} color="#0E7490" />
-                <span>Notification Channels</span>
-              </div>
-              <p style={{ fontSize: '13px', color: '#64748B', margin: '6px 0 0 0', lineHeight: 1.4 }}>
-                Choose where you receive instant notifications when leads are assigned or approvals are pending.
-              </p>
-            </div>
-
+          {/* TAB 3: NOTIFICATIONS */}
+          {activeTab === 'notifications' && (
             <div style={{
-              background: '#FFFFFF',
+              backgroundColor: '#FFFFFF',
+              borderRadius: '16px',
               border: '1px solid #E2E8F0',
-              borderRadius: '12px',
-              padding: '20px',
-              maxWidth: '580px',
+              padding: '24px',
+              boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
               display: 'flex',
               flexDirection: 'column',
               gap: '16px'
             }}>
+              <div style={{ borderBottom: '1px solid #F1F5F9', paddingBottom: '14px' }}>
+                <h3 style={{ fontSize: '15px', fontWeight: '800', color: '#0F172A', margin: 0 }}>
+                  Operational Notification Channels
+                </h3>
+                <p style={{ fontSize: '12.5px', color: '#64748B', margin: '4px 0 0 0' }}>
+                  Choose where and how you receive alerts for new orders and approvals.
+                </p>
+              </div>
+
               {[
-                { key: 'emailNewLead', title: 'New Order / Assignment Alerts', desc: 'Email when a new order or item is assigned to your queue' },
+                { key: 'emailNewLead', title: 'New Order / Assignment Alerts', desc: 'Email when a new order, BOM, or lead is assigned to you' },
                 { key: 'emailSlaBreach', title: 'Overdue SLA & Approvals Warning', desc: 'Alert when critical operational touchpoint SLA is breached' },
                 { key: 'whatsappAlerts', title: 'WhatsApp Push Notifications', desc: 'Real-time alert messages via WhatsApp Gateway' },
                 { key: 'dailyDigest', title: 'Daily Morning Digest', desc: 'Summary of scheduled production orders and active dispatches' }
               ].map(item => (
-                <div key={item.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '12px', borderBottom: '1px solid #F8FAFC' }}>
+                <div key={item.key} style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '12px 14px',
+                  backgroundColor: '#F8FAFC',
+                  borderRadius: '10px',
+                  border: '1px solid #E2E8F0'
+                }}>
                   <div>
-                    <div style={{ fontSize: '13.5px', fontWeight: '600', color: '#0F172A' }}>{item.title}</div>
-                    <div style={{ fontSize: '12px', color: '#64748B', marginTop: '2px' }}>{item.desc}</div>
+                    <div style={{ fontSize: '13px', fontWeight: '700', color: '#0F172A' }}>{item.title}</div>
+                    <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px' }}>{item.desc}</div>
                   </div>
                   <input
                     type="checkbox"
@@ -545,39 +856,29 @@ export default function ProfileSettingsView({ userRole, onNavigateTab }) {
                 </div>
               ))}
             </div>
-          </div>
-        </div>
-      )}
+          )}
 
-      {/* 6. TAB: PRIVACY & SECURITY */}
-      {activeTab === 'privacy' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'minmax(220px, 280px) 1fr',
-            gap: '32px',
-            alignItems: 'start'
-          }}>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '15px', fontWeight: '700', color: '#0F172A' }}>
-                <KeyRound size={16} color="#0E7490" />
-                <span>Security & Credentials</span>
-              </div>
-              <p style={{ fontSize: '13px', color: '#64748B', margin: '6px 0 0 0', lineHeight: 1.4 }}>
-                Password updates, session isolation, and access protection.
-              </p>
-            </div>
-
+          {/* TAB 4: PRIVACY & SECURITY */}
+          {activeTab === 'privacy' && (
             <div style={{
-              background: '#FFFFFF',
+              backgroundColor: '#FFFFFF',
+              borderRadius: '16px',
               border: '1px solid #E2E8F0',
-              borderRadius: '12px',
               padding: '24px',
-              maxWidth: '580px',
+              boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
               display: 'flex',
               flexDirection: 'column',
               gap: '16px'
             }}>
+              <div style={{ borderBottom: '1px solid #F1F5F9', paddingBottom: '14px' }}>
+                <h3 style={{ fontSize: '15px', fontWeight: '800', color: '#0F172A', margin: 0 }}>
+                  Security & Authentication Protocols
+                </h3>
+                <p style={{ fontSize: '12.5px', color: '#64748B', margin: '4px 0 0 0' }}>
+                  Update credentials and maintain account security.
+                </p>
+              </div>
+
               <div>
                 <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569', display: 'block', marginBottom: '6px' }}>
                   Current Password
@@ -589,10 +890,10 @@ export default function ProfileSettingsView({ userRole, onNavigateTab }) {
                   onChange={(e) => setPasswordState(p => ({ ...p, currentPassword: e.target.value }))}
                   style={{
                     width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: '8px',
+                    padding: '9px 12px',
+                    borderRadius: '10px',
                     border: '1px solid #CBD5E1',
-                    fontSize: '13.5px',
+                    fontSize: '13px',
                     boxSizing: 'border-box'
                   }}
                 />
@@ -610,10 +911,10 @@ export default function ProfileSettingsView({ userRole, onNavigateTab }) {
                     onChange={(e) => setPasswordState(p => ({ ...p, newPassword: e.target.value }))}
                     style={{
                       width: '100%',
-                      padding: '8px 12px',
-                      borderRadius: '8px',
+                      padding: '9px 12px',
+                      borderRadius: '10px',
                       border: '1px solid #CBD5E1',
-                      fontSize: '13.5px',
+                      fontSize: '13px',
                       boxSizing: 'border-box'
                     }}
                   />
@@ -629,152 +930,385 @@ export default function ProfileSettingsView({ userRole, onNavigateTab }) {
                     onChange={(e) => setPasswordState(p => ({ ...p, confirmPassword: e.target.value }))}
                     style={{
                       width: '100%',
-                      padding: '8px 12px',
-                      borderRadius: '8px',
+                      padding: '9px 12px',
+                      borderRadius: '10px',
                       border: '1px solid #CBD5E1',
-                      fontSize: '13.5px',
+                      fontSize: '13px',
                       boxSizing: 'border-box'
                     }}
                   />
                 </div>
               </div>
-
-              <div style={{
-                backgroundColor: '#F8FAFC',
-                border: '1px solid #E2E8F0',
-                borderRadius: '8px',
-                padding: '12px',
-                fontSize: '12.5px',
-                color: '#475569',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px'
-              }}>
-                <ShieldCheck size={16} color="#059669" />
-                <span>Session Security: Multi-device authorization enabled with automatic session locking.</span>
-              </div>
             </div>
-          </div>
-        </div>
-      )}
+          )}
 
-      {/* 7. TAB: INTEGRATIONS */}
-      {activeTab === 'integrations' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'minmax(220px, 280px) 1fr',
-            gap: '32px',
-            alignItems: 'start'
-          }}>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '15px', fontWeight: '700', color: '#0F172A' }}>
-                <Link2 size={16} color="#0E7490" />
-                <span>Connected Integrations</span>
-              </div>
-              <p style={{ fontSize: '13px', color: '#64748B', margin: '6px 0 0 0', lineHeight: 1.4 }}>
-                External ERP, WhatsApp messaging, and lead pipeline connections.
-              </p>
-              <button
-                type="button"
-                onClick={() => onNavigateTab && onNavigateTab('Integration Hub')}
-                style={{
-                  marginTop: '14px',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '8px 14px',
-                  backgroundColor: '#ECFEFF',
-                  border: '1px solid #A5F3FC',
-                  color: '#0E7490',
-                  borderRadius: '8px',
-                  fontSize: '12.5px',
-                  fontWeight: '700',
-                  cursor: 'pointer'
-                }}
-              >
-                Open Full Integrations Hub <ArrowRight size={14} />
-              </button>
-            </div>
-
-            <div style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '12px',
-              maxWidth: '580px'
-            }}>
-              {[
-                { name: 'Zoho Books ERP', desc: 'Sequential PO numbers (PO-000XX) & dual disk/cloud persistence', status: 'Connected', color: '#059669', bg: '#ECFDF5' },
-                { name: 'WhatsApp Business API', desc: 'Multi-device QR session and automated customer notifications', status: 'Active', color: '#059669', bg: '#ECFDF5' },
-                { name: 'Official Support Mail', desc: 'Incoming IMAP and outgoing SMTP integration', status: 'Active', color: '#059669', bg: '#ECFDF5' },
-                { name: 'Facebook & Meta Suite', desc: 'Meta Lead Ads and Facebook Messenger direct routing', status: 'Webhook Ready', color: '#2563EB', bg: '#EFF6FF' }
-              ].map(intg => (
-                <div
-                  key={intg.name}
-                  style={{
-                    background: '#FFFFFF',
-                    border: '1px solid #E2E8F0',
-                    borderRadius: '10px',
-                    padding: '14px 18px',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center'
-                  }}
-                >
-                  <div>
-                    <div style={{ fontSize: '14px', fontWeight: '700', color: '#0F172A' }}>{intg.name}</div>
-                    <div style={{ fontSize: '12px', color: '#64748B', marginTop: '2px' }}>{intg.desc}</div>
-                  </div>
-                  <span style={{
-                    fontSize: '11px',
-                    fontWeight: '700',
-                    color: intg.color,
-                    background: intg.bg,
-                    padding: '3px 10px',
-                    borderRadius: '12px'
-                  }}>
-                    {intg.status}
-                  </span>
+          {/* TAB 5: INTEGRATIONS HUB (ALL INTEGRATIONS BROUGHT DIRECTLY HERE) */}
+          {activeTab === 'integrations' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {activeIntegrationSubView === 'indiamart' ? (
+                <div style={{
+                  backgroundColor: '#FFFFFF',
+                  borderRadius: '16px',
+                  border: '1px solid #E2E8F0',
+                  padding: '20px',
+                  boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '16px'
+                }}>
+                  <button
+                    type="button"
+                    onClick={() => setActiveIntegrationSubView(null)}
+                    style={{
+                      alignSelf: 'flex-start',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '7px 14px',
+                      backgroundColor: '#F8FAFC',
+                      border: '1px solid #CBD5E1',
+                      borderRadius: '8px',
+                      fontSize: '12.5px',
+                      fontWeight: '700',
+                      color: '#0E7490',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <ArrowLeft size={15} /> Back to All Integrations
+                  </button>
+                  <IndiaMartSettingsView userRole={userRole} />
                 </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
+              ) : (
+                <div style={{
+                  backgroundColor: '#FFFFFF',
+                  borderRadius: '16px',
+                  border: '1px solid #E2E8F0',
+                  padding: '24px',
+                  boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '18px'
+                }}>
+                  <div style={{ borderBottom: '1px solid #F1F5F9', paddingBottom: '14px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <h3 style={{ fontSize: '16px', fontWeight: '800', color: '#0F172A', margin: 0 }}>
+                        Omnichannel & ERP Integrations Hub
+                      </h3>
+                      <span style={{
+                        fontSize: '11px',
+                        fontWeight: '700',
+                        color: '#059669',
+                        backgroundColor: '#ECFDF5',
+                        border: '1px solid #A7F3D0',
+                        padding: '3px 10px',
+                        borderRadius: '12px'
+                      }}>
+                        All Systems Active
+                      </span>
+                    </div>
+                    <p style={{ fontSize: '12.5px', color: '#64748B', margin: '4px 0 0 0' }}>
+                      Manage live ERP, WhatsApp messaging, IndiaMART leads, and support pipelines directly here.
+                    </p>
+                  </div>
 
-      {/* 8. TAB: SUBSCRIPTION & BILLING */}
-      {activeTab === 'billing' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'minmax(220px, 280px) 1fr',
-            gap: '32px',
-            alignItems: 'start'
-          }}>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '15px', fontWeight: '700', color: '#0F172A' }}>
-                <CreditCard size={16} color="#0E7490" />
-                <span>Subscription & Deployment</span>
-              </div>
-              <p style={{ fontSize: '13px', color: '#64748B', margin: '6px 0 0 0', lineHeight: 1.4 }}>
-                Active BUSINZ instance tier and cloud database details.
-              </p>
-            </div>
+                  {zohoTestResult && (
+                    <div style={{
+                      padding: '10px 14px',
+                      borderRadius: '10px',
+                      backgroundColor: zohoTestResult.success ? '#F0FDF4' : '#FEF2F2',
+                      border: `1px solid ${zohoTestResult.success ? '#BBF7D0' : '#FECACA'}`,
+                      color: zohoTestResult.success ? '#166534' : '#991B1B',
+                      fontSize: '12px',
+                      fontWeight: '700',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px'
+                    }}>
+                      {zohoTestResult.success ? <CheckCircle2 size={16} color="#16A34A" /> : <AlertCircle size={16} color="#DC2626" />}
+                      <span>{zohoTestResult.message}</span>
+                    </div>
+                  )}
 
+                  {/* 1. Zoho Books ERP */}
+                  <div style={{
+                    backgroundColor: '#F8FAFC',
+                    border: '1px solid #E2E8F0',
+                    borderRadius: '12px',
+                    padding: '16px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '12px'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{ width: '38px', height: '38px', borderRadius: '10px', backgroundColor: '#ECFEFF', border: '1px solid #CFFAFE', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <Sliders size={18} color="#0E7490" />
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '14px', fontWeight: '800', color: '#0F172A' }}>
+                            Zoho Books ERP Integration
+                          </div>
+                          <div style={{ fontSize: '11.5px', color: '#64748B' }}>
+                            Accounting & Procurement • Sequential PO Numbers (PO-000XX)
+                          </div>
+                        </div>
+                      </div>
+                      <span style={{ fontSize: '10.5px', fontWeight: '700', color: '#059669', backgroundColor: '#ECFDF5', border: '1px solid #A7F3D0', padding: '3px 10px', borderRadius: '12px' }}>
+                        Synchronized
+                      </span>
+                    </div>
+
+                    <p style={{ fontSize: '12px', color: '#475569', margin: 0, lineHeight: 1.5 }}>
+                      Official purchase order numbering sequence (PO-000XX), vendor catalog syncing, and dual disk/cloud persistence.
+                    </p>
+
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+                      gap: '8px',
+                      padding: '10px 12px',
+                      backgroundColor: '#FFFFFF',
+                      borderRadius: '8px',
+                      border: '1px solid #E2E8F0',
+                      fontSize: '11.5px'
+                    }}>
+                      <div>
+                        <span style={{ color: '#94A3B8', display: 'block', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase' }}>Company</span>
+                        <span style={{ fontWeight: '700', color: '#0F172A' }}>{zohoConfig?.companyName || 'VRM Structures'}</span>
+                      </div>
+                      <div>
+                        <span style={{ color: '#94A3B8', display: 'block', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase' }}>Org ID</span>
+                        <span style={{ fontWeight: '700', color: '#0F172A', fontFamily: 'monospace' }}>{zohoConfig?.orgId || '60082137608'}</span>
+                      </div>
+                      <div>
+                        <span style={{ color: '#94A3B8', display: 'block', fontSize: '10px', fontWeight: '700', textTransform: 'uppercase' }}>Numbering Format</span>
+                        <span style={{ fontWeight: '700', color: '#0E7490', fontFamily: 'monospace' }}>PO-000XX</span>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        onClick={handleTestZoho}
+                        disabled={isTestingZoho}
+                        style={{
+                          padding: '7px 14px',
+                          backgroundColor: '#FFFFFF',
+                          border: '1px solid #CBD5E1',
+                          borderRadius: '8px',
+                          fontSize: '12px',
+                          fontWeight: '700',
+                          color: '#334155',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px'
+                        }}
+                      >
+                        <RefreshCw size={13} className={isTestingZoho ? 'animate-spin' : ''} />
+                        {isTestingZoho ? 'Testing...' : 'Test Connection'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIsZohoModalOpen(true)}
+                        style={{
+                          padding: '7px 14px',
+                          backgroundColor: '#0E7490',
+                          border: 'none',
+                          borderRadius: '8px',
+                          fontSize: '12px',
+                          fontWeight: '700',
+                          color: '#FFFFFF',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px'
+                        }}
+                      >
+                        <Sliders size={13} /> Configure Zoho API
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 2. IndiaMART CRM Integration */}
+                  <div style={{
+                    backgroundColor: '#F8FAFC',
+                    border: '1px solid #E2E8F0',
+                    borderRadius: '12px',
+                    padding: '16px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '12px'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{ width: '38px', height: '38px', borderRadius: '10px', backgroundColor: '#FFF7ED', border: '1px solid #FFEDD5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <Globe size={18} color="#EA580C" />
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '14px', fontWeight: '800', color: '#0F172A' }}>
+                            IndiaMART CRM Integration
+                          </div>
+                          <div style={{ fontSize: '11.5px', color: '#64748B' }}>
+                            B2B Lead Ingestion • Real-Time Webhook • Auto Sales Routing
+                          </div>
+                        </div>
+                      </div>
+                      <span style={{ fontSize: '10.5px', fontWeight: '700', color: '#059669', backgroundColor: '#ECFDF5', border: '1px solid #A7F3D0', padding: '3px 10px', borderRadius: '12px' }}>
+                        Live API Sync
+                      </span>
+                    </div>
+
+                    <p style={{ fontSize: '12px', color: '#475569', margin: 0, lineHeight: 1.5 }}>
+                      Automated CRM lead ingestion from IndiaMART buyers, push webhook listeners, and automatic rep assignment.
+                    </p>
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                      <button
+                        type="button"
+                        onClick={() => setActiveIntegrationSubView('indiamart')}
+                        style={{
+                          padding: '7px 14px',
+                          backgroundColor: '#EA580C',
+                          border: 'none',
+                          borderRadius: '8px',
+                          fontSize: '12px',
+                          fontWeight: '700',
+                          color: '#FFFFFF',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px'
+                        }}
+                      >
+                        <Globe size={13} /> Manage IndiaMART Keys & Settings
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 3. WhatsApp Business & Support */}
+                  <div style={{
+                    backgroundColor: '#F8FAFC',
+                    border: '1px solid #E2E8F0',
+                    borderRadius: '12px',
+                    padding: '16px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '10px'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{ width: '38px', height: '38px', borderRadius: '10px', backgroundColor: '#ECFDF5', border: '1px solid #A7F3D0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <MessageSquare size={18} color="#059669" />
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '14px', fontWeight: '800', color: '#0F172A' }}>
+                            WhatsApp Business & Support
+                          </div>
+                          <div style={{ fontSize: '11.5px', color: '#64748B' }}>
+                            Multi-Session QR • Real-Time Chat • Automated Notifications
+                          </div>
+                        </div>
+                      </div>
+                      <span style={{ fontSize: '10.5px', fontWeight: '700', color: '#059669', backgroundColor: '#ECFDF5', border: '1px solid #A7F3D0', padding: '3px 10px', borderRadius: '12px' }}>
+                        Live Connected
+                      </span>
+                    </div>
+                    <p style={{ fontSize: '12px', color: '#475569', margin: 0 }}>
+                      Baileys Multi-Session QR code engine powering real-time chat, customer technical media sharing, and automated order notifications.
+                    </p>
+                  </div>
+
+                  {/* 4. Official Support Mail */}
+                  <div style={{
+                    backgroundColor: '#F8FAFC',
+                    border: '1px solid #E2E8F0',
+                    borderRadius: '12px',
+                    padding: '16px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '10px'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{ width: '38px', height: '38px', borderRadius: '10px', backgroundColor: '#F0F9FF', border: '1px solid #BAE6FD', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <Mail size={18} color="#0284C7" />
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '14px', fontWeight: '800', color: '#0F172A' }}>
+                            Official Support Mail (IMAP / SMTP)
+                          </div>
+                          <div style={{ fontSize: '11.5px', color: '#64748B' }}>
+                            Inbound IMAP (993) • Outbound SMTP (465) • SSL/TLS
+                          </div>
+                        </div>
+                      </div>
+                      <span style={{ fontSize: '10.5px', fontWeight: '700', color: '#0284C7', backgroundColor: '#F0F9FF', border: '1px solid #BAE6FD', padding: '3px 10px', borderRadius: '12px' }}>
+                        Connected
+                      </span>
+                    </div>
+                    <p style={{ fontSize: '12px', color: '#475569', margin: 0 }}>
+                      Incoming IMAP and outgoing SMTP integration for customer technical queries, quotations, and official support correspondence.
+                    </p>
+                  </div>
+
+                  {/* 5. Facebook & Meta Suite */}
+                  <div style={{
+                    backgroundColor: '#F8FAFC',
+                    border: '1px solid #E2E8F0',
+                    borderRadius: '12px',
+                    padding: '16px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '10px'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{ width: '38px', height: '38px', borderRadius: '10px', backgroundColor: '#EEF2FF', border: '1px solid #C7D2FE', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <Share2 size={18} color="#4F46E5" />
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '14px', fontWeight: '800', color: '#0F172A' }}>
+                            Facebook & Meta Support Suite
+                          </div>
+                          <div style={{ fontSize: '11.5px', color: '#64748B' }}>
+                            Meta Lead Ads • Facebook Messenger • Graph API Webhook
+                          </div>
+                        </div>
+                      </div>
+                      <span style={{ fontSize: '10.5px', fontWeight: '700', color: '#4F46E5', backgroundColor: '#EEF2FF', border: '1px solid #C7D2FE', padding: '3px 10px', borderRadius: '12px' }}>
+                        Webhook Ready
+                      </span>
+                    </div>
+                    <p style={{ fontSize: '12px', color: '#475569', margin: 0 }}>
+                      Facebook Messenger direct customer chats and Meta Lead Ads synchronization with instant response routing.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 6: SUBSCRIPTION */}
+          {activeTab === 'billing' && (
             <div style={{
-              background: '#FFFFFF',
+              backgroundColor: '#FFFFFF',
+              borderRadius: '16px',
               border: '1px solid #E2E8F0',
-              borderRadius: '12px',
-              padding: '22px',
-              maxWidth: '580px',
+              padding: '24px',
+              boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
               display: 'flex',
               flexDirection: 'column',
-              gap: '14px'
+              gap: '16px'
             }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ borderBottom: '1px solid #F1F5F9', paddingBottom: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
-                  <div style={{ fontSize: '16px', fontWeight: '800', color: '#0F172A' }}>BUSINZ Enterprise Core</div>
-                  <div style={{ fontSize: '12px', color: '#64748B' }}>PostgreSQL Authoritative Backend • Unlimited Seats</div>
+                  <h3 style={{ fontSize: '15px', fontWeight: '800', color: '#0F172A', margin: 0 }}>
+                    BUSINZ Enterprise Core
+                  </h3>
+                  <p style={{ fontSize: '12.5px', color: '#64748B', margin: '4px 0 0 0' }}>
+                    PostgreSQL Authoritative Cloud Backend
+                  </p>
                 </div>
                 <span style={{
                   fontSize: '11px',
@@ -787,12 +1321,173 @@ export default function ProfileSettingsView({ userRole, onNavigateTab }) {
                   Active License
                 </span>
               </div>
-              <div style={{ fontSize: '13px', color: '#475569', lineHeight: 1.5 }}>
-                Directly connected to PostgreSQL authoritative store. Real-time sync, zero egress waste, and unlimited internal users enabled.
+              <div style={{ fontSize: '12.5px', color: '#475569', lineHeight: 1.6 }}>
+                Directly connected to PostgreSQL authoritative store. Real-time sync, zero egress waste, and unlimited internal organization users enabled.
+              </div>
+            </div>
+          )}
+
+        </div>
+
+
+        {/* ========================================================= */}
+        {/* COLUMN 3: RIGHT INTELLIGENCE PANEL */}
+        {/* ========================================================= */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+
+          {/* Live User Profile Card */}
+          <div style={{
+            backgroundColor: '#FFFFFF',
+            borderRadius: '16px',
+            border: '1px solid #E2E8F0',
+            padding: '20px',
+            boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
+            textAlign: 'center',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '14px'
+          }}>
+            <div style={{
+              width: '60px',
+              height: '60px',
+              borderRadius: '16px',
+              background: 'linear-gradient(135deg, #0E7490 0%, #155E75 100%)',
+              color: '#FFFFFF',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '22px',
+              fontWeight: '800',
+              margin: '0 auto',
+              boxShadow: '0 4px 12px rgba(14, 116, 144, 0.25)'
+            }}>
+              {(profile.name || 'U').charAt(0).toUpperCase()}
+            </div>
+
+            <div>
+              <h2 style={{ fontSize: '16px', fontWeight: '800', color: '#0F172A', margin: 0 }}>
+                {profile.name}
+              </h2>
+              <div style={{ fontSize: '12px', fontWeight: '700', color: '#0E7490', marginTop: '3px' }}>
+                {profile.role}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', marginTop: '8px' }}>
+                <span style={{
+                  fontSize: '11px',
+                  fontWeight: '700',
+                  fontFamily: 'monospace',
+                  backgroundColor: '#F1F5F9',
+                  color: '#475569',
+                  padding: '2px 8px',
+                  borderRadius: '6px'
+                }}>
+                  {profile.empCode || 'TA-001'}
+                </span>
+                <span style={{
+                  fontSize: '11px',
+                  fontWeight: '700',
+                  backgroundColor: '#F0FDF4',
+                  color: '#16A34A',
+                  padding: '2px 8px',
+                  borderRadius: '6px'
+                }}>
+                  Active User
+                </span>
+              </div>
+            </div>
+
+            <div style={{
+              borderTop: '1px solid #F1F5F9',
+              paddingTop: '12px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px',
+              fontSize: '12px',
+              textAlign: 'left'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B' }}>
+                <span>Department</span>
+                <span style={{ fontWeight: '700', color: '#0F172A' }}>{profile.department}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B' }}>
+                <span>Official Email</span>
+                <span style={{ fontWeight: '600', color: '#0F172A', fontFamily: 'monospace', fontSize: '11px' }}>
+                  {profile.email}
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B' }}>
+                <span>Contact Phone</span>
+                <span style={{ fontWeight: '700', color: '#0F172A' }}>{profile.phone}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B' }}>
+                <span>Zoho Books Sync</span>
+                <span style={{ fontWeight: '700', color: '#059669' }}>Connected</span>
               </div>
             </div>
           </div>
+
+          {/* Assigned System Capabilities */}
+          <div style={{
+            backgroundColor: '#FFFFFF',
+            borderRadius: '16px',
+            border: '1px solid #E2E8F0',
+            padding: '16px',
+            boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '12px', fontWeight: '800', color: '#0F172A' }}>
+                Assigned Capabilities
+              </span>
+              <span style={{
+                fontSize: '10px',
+                fontWeight: '700',
+                color: '#0E7490',
+                backgroundColor: '#ECFEFF',
+                padding: '2px 8px',
+                borderRadius: '6px'
+              }}>
+                Full Access
+              </span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '11.5px' }}>
+              {[
+                'Sales & CRM', 'BOM Production',
+                'Dispatch Orders', 'Invoices & Billing',
+                'Zoho PO & Books', 'System Admin'
+              ].map(cap => (
+                <div key={cap} style={{
+                  padding: '7px 10px',
+                  borderRadius: '8px',
+                  backgroundColor: '#F8FAFC',
+                  border: '1px solid #F1F5F9',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  color: '#334155',
+                  fontWeight: '600'
+                }}>
+                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#0E7490' }} />
+                  <span>{cap}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
         </div>
+
+      </div>
+
+      {/* Zoho Configuration Modal */}
+      {isZohoModalOpen && (
+        <ZohoConfigModal
+          isOpen={isZohoModalOpen}
+          onClose={() => setIsZohoModalOpen(false)}
+          initialConfig={zohoConfig}
+          onSaved={(newCfg) => setZohoConfig(newCfg)}
+        />
       )}
     </div>
   );
