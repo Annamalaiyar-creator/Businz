@@ -691,20 +691,29 @@ export default function ProfileSettingsView({ userRole, onNavigateTab }) {
                   </div>
 
                   <div style={{ gridColumn: 'span 2' }}>
-                    <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569', display: 'block', marginBottom: '6px' }}>
-                      Assigned Department
-                    </label>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                      <label style={{ fontSize: '12px', fontWeight: '700', color: '#475569' }}>
+                        Assigned Department
+                      </label>
+                      <span style={{ fontSize: '11px', fontWeight: '700', color: '#94A3B8', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <Lock size={12} color="#94A3B8" /> Read-Only
+                      </span>
+                    </div>
                     <input
                       type="text"
-                      value={profile.department}
-                      onChange={(e) => setProfile(p => ({ ...p, department: e.target.value }))}
+                      value={profile.department || 'Operations & Engineering'}
+                      readOnly
+                      disabled
                       style={{
                         width: '100%',
                         padding: '9px 12px',
                         borderRadius: '10px',
-                        border: '1px solid #CBD5E1',
+                        border: '1px solid #E2E8F0',
                         fontSize: '13px',
-                        color: '#0F172A',
+                        fontWeight: '600',
+                        color: '#64748B',
+                        backgroundColor: '#F8FAFC',
+                        cursor: 'not-allowed',
                         boxSizing: 'border-box'
                       }}
                     />
