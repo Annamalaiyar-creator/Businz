@@ -925,7 +925,7 @@ export function toConsumerBom(row) {
     createdById: createdById,
     dispatchPackingMedia: row.dispatch_packing_media || extraData.dispatchPackingMedia || { photos: [], videos: [] },
     items: Array.isArray(row.items) ? row.items : [],
-    payments: (row.payments && typeof row.payments === 'object') ? row.payments : {},
+    payments: (row.payments && typeof row.payments === 'object' && Object.keys(row.payments).length > 0) ? row.payments : ((extraData.payments && typeof extraData.payments === 'object') ? extraData.payments : {}),
     dispatchPacking: cleanDispatchPacking,
     accountsVerification: cleanAccountsVerification,
     packingStatus: row.packing_status || row.packingStatus || extraData.packingStatus || (
@@ -963,6 +963,29 @@ export function toConsumerBom(row) {
     cancellationReason: row.cancellation_reason || extraData.cancellationReason || '',
     dispatchPackingMedia: Array.isArray(row.dispatch_packing_media) ? row.dispatch_packing_media : (extraData.dispatchPackingMedia || { photos: [], videos: [] }),
     proofDoc: row.proof_doc || extraData.proofDoc || null,
+    proofDocData: row.proof_doc_data || extraData.proofDocData || null,
+    paymentProofDoc: row.payment_proof_doc || extraData.paymentProofDoc || null,
+    paymentProofDocs: Array.isArray(row.payment_proof_docs)
+      ? row.payment_proof_docs
+      : (Array.isArray(extraData.paymentProofDocs)
+        ? extraData.paymentProofDocs
+        : (Array.isArray(cleanAccountsVerification?.paymentProofDocs) ? cleanAccountsVerification.paymentProofDocs : [])),
+    balancePaymentProofDoc: row.balance_payment_proof_doc || extraData.balancePaymentProofDoc || cleanAccountsVerification?.balancePaymentProofDoc || null,
+    balancePaymentProofDocs: Array.isArray(row.balance_payment_proof_docs)
+      ? row.balance_payment_proof_docs
+      : (Array.isArray(extraData.balancePaymentProofDocs)
+        ? extraData.balancePaymentProofDocs
+        : (Array.isArray(cleanAccountsVerification?.balancePaymentProofDocs) ? cleanAccountsVerification.balancePaymentProofDocs : [])),
+    balanceProofDoc: row.balance_proof_doc || extraData.balanceProofDoc || null,
+    uploadedDocuments: Array.isArray(row.uploaded_documents)
+      ? row.uploaded_documents
+      : (Array.isArray(extraData.uploadedDocuments) ? extraData.uploadedDocuments : []),
+    awaitingSalesPaymentProof: Boolean(row.awaiting_sales_payment_proof ?? extraData.awaitingSalesPaymentProof),
+    pendingSalesDispatchPayment: Boolean(row.pending_sales_dispatch_payment ?? extraData.pendingSalesDispatchPayment),
+    paymentProofAttached: Boolean(extraData.paymentProofAttached || cleanAccountsVerification?.paymentStatus === 'Payment Proof Attached' || cleanAccountsVerification?.paymentStatus === 'Payment Proof Attached by Sales'),
+    paymentProofAttachedAt: extraData.paymentProofAttachedAt || cleanAccountsVerification?.paymentProofAttachedAt || null,
+    creditSettled: Boolean(row.credit_settled || extraData.creditSettled || cleanAccountsVerification?.creditSettled),
+    paymentSettled: Boolean(row.payment_settled || extraData.paymentSettled),
     sourcePiNo: row.source_pi_no || extraData.sourcePiNo || null,
     piCreatedAt: row.pi_created_at || extraData.piCreatedAt || null,
     vehicleLoading: row.vehicle_loading || extraData.vehicleLoading || null,
@@ -1073,6 +1096,19 @@ export function toDatabaseBomRow(item) {
   if (item.cancelledByTeam) mergedExtra.cancelledByTeam = item.cancelledByTeam;
   if (item.cancelledByNameAndRole) mergedExtra.cancelledByNameAndRole = item.cancelledByNameAndRole;
   if (item.cancellationReason) mergedExtra.cancellationReason = item.cancellationReason;
+  if (item.paymentProofDocs) mergedExtra.paymentProofDocs = item.paymentProofDocs;
+  if (item.balancePaymentProofDoc) mergedExtra.balancePaymentProofDoc = item.balancePaymentProofDoc;
+  if (item.balancePaymentProofDocs) mergedExtra.balancePaymentProofDocs = item.balancePaymentProofDocs;
+  if (item.balanceProofDoc) mergedExtra.balanceProofDoc = item.balanceProofDoc;
+  if (item.paymentProofDoc) mergedExtra.paymentProofDoc = item.paymentProofDoc;
+  if (item.proofDoc) mergedExtra.proofDoc = item.proofDoc;
+  if (item.uploadedDocuments) mergedExtra.uploadedDocuments = item.uploadedDocuments;
+  if (item.awaitingSalesPaymentProof !== undefined) mergedExtra.awaitingSalesPaymentProof = Boolean(item.awaitingSalesPaymentProof);
+  if (item.pendingSalesDispatchPayment !== undefined) mergedExtra.pendingSalesDispatchPayment = Boolean(item.pendingSalesDispatchPayment);
+  if (item.paymentProofAttached !== undefined) mergedExtra.paymentProofAttached = Boolean(item.paymentProofAttached);
+  if (item.paymentProofAttachedAt) mergedExtra.paymentProofAttachedAt = item.paymentProofAttachedAt;
+  if (item.creditSettled !== undefined) mergedExtra.creditSettled = Boolean(item.creditSettled);
+  if (item.paymentSettled !== undefined) mergedExtra.paymentSettled = Boolean(item.paymentSettled);
 
   delete mergedExtra.dateTimeObj;
   delete mergedExtra.c2;

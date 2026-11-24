@@ -554,15 +554,94 @@ export default function ProductionViewsEngine(props) {
     };
 
     const handleBomUpdated = (e) => {
-      if (e?.detail?.bom) {
-        const newBom = e.detail.bom;
-        setBomStore(prev => {
-          const k = newBom.bomCode || newBom.code || newBom.id;
-          const filtered = (prev || []).filter(b => b && (b.bomCode !== k && b.code !== k && b.id !== k));
-          const list = [newBom, ...filtered];
-          return list.map(stripDataUrlsFromRecord);
+      const incomingBom = e?.detail?.bom || (e?.detail && (e.detail.bomCode || e.detail.code || e.detail.id) ? e.detail : null);
+      if (!incomingBom) return;
+
+      const k = String(incomingBom.bomCode || incomingBom.code || incomingBom.id || '').trim().toLowerCase();
+      if (!k) return;
+
+      setBomStore(prev => {
+        let matched = false;
+        const updated = (prev || []).map(b => {
+          if (!b) return b;
+          const bk = String(b.bomCode || b.code || b.id || '').trim().toLowerCase();
+          if (bk === k) {
+            matched = true;
+            return stripDataUrlsFromRecord({
+              ...b,
+              ...incomingBom,
+              dispatchPacking: (Array.isArray(incomingBom.dispatchPacking) && incomingBom.dispatchPacking.length > 0)
+                ? incomingBom.dispatchPacking
+                : (b.dispatchPacking || []),
+              accountsVerification: {
+                ...(b.accountsVerification || {}),
+                ...(incomingBom.accountsVerification || {})
+              },
+              vehicleLoading: incomingBom.vehicleLoading || b.vehicleLoading || null,
+              payments: {
+                ...(b.payments || {}),
+                ...(incomingBom.payments || {})
+              }
+            });
+          }
+          return b;
         });
-      }
+
+        if (!matched) {
+          updated.unshift(stripDataUrlsFromRecord(incomingBom));
+        }
+
+        try {
+          localStorage.setItem('controlroom_bom_store', JSON.stringify(updated.map(stripDataUrlsFromRecord)));
+        } catch (_) {}
+
+        return updated;
+      });
+
+      // If Accounts Verification modal is actively open for this BOM, update it live
+      setAccountsVerificationModal(curr => {
+        if (!curr) return null;
+        const curK = String(curr.bomCode || curr.code || curr.id || '').trim().toLowerCase();
+        if (curK === k) {
+          return {
+            ...curr,
+            ...incomingBom,
+            dispatchPacking: (Array.isArray(incomingBom.dispatchPacking) && incomingBom.dispatchPacking.length > 0)
+              ? incomingBom.dispatchPacking
+              : (curr.dispatchPacking || []),
+            accountsVerification: {
+              ...(curr.accountsVerification || {}),
+              ...(incomingBom.accountsVerification || {})
+            },
+            vehicleLoading: incomingBom.vehicleLoading || curr.vehicleLoading || null,
+            payments: {
+              ...(curr.payments || {}),
+              ...(incomingBom.payments || {})
+            }
+          };
+        }
+        return curr;
+      });
+
+      // If Dispatch Packing modal is actively open for this BOM, update it live
+      setDispatchPackingModal(curr => {
+        if (!curr) return null;
+        const curK = String(curr.bomCode || curr.code || curr.id || '').trim().toLowerCase();
+        if (curK === k) {
+          return {
+            ...curr,
+            ...incomingBom,
+            dispatchPacking: (Array.isArray(incomingBom.dispatchPacking) && incomingBom.dispatchPacking.length > 0)
+              ? incomingBom.dispatchPacking
+              : (curr.dispatchPacking || []),
+            accountsVerification: {
+              ...(curr.accountsVerification || {}),
+              ...(incomingBom.accountsVerification || {})
+            }
+          };
+        }
+        return curr;
+      });
     };
 
     let debounceCloudTimer = null;
@@ -590,22 +669,39 @@ export default function ProductionViewsEngine(props) {
       }));
     };
 
+    const handleCrossTabStorage = (e) => {
+      if (e.key === 'controlroom_bom_store' && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setBomStore(parsed);
+          }
+        } catch (_) {}
+      }
+    };
+
     window.addEventListener('controlroom_bom_store_updated', handleBomUpdated);
+    window.addEventListener('controlroom_bom_updated', handleBomUpdated);
+    window.addEventListener('controlroom_bom_save', handleBomUpdated);
     window.addEventListener('controlroom_customer_update', handleCustomerUpdate);
     window.addEventListener('controlroom_storage_update', debouncedSyncFromCloud);
     window.addEventListener('vrm_bom_printed', handleBomPrinted);
     window.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('focus', handleVisibilityChange);
+    window.addEventListener('storage', handleCrossTabStorage);
 
     return () => {
       clearInterval(fallbackInterval);
       if (debounceCloudTimer) clearTimeout(debounceCloudTimer);
       window.removeEventListener('controlroom_bom_store_updated', handleBomUpdated);
+      window.removeEventListener('controlroom_bom_updated', handleBomUpdated);
+      window.removeEventListener('controlroom_bom_save', handleBomUpdated);
       window.removeEventListener('controlroom_customer_update', handleCustomerUpdate);
       window.removeEventListener('controlroom_storage_update', debouncedSyncFromCloud);
       window.removeEventListener('vrm_bom_printed', handleBomPrinted);
       window.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('focus', handleVisibilityChange);
+      window.removeEventListener('storage', handleCrossTabStorage);
     };
   }, [activeTab]);
 

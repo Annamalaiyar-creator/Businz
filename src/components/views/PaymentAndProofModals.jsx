@@ -8,6 +8,16 @@ import { saveCloudStore, saveCloudBomRow } from "../../utils/supabaseDataSync";
 import { uploadBomDocumentFile } from "../../utils/bomStorageClient";
 import { resolveDocumentUrl, resolveDocumentUrlAsync } from "../../utils/documentResolver";
 
+function getAuthBomHeaders() {
+  const sesId = typeof window !== 'undefined' && window.localStorage
+    ? localStorage.getItem('controlroom_device_session_id')
+    : null;
+  return {
+    'Content-Type': 'application/json',
+    ...(sesId ? { 'x-device-session-id': sesId } : {})
+  };
+}
+
 export function UploadPaymentModal({ uploadPaymentModal, onClose, setBomStore }) {
   const [paymentProofFiles, setPaymentProofFiles] = useState([]);
   const [paymentProofFile, setPaymentProofFile] = useState(null);
@@ -399,6 +409,9 @@ export function UploadPaymentModal({ uploadPaymentModal, onClose, setBomStore })
                                   balancePaymentProofDocs: [...(b.balancePaymentProofDocs || []), metadata],
                                   balanceAmountPaid: settledVal,
                                   balancePaidAt: new Date().toISOString(),
+                                  balancePaymentProofDoc: metadata,
+                                  balancePaymentProofDocs: [...(b.balancePaymentProofDocs || []), metadata],
+                                  paymentProofAttached: true,
                                   paymentProofAttachedAt: new Date().toISOString(),
                                   status: wasPackedAwaitingProof ? 'Dispatch Packing Verified - Sent to Accounts' : (b.status || 'Pending Sales Confirmation'),
                                   readyForAccounts: wasPackedAwaitingProof ? true : b.readyForAccounts,
@@ -408,7 +421,9 @@ export function UploadPaymentModal({ uploadPaymentModal, onClose, setBomStore })
                                     ...(b.accountsVerification || {}),
                                     readyForAccounts: wasPackedAwaitingProof ? true : (b.accountsVerification?.readyForAccounts || false),
                                     balancePaymentProofDoc: metadata,
-                                    paymentStatus: 'Payment Proof Attached'
+                                    balancePaymentProofDocs: [...(b.accountsVerification?.balancePaymentProofDocs || []), metadata],
+                                    paymentStatus: 'Payment Proof Attached',
+                                    paymentProofAttachedAt: new Date().toISOString()
                                   },
                                   payments: {
                                     ...b.payments,
@@ -421,7 +436,16 @@ export function UploadPaymentModal({ uploadPaymentModal, onClose, setBomStore })
                                 };
                               });
                               const targetBom = updated.find(x => x.bomCode === bomCode || x.id === bomCode);
-                              if (targetBom) saveCloudBomRow(targetBom);
+                              if (targetBom) {
+                                saveCloudBomRow(targetBom);
+                                window.dispatchEvent(new CustomEvent('controlroom_bom_store_updated', { detail: { bom: targetBom } }));
+                                window.dispatchEvent(new CustomEvent('controlroom_bom_updated', { detail: { bom: targetBom, action: 'update' } }));
+                                fetch('/api/boms', {
+                                  method: 'POST',
+                                  headers: getAuthBomHeaders(),
+                                  body: JSON.stringify({ bom: stripDataUrlsFromRecord(targetBom), isUpdate: true })
+                                }).catch(() => {});
+                              }
                               return updated;
                             });
                             onClose();
@@ -492,14 +516,17 @@ export function UploadPaymentModal({ uploadPaymentModal, onClose, setBomStore })
                           pendingSalesDispatchPayment: false,
                           paymentProofAttachedAt: new Date().toISOString(),
                           paymentProofDoc: primaryMeta,
+                          proofDoc: primaryMeta?.name,
                           paymentProofDocs: [...(b.paymentProofDocs || []), ...uploadedMetas],
                           paymentDocs: [...(b.paymentDocs || []), ...uploadedMetas],
+                          paymentProofAttached: true,
                           accountsVerification: {
                             ...(b.accountsVerification || {}),
                             readyForAccounts: wasPackedAwaitingProof ? true : (b.accountsVerification?.readyForAccounts || false),
                             paymentProofDoc: primaryMeta,
                             paymentProofDocs: [...(b.paymentProofDocs || []), ...uploadedMetas],
-                            paymentStatus: 'Payment Proof Attached'
+                            paymentStatus: 'Payment Proof Attached',
+                            paymentProofAttachedAt: new Date().toISOString()
                           },
                           payments: {
                             ...b.payments,
@@ -515,7 +542,16 @@ export function UploadPaymentModal({ uploadPaymentModal, onClose, setBomStore })
                         };
                       });
                       const targetBom = updated.find(x => x.bomCode === bomCode || x.id === bomCode);
-                      if (targetBom) saveCloudBomRow(targetBom);
+                      if (targetBom) {
+                        saveCloudBomRow(targetBom);
+                        window.dispatchEvent(new CustomEvent('controlroom_bom_store_updated', { detail: { bom: targetBom } }));
+                        window.dispatchEvent(new CustomEvent('controlroom_bom_updated', { detail: { bom: targetBom, action: 'update' } }));
+                        fetch('/api/boms', {
+                          method: 'POST',
+                          headers: getAuthBomHeaders(),
+                          body: JSON.stringify({ bom: stripDataUrlsFromRecord(targetBom), isUpdate: true })
+                        }).catch(() => {});
+                      }
                       return updated;
                     });
                     onClose();
@@ -668,11 +704,13 @@ export function UpdatePaymentModal({
                   const targetBom = updated.find(x => x.bomCode === bomCode || x.id === bomCode);
                   if (targetBom) {
                     saveCloudBomRow(targetBom).catch(console.error);
+                    window.dispatchEvent(new CustomEvent('controlroom_bom_store_updated', { detail: { bom: targetBom } }));
+                    window.dispatchEvent(new CustomEvent('controlroom_bom_updated', { detail: { bom: targetBom, action: 'update' } }));
                     try {
                       fetch('/api/boms', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(targetBom)
+                        headers: getAuthBomHeaders(),
+                        body: JSON.stringify({ bom: stripDataUrlsFromRecord(targetBom), isUpdate: true })
                       }).catch(console.error);
                     } catch (_) {}
                   }
