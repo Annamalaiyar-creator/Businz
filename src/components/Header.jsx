@@ -28,6 +28,13 @@ export default function Header({
   const isExecutiveOrMD = userRole === 'CEO' || userRole === 'Managing Director' || userRole === 'MD';
   const isTechAdmin = userRole === 'Technical Administrator' || userRole === 'Technical Admin' || userRole === 'Developer' || (userRole || '').startsWith('TA');
 
+  const [, setProfileUpdateTick] = useState(0);
+  useEffect(() => {
+    const handleProfileUpdate = () => setProfileUpdateTick(t => t + 1);
+    window.addEventListener('businz_user_updated', handleProfileUpdate);
+    return () => window.removeEventListener('businz_user_updated', handleProfileUpdate);
+  }, []);
+
   useEffect(() => {
     const handleOutsideClick = () => {
       setShowRoleMenu(false);
@@ -51,8 +58,13 @@ export default function Header({
 
   let userName = '';
 
-  // 1. Authoritative resolution: Canonical sales mapping first
-  if (storedEmpId && CODE_TO_SALES_NAME[storedEmpId]) {
+  // 0. Explicit user-customized profile name takes highest priority
+  if (storedName && storedName !== 'undefined' && storedName !== 'null' && storedName !== 'Executive Leadership (CEO)' && storedName !== 'Sales Executive' && storedName !== 'User') {
+    userName = storedName;
+  }
+
+  // 1. Authoritative resolution: Canonical sales mapping if user hasn't explicitly set a custom profile name
+  if (!userName && storedEmpId && CODE_TO_SALES_NAME[storedEmpId]) {
     userName = CODE_TO_SALES_NAME[storedEmpId];
   }
 

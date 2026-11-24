@@ -3778,6 +3778,19 @@ app.use(createCrmLeadsRouter({
 import createSystemBackupRouter from './routes/systemBackupRoutes.js';
 app.use(createSystemBackupRouter({ supabase, supabaseMemoryStore, getVerifiedUserSession, isMaintenanceModeActive }));
 
+import createUserProfileRouter from './routes/userProfileRoutes.js';
+app.use(createUserProfileRouter({
+  requireBusinzSession,
+  broadcastRealtimeEvent,
+  query,
+  isDbConnected,
+  getDatabaseStore,
+  saveDatabaseStore,
+  safeWriteJsonFileAsync,
+  activeSessionsMap,
+  supabaseMemoryStore
+}));
+
 import trackingRoutes from './routes/trackingRoutes.js';
 app.use(trackingRoutes);
 

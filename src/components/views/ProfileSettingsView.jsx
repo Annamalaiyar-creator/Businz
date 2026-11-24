@@ -16,6 +16,31 @@ export default function ProfileSettingsView({ userRole, onNavigateTab }) {
   // Subview inside Integrations tab (e.g. 'indiamart')
   const [activeIntegrationSubView, setActiveIntegrationSubView] = useState(null);
 
+  // Sync user profile from backend on mount
+  useEffect(() => {
+    fetch('/api/user/profile')
+      .then(r => r.json())
+      .then(d => {
+        if (d.success && d.user) {
+          setProfile(p => ({
+            ...p,
+            name: d.user.name || p.name,
+            email: d.user.email || p.email,
+            phone: d.user.phone || p.phone,
+            empCode: d.user.empCode || p.empCode,
+            role: d.user.role || p.role,
+            department: d.user.department || p.department
+          }));
+          if (d.user.name) {
+            localStorage.setItem('controlroom_logged_user_name', d.user.name);
+            localStorage.setItem('vrm_user_name', d.user.name);
+            localStorage.setItem('businz_user_name', d.user.name);
+          }
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   // Zoho modal & live status
   const [isZohoModalOpen, setIsZohoModalOpen] = useState(false);
   const [zohoConfig, setZohoConfig] = useState(null);
@@ -161,12 +186,43 @@ export default function ProfileSettingsView({ userRole, onNavigateTab }) {
     }
   };
 
-  const handleSaveProfile = (e) => {
+  const handleSaveProfile = async (e) => {
     e?.preventDefault();
+    const cleanName = String(profile.name || '').trim();
+    if (!cleanName) return;
     setBusy(true);
     try {
-      localStorage.setItem('controlroom_logged_user_name', profile.name);
-      localStorage.setItem('vrm_user_name', profile.name);
+      const res = await fetch('/api/user/profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: cleanName,
+          email: String(profile.email || '').trim(),
+          phone: String(profile.phone || '').trim()
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        localStorage.setItem('controlroom_logged_user_name', cleanName);
+        localStorage.setItem('vrm_user_name', cleanName);
+        localStorage.setItem('businz_user_name', cleanName);
+        if (profile.email) localStorage.setItem('controlroom_logged_user_email', String(profile.email).trim());
+        if (profile.phone) localStorage.setItem('controlroom_logged_user_phone', String(profile.phone).trim());
+
+        // Notify Header and all components immediately of the updated name
+        window.dispatchEvent(new CustomEvent('businz_user_updated', {
+          detail: { name: cleanName, email: profile.email, phone: profile.phone }
+        }));
+
+        setSavedSuccess(true);
+        setTimeout(() => setSavedSuccess(false), 3500);
+      } else {
+        alert(data.error || 'Failed to update profile on server.');
+      }
+    } catch (err) {
+      console.error('Error updating profile:', err);
+      localStorage.setItem('controlroom_logged_user_name', cleanName);
+      localStorage.setItem('vrm_user_name', cleanName);
       setSavedSuccess(true);
       setTimeout(() => setSavedSuccess(false), 3500);
     } finally {
