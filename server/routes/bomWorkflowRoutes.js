@@ -1,13 +1,20 @@
 import { Router } from 'express';
 import fs from 'fs';
 import path from 'path';
-import { createHash } from 'crypto';
+import crypto, { createHash } from 'crypto';
+import zlib from 'zlib';
 import { getStoreFilePath } from '../runtimePaths.js';
 import { isDbConnected, query } from '../db.js';
 import { toDatabaseBomRowServer } from '../bomPersistence.js';
 
 export let reconcileServerInventoryWithBoms = async () => {};
 export let syncMissingRelationalBoms = async () => {};
+
+let cachedBomsResult = null;
+let lastBomFetchTimestamp = 0;
+let cachedBomsWirePayload = null;
+let serverBomSequenceCounter = null;
+let serverBomReservationLock = Promise.resolve();
 
 export default function createBomWorkflowRouter(dependencies) {
   const router = Router();

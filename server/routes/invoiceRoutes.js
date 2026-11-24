@@ -5,6 +5,7 @@ import { getStoreFilePath } from '../runtimePaths.js';
 
 export default function createInvoiceRouter(dependencies) {
   const router = Router();
+  let cachedBomsResult = null;
   const {
     broadcastRealtimeEvent,
     getVerifiedUserSession,
