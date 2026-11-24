@@ -3,8 +3,11 @@ import fs from 'fs';
 import path from 'path';
 import { createHash } from 'crypto';
 import { getStoreFilePath } from '../runtimePaths.js';
+import { isDbConnected, query } from '../db.js';
+import { toDatabaseBomRowServer } from '../bomPersistence.js';
 
 export let reconcileServerInventoryWithBoms = async () => {};
+export let syncMissingRelationalBoms = async () => {};
 
 export default function createBomWorkflowRouter(dependencies) {
   const router = Router();
@@ -21,18 +24,14 @@ export default function createBomWorkflowRouter(dependencies) {
     gzipAsync,
     hasAnyUserRole,
     isDbConnected,
-    parseBomSeq,
     persistBomsTransactionSafe,
     pushStoreToSupabase,
     query,
     requireRole,
     resolveProductCode,
     safeWriteJsonFileAsync,
-    sortBoms,
-    stripServerDataUrls,
     toConsumerBomServer,
     toDatabaseBomRowServer,
-    updatePiDiskFile,
     wordFingerprint,
     supabase,
     supabaseMemoryStore,
@@ -352,7 +351,7 @@ async function repairBomSequences() {
  * Ensures all BOMs present in controlroom_store or bom_store.json
  * are cleanly represented in public.bom_orders without overwriting existing data.
  */
-async function syncMissingRelationalBoms() {
+  syncMissingRelationalBoms = async function() {
   if (!isDbConnected()) return;
   try {
     const existingDbRes = await query(`SELECT bom_code, id, status, grand_total FROM public.bom_orders`).catch(() => null);

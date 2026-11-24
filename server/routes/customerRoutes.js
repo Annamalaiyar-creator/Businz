@@ -21,9 +21,6 @@ export default function createCustomerRouter(dependencies) {
     loadLocalCustomers,
     saveLocalCustomers,
     safeWriteJsonFileAsync,
-    normalizeCustGst,
-    normalizeCustName,
-    normalizeCustPhone,
     query,
     supabaseMemoryStore
   } = dependencies;

@@ -16,6 +16,7 @@ const gzipAsync = promisify(zlib.gzip);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 import { pool, isDbConnected, initPostgresDatabase, createLocalDbClient, query, verifyDbConnectivity } from './db.js';
+import { syncMissingRelationalBoms } from './routes/bomWorkflowRoutes.js';
 import {
   persistBomsTransactionSafe,
   toDatabaseBomRowServer,
@@ -3342,9 +3343,6 @@ app.use(createCustomerRouter({
   loadLocalCustomers,
   saveLocalCustomers,
   safeWriteJsonFileAsync,
-  normalizeCustGst,
-  normalizeCustName,
-  normalizeCustPhone,
   query,
   supabaseMemoryStore
 }));
@@ -3552,18 +3550,14 @@ app.use(createBomWorkflowRouter({
   gzipAsync,
   hasAnyUserRole,
   isDbConnected,
-  parseBomSeq,
   persistBomsTransactionSafe,
   pushStoreToSupabase,
   query,
   requireRole,
   resolveProductCode,
   safeWriteJsonFileAsync,
-  sortBoms,
-  stripServerDataUrls,
   toConsumerBomServer,
   toDatabaseBomRowServer,
-  updatePiDiskFile,
   wordFingerprint,
   supabase,
   supabaseMemoryStore,
