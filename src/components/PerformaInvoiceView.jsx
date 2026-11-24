@@ -597,26 +597,26 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         const assignedByCode = String(pi.assignedById || '').toUpperCase().trim();
         const assignedByName = String(pi.assignedBy || '').replace(/\s*\([^)]*\)/g, '').trim().toLowerCase();
 
-        // STRICT SEPARATION: Any Sales Rep PI (SE-001 to SE-009, SH-001) is strictly excluded from Tech Support
-        if (createdCode.startsWith('SE-') || createdCode.startsWith('SH-')) {
-          if (assignedByCode !== curCode && createdCode !== curCode) {
-            return false;
-          }
-        }
-        // Disambiguate Sales Vasanth Kumar S vs Tech Support Vasanth
-        const piFullText = [pi.salesPerson, pi.createdBy, pi.createdByName, pi.author].filter(Boolean).join(' ').toLowerCase();
-        if (piFullText.includes('kumar') && (createdCode === 'SE-003' || piFullText.includes('vasanth'))) {
-          if (curCode !== 'SE-003') {
-            return false;
-          }
-        }
-
-        // 1. Strict EMP Code matching (TS-001, TS-002, etc.)
+        // 1. Authoritative ownership: If created or assigned by this exact employee code -> always visible
         if (curCode && createdCode && (curCode === createdCode || (curCode === 'TS-VRM001' && createdCode === 'TS-001') || (curCode === 'TS-001' && createdCode === 'TS-VRM001'))) {
           return true;
         }
         if (curCode && assignedByCode && (curCode === assignedByCode)) {
           return true;
+        }
+
+        // STRICT SEPARATION: Any Sales Rep PI (SE-001 to SE-009, SH-001) not created/assigned by this user is strictly excluded from Tech Support
+        if (createdCode.startsWith('SE-') || createdCode.startsWith('SH-')) {
+          if (assignedByCode !== curCode && createdCode !== curCode) {
+            return false;
+          }
+        }
+        // Disambiguate Sales Vasanth Kumar S vs Tech Support Vasanth (checks creator only, not assigned salesPerson)
+        const creatorFullText = [pi.createdBy, pi.createdByName, pi.author].filter(Boolean).join(' ').toLowerCase();
+        if (creatorFullText.includes('kumar') && (createdCode === 'SE-003' || creatorFullText.includes('vasanth'))) {
+          if (curCode !== 'SE-003') {
+            return false;
+          }
         }
 
         // 2. Exact email matching

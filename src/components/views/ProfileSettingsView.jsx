@@ -3,7 +3,7 @@ import {
   Building2, ShieldCheck, Bell, CreditCard, Link2,
   Save, Check, User, KeyRound, Shield, CheckCircle, ArrowRight,
   Sliders, Globe, MessageSquare, Mail, Share2, Lock, AlertCircle,
-  RefreshCw, CheckCircle2, ArrowLeft
+  RefreshCw, CheckCircle2, ArrowLeft, Truck
 } from 'lucide-react';
 import ZohoConfigModal from './ZohoConfigModal';
 import IndiaMartSettingsView from '../crm/IndiaMartSettingsView';
@@ -21,6 +21,51 @@ export default function ProfileSettingsView({ userRole, onNavigateTab }) {
   const [zohoConfig, setZohoConfig] = useState(null);
   const [isTestingZoho, setIsTestingZoho] = useState(false);
   const [zohoTestResult, setZohoTestResult] = useState(null);
+
+  // BUSINZ Track: Customer Order Tracking Settings State
+  const [trackingSettings, setTrackingSettings] = useState({
+    is_enabled: true,
+    brand_color: '#0E7490',
+    support_phone: '+91 98765 43210',
+    support_email: 'support@businz.com',
+    show_packing_photos: true,
+    show_loading_photos: true,
+    show_driver_phone: true,
+    auto_whatsapp_dispatch_received: true,
+    auto_whatsapp_packing_completed: true,
+    auto_whatsapp_dispatched: true,
+    auto_whatsapp_delivered: true
+  });
+  const [trackingSaved, setTrackingSaved] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/internal/tracking/settings')
+      .then(r => r.json())
+      .then(d => {
+        if (d.settings && Object.keys(d.settings).length > 0) {
+          setTrackingSettings(prev => ({ ...prev, ...d.settings }));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleSaveTrackingSettings = async () => {
+    setBusy(true);
+    try {
+      const res = await fetch('/api/internal/tracking/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(trackingSettings)
+      });
+      if (res.ok) {
+        setTrackingSaved(true);
+        setTimeout(() => setTrackingSaved(false), 2000);
+      }
+    } catch (_) {}
+    finally {
+      setBusy(false);
+    }
+  };
 
   // Read stored user profile details
   const storedEmpCode = localStorage.getItem('controlroom_logged_emp_id') || localStorage.getItem('controlroom_logged_user_emp_code') || 'TA-001';
@@ -159,6 +204,7 @@ export default function ProfileSettingsView({ userRole, onNavigateTab }) {
     { key: 'notifications', label: 'Notifications', icon: Bell },
     { key: 'privacy', label: 'Privacy & Security', icon: KeyRound },
     { key: 'integrations', label: 'Integrations Hub', icon: Link2, badge: '5 Active' },
+    { key: 'tracking', label: 'Order Tracking', icon: Truck },
     { key: 'billing', label: 'Subscription & License', icon: CreditCard }
   ];
 
@@ -277,19 +323,67 @@ export default function ProfileSettingsView({ userRole, onNavigateTab }) {
         </div>
       </div>
 
-      {/* 2. Main 3-Column Enterprise Grid Layout */}
+      {/* 2. Main 2-Column Full-Width Enterprise Grid Layout */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: '260px minmax(0, 1fr) 340px',
+        gridTemplateColumns: '260px minmax(0, 1fr)',
         gap: '20px',
         alignItems: 'start',
         width: '100%'
       }}>
 
         {/* ========================================================= */}
-        {/* COLUMN 1: LEFT NAVIGATION MENU */}
+        {/* COLUMN 1: LEFT NAVIGATION MENU & USER IDENTITY */}
         {/* ========================================================= */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {/* User Mini Profile Card */}
+          <div style={{
+            backgroundColor: '#FFFFFF',
+            borderRadius: '16px',
+            border: '1px solid #E2E8F0',
+            padding: '12px 14px',
+            boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px'
+          }}>
+            <div style={{
+              width: '38px',
+              height: '38px',
+              borderRadius: '10px',
+              backgroundColor: '#0E7490',
+              color: '#FFFFFF',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '15px',
+              fontWeight: '800',
+              flexShrink: 0
+            }}>
+              {(profile.name || 'A').charAt(0).toUpperCase()}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {profile.name}
+              </div>
+              <div style={{ fontSize: '11px', color: '#64748B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {profile.role}
+              </div>
+            </div>
+            <span style={{
+              fontSize: '10px',
+              fontWeight: '700',
+              fontFamily: 'monospace',
+              backgroundColor: '#F1F5F9',
+              color: '#475569',
+              padding: '2px 6px',
+              borderRadius: '6px',
+              flexShrink: 0
+            }}>
+              {profile.empCode}
+            </span>
+          </div>
+
           <div style={{
             backgroundColor: '#FFFFFF',
             borderRadius: '16px',
@@ -371,9 +465,78 @@ export default function ProfileSettingsView({ userRole, onNavigateTab }) {
 
 
         {/* ========================================================= */}
-        {/* COLUMN 2: CENTER FORM PANELS */}
+        {/* COLUMN 2: FULL-WIDTH EXECUTIVE SETTINGS CONTENT PANE */}
         {/* ========================================================= */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', minWidth: 0, width: '100%' }}>
+
+          {/* Executive Header Banner Card */}
+          <div style={{
+            backgroundColor: '#FFFFFF',
+            borderRadius: '16px',
+            border: '1px solid #E2E8F0',
+            padding: '20px 24px',
+            boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '16px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+              <div style={{
+                width: '56px',
+                height: '56px',
+                borderRadius: '14px',
+                backgroundColor: '#0E7490',
+                color: '#FFFFFF',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '24px',
+                fontWeight: '800',
+                boxShadow: '0 4px 12px rgba(14, 116, 144, 0.25)',
+                flexShrink: 0
+              }}>
+                {(profile.name || 'A').charAt(0).toUpperCase()}
+              </div>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                  <h2 style={{ fontSize: '18px', fontWeight: '800', color: '#0F172A', margin: 0 }}>
+                    {profile.name}
+                  </h2>
+                  <span style={{
+                    fontSize: '11px',
+                    fontWeight: '700',
+                    color: '#0E7490',
+                    backgroundColor: '#ECFEFF',
+                    border: '1px solid #CFFAFE',
+                    padding: '2px 10px',
+                    borderRadius: '999px'
+                  }}>
+                    {profile.role}
+                  </span>
+                </div>
+                <div style={{ fontSize: '12px', color: '#64748B', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>Employee Code: <strong style={{ color: '#0F172A' }}>{profile.empCode}</strong></span>
+                  <span>•</span>
+                  <span>{profile.department}</span>
+                </div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span style={{
+                fontSize: '11.5px',
+                fontWeight: '700',
+                color: '#475569',
+                backgroundColor: '#F8FAFC',
+                border: '1px solid #E2E8F0',
+                padding: '6px 14px',
+                borderRadius: '8px'
+              }}>
+                {isTA ? 'Full System Scope' : 'Standard User Scope'}
+              </span>
+            </div>
+          </div>
 
           {/* TAB 1: PERSONAL PROFILE */}
           {activeTab === 'general' && (
@@ -1327,154 +1490,169 @@ export default function ProfileSettingsView({ userRole, onNavigateTab }) {
             </div>
           )}
 
-        </div>
-
-
-        {/* ========================================================= */}
-        {/* COLUMN 3: RIGHT INTELLIGENCE PANEL */}
-        {/* ========================================================= */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-
-          {/* Live User Profile Card */}
-          <div style={{
-            backgroundColor: '#FFFFFF',
-            borderRadius: '16px',
-            border: '1px solid #E2E8F0',
-            padding: '20px',
-            boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
-            textAlign: 'center',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '14px'
-          }}>
+          {/* TAB 7: ORDER TRACKING SETTINGS */}
+          {activeTab === 'tracking' && (
             <div style={{
-              width: '60px',
-              height: '60px',
+              backgroundColor: '#FFFFFF',
               borderRadius: '16px',
-              background: 'linear-gradient(135deg, #0E7490 0%, #155E75 100%)',
-              color: '#FFFFFF',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '22px',
-              fontWeight: '800',
-              margin: '0 auto',
-              boxShadow: '0 4px 12px rgba(14, 116, 144, 0.25)'
-            }}>
-              {(profile.name || 'U').charAt(0).toUpperCase()}
-            </div>
-
-            <div>
-              <h2 style={{ fontSize: '16px', fontWeight: '800', color: '#0F172A', margin: 0 }}>
-                {profile.name}
-              </h2>
-              <div style={{ fontSize: '12px', fontWeight: '700', color: '#0E7490', marginTop: '3px' }}>
-                {profile.role}
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', marginTop: '8px' }}>
-                <span style={{
-                  fontSize: '11px',
-                  fontWeight: '700',
-                  fontFamily: 'monospace',
-                  backgroundColor: '#F1F5F9',
-                  color: '#475569',
-                  padding: '2px 8px',
-                  borderRadius: '6px'
-                }}>
-                  {profile.empCode || 'TA-001'}
-                </span>
-                <span style={{
-                  fontSize: '11px',
-                  fontWeight: '700',
-                  backgroundColor: '#F0FDF4',
-                  color: '#16A34A',
-                  padding: '2px 8px',
-                  borderRadius: '6px'
-                }}>
-                  Active User
-                </span>
-              </div>
-            </div>
-
-            <div style={{
-              borderTop: '1px solid #F1F5F9',
-              paddingTop: '12px',
+              border: '1px solid #E2E8F0',
+              padding: '24px',
+              boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
               display: 'flex',
               flexDirection: 'column',
-              gap: '8px',
-              fontSize: '12px',
-              textAlign: 'left'
+              gap: '20px'
             }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B' }}>
-                <span>Department</span>
-                <span style={{ fontWeight: '700', color: '#0F172A' }}>{profile.department}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B' }}>
-                <span>Official Email</span>
-                <span style={{ fontWeight: '600', color: '#0F172A', fontFamily: 'monospace', fontSize: '11px' }}>
-                  {profile.email}
-                </span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B' }}>
-                <span>Contact Phone</span>
-                <span style={{ fontWeight: '700', color: '#0F172A' }}>{profile.phone}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B' }}>
-                <span>Zoho Books Sync</span>
-                <span style={{ fontWeight: '700', color: '#059669' }}>Connected</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Assigned System Capabilities */}
-          <div style={{
-            backgroundColor: '#FFFFFF',
-            borderRadius: '16px',
-            border: '1px solid #E2E8F0',
-            padding: '16px',
-            boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '12px'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '12px', fontWeight: '800', color: '#0F172A' }}>
-                Assigned Capabilities
-              </span>
-              <span style={{
-                fontSize: '10px',
-                fontWeight: '700',
-                color: '#0E7490',
-                backgroundColor: '#ECFEFF',
-                padding: '2px 8px',
-                borderRadius: '6px'
-              }}>
-                Full Access
-              </span>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '11.5px' }}>
-              {[
-                'Sales & CRM', 'BOM Production',
-                'Dispatch Orders', 'Invoices & Billing',
-                'Zoho PO & Books', 'System Admin'
-              ].map(cap => (
-                <div key={cap} style={{
-                  padding: '7px 10px',
-                  borderRadius: '8px',
-                  backgroundColor: '#F8FAFC',
-                  border: '1px solid #F1F5F9',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  color: '#334155',
-                  fontWeight: '600'
-                }}>
-                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#0E7490' }} />
-                  <span>{cap}</span>
+              <div style={{ borderBottom: '1px solid #F1F5F9', paddingBottom: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <h3 style={{ fontSize: '15px', fontWeight: '800', color: '#0F172A', margin: 0 }}>
+                    Live Customer Order Tracking
+                  </h3>
+                  <p style={{ fontSize: '12.5px', color: '#64748B', margin: '4px 0 0 0' }}>
+                    Configure automated customer tracking links, WhatsApp notifications, and customer document permissions.
+                  </p>
                 </div>
-              ))}
+                {trackingSaved && (
+                  <span style={{ fontSize: '12px', fontWeight: 700, color: '#059669', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <CheckCircle2 size={16} /> Saved!
+                  </span>
+                )}
+              </div>
+
+              {/* Master Toggle */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', backgroundColor: '#F8FAFC', borderRadius: '12px' }}>
+                <div>
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A' }}>Enable Customer Order Tracking</div>
+                  <div style={{ fontSize: '12px', color: '#64748B' }}>Generate secure live tracking links for verified BOM orders.</div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={trackingSettings.is_enabled}
+                  onChange={(e) => setTrackingSettings(s => ({ ...s, is_enabled: e.target.checked }))}
+                  style={{ accentColor: '#0E7490', width: '18px', height: '18px', cursor: 'pointer' }}
+                />
+              </div>
+
+              {/* Branding & Contacts */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#475569', marginBottom: '6px' }}>
+                    Brand Accent Color
+                  </label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <input
+                      type="color"
+                      value={trackingSettings.brand_color || '#0E7490'}
+                      onChange={(e) => setTrackingSettings(s => ({ ...s, brand_color: e.target.value }))}
+                      style={{ width: '36px', height: '36px', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+                    />
+                    <input
+                      type="text"
+                      value={trackingSettings.brand_color || '#0E7490'}
+                      onChange={(e) => setTrackingSettings(s => ({ ...s, brand_color: e.target.value }))}
+                      style={{ flex: 1, padding: '8px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '13px' }}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#475569', marginBottom: '6px' }}>
+                    Customer Support Phone
+                  </label>
+                  <input
+                    type="text"
+                    value={trackingSettings.support_phone || ''}
+                    onChange={(e) => setTrackingSettings(s => ({ ...s, support_phone: e.target.value }))}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '13px', boxSizing: 'border-box' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#475569', marginBottom: '6px' }}>
+                    Customer Support Email
+                  </label>
+                  <input
+                    type="email"
+                    value={trackingSettings.support_email || ''}
+                    onChange={(e) => setTrackingSettings(s => ({ ...s, support_email: e.target.value }))}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '13px', boxSizing: 'border-box' }}
+                  />
+                </div>
+              </div>
+
+              {/* Privacy Toggles */}
+              <div>
+                <div style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A', marginBottom: '10px' }}>
+                  Customer Visibility & Photo Permissions
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {[
+                    { key: 'show_packing_photos', label: 'Display warehouse packing verification photos on tracking portal' },
+                    { key: 'show_loading_photos', label: 'Display vehicle bay loading & consignment photos' },
+                    { key: 'show_driver_phone', label: 'Allow customer to view assigned delivery driver mobile number' }
+                  ].map(item => (
+                    <label key={item.key} style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px', color: '#334155', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(trackingSettings[item.key])}
+                        onChange={(e) => setTrackingSettings(s => ({ ...s, [item.key]: e.target.checked }))}
+                        style={{ accentColor: '#0E7490', width: '16px', height: '16px' }}
+                      />
+                      <span>{item.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Automated WhatsApp Notification Triggers */}
+              <div>
+                <div style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A', marginBottom: '10px' }}>
+                  Automated Meta WhatsApp Notification Triggers
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px' }}>
+                  {[
+                    { key: 'auto_whatsapp_dispatch_received', label: '1. Order Received by Dispatch' },
+                    { key: 'auto_whatsapp_packing_completed', label: '2. Packing Completed' },
+                    { key: 'auto_whatsapp_dispatched', label: '3. Order Dispatched & In Transit' },
+                    { key: 'auto_whatsapp_delivered', label: '4. Delivery Completed' }
+                  ].map(item => (
+                    <label key={item.key} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12.5px', color: '#334155', padding: '10px', backgroundColor: '#F8FAFC', borderRadius: '8px', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(trackingSettings[item.key])}
+                        onChange={(e) => setTrackingSettings(s => ({ ...s, [item.key]: e.target.checked }))}
+                        style={{ accentColor: '#0E7490', width: '16px', height: '16px' }}
+                      />
+                      <span>{item.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Save Button */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '10px', borderTop: '1px solid #F1F5F9' }}>
+                <button
+                  onClick={handleSaveTrackingSettings}
+                  disabled={busy}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '10px 18px',
+                    borderRadius: '8px',
+                    backgroundColor: '#0E7490',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  <Save size={15} />
+                  <span>{busy ? 'Saving...' : 'Save Tracking Settings'}</span>
+                </button>
+              </div>
             </div>
-          </div>
+          )}
 
         </div>
 

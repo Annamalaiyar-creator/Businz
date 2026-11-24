@@ -110,7 +110,8 @@ export default function CeoDispatchAnalyticsSection({
   challansList = [],
   invList = [],
   inventoryList = [],
-  onOpenBom = null
+  onOpenBom = null,
+  onNavigateTab = null
 }) {
   const [selectedStatus, setSelectedStatus] = useState(null);
   const [selectedDayIdx, setSelectedDayIdx] = useState(null);
@@ -571,6 +572,83 @@ export default function CeoDispatchAnalyticsSection({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      {/* 🚀 BUSINZ Track: LIVE CUSTOMER ORDER TRACKING EXECUTIVE RIBBON */}
+      <div style={{
+        backgroundColor: '#FFFFFF',
+        borderRadius: '16px',
+        border: '1px solid #E2E8F0',
+        padding: '16px 20px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: '16px',
+        boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{
+            width: '36px',
+            height: '36px',
+            borderRadius: '10px',
+            backgroundColor: '#0E7490',
+            color: '#FFFFFF',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}>
+            <Truck size={18} />
+          </div>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                Live Customer Order Tracking
+              </span>
+              <span style={{ fontSize: '10px', fontWeight: '800', backgroundColor: '#ECFDF5', color: '#059669', padding: '2px 8px', borderRadius: '12px' }}>
+                Real-Time SSE
+              </span>
+            </div>
+            <div style={{ fontSize: '12px', color: '#64748B' }}>
+              Active WhatsApp customer tracking links & live dispatch progression
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '24px', flexWrap: 'wrap' }}>
+          <div>
+            <div style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>Tracked Orders</div>
+            <div style={{ fontSize: '15px', fontWeight: '900', color: '#0F172A' }}>{analytics.totalOrders}</div>
+          </div>
+          <div>
+            <div style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>In Transit</div>
+            <div style={{ fontSize: '15px', fontWeight: '900', color: '#2563EB' }}>{analytics.dispatchedCount}</div>
+          </div>
+          <div>
+            <div style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>Packing Queue</div>
+            <div style={{ fontSize: '15px', fontWeight: '900', color: '#D97706' }}>{analytics.inQueueCount}</div>
+          </div>
+
+          <button
+            onClick={() => onNavigateTab && onNavigateTab('Customer Order Tracking')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '8px 14px',
+              borderRadius: '8px',
+              backgroundColor: '#0E7490',
+              color: '#FFFFFF',
+              border: 'none',
+              fontSize: '12px',
+              fontWeight: '700',
+              cursor: 'pointer'
+            }}
+          >
+            <span>Open Tracking Console</span>
+            <span style={{ fontSize: '13px' }}>›</span>
+          </button>
+        </div>
+      </div>
+
       {/* ROW 1: DISPATCH STATUS (DONUT) + DAILY DISPATCH TREND (ORDERS) */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '16px' }}>
         {/* 1. DISPATCH STATUS */}

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import {
   Eye, FileText, X, CheckCircle, Clock, XCircle, Calendar,
   UploadCloud, Download, Upload, Printer, Layers, Receipt, IndianRupee, Image,
-  Loader2, ExternalLink, AlertTriangle, User, Truck, Package
+  Loader2, ExternalLink, AlertTriangle, User, Truck, Package, ShieldCheck
 } from "lucide-react";
 import { getMediaFromCache, getMediaFromCacheAsync, saveMediaToCache, formatCurrency, cleanNum, compressAndSaveFile, stripDataUrlsFromRecord } from "../../utils/otherViewsShared";
 import { resolveDocumentUrl, resolveDocumentUrlAsync } from "../../utils/documentResolver";
@@ -450,11 +450,19 @@ export default function AccountsVerificationModal({
 
   const payType = accountsVerificationModal?.paymentType || accountsVerificationModal?.paymentTerms || accountsVerificationModal?.c3 || '';
   const payTypeLower = String(payType).toLowerCase();
-  const isWhileDispatch = payType === 'Payment While Dispatch' || payTypeLower.includes('while dispatch') || payTypeLower.includes('before dispatch');
-  const isPartialPaidTerms = payTypeLower.includes('partial') || payTypeLower.includes('50%');
-  const isCreditTerms = payTypeLower.includes('credit') || payTypeLower.includes('net 30') || payTypeLower.includes('net 15') || payTypeLower.includes('net 45') || payTypeLower.includes('net 60');
-  const is100PaidTerms = payTypeLower.includes('100%') || payTypeLower.includes('full') || payTypeLower.includes('advance');
-  const requiresPaymentProofForApproval = Boolean(
+  const creditDays = Number(accountsVerificationModal?.creditDays || 30);
+  const verifiedOrderTotal = orderValue > 0 ? orderValue : cleanNum(accountsVerificationModal?.grandTotal, 0);
+  const isCreditTerms = currentPayStatus === 'Credit Payment' ||
+    payTypeLower.includes('credit') || 
+    payTypeLower.includes('net 30') || 
+    payTypeLower.includes('net 15') || 
+    payTypeLower.includes('net 45') || 
+    payTypeLower.includes('net 60') ||
+    Number(accountsVerificationModal?.creditDays || 0) > 0;
+  const isWhileDispatch = !isCreditTerms && (payType === 'Payment While Dispatch' || payTypeLower.includes('while dispatch') || payTypeLower.includes('before dispatch'));
+  const isPartialPaidTerms = !isCreditTerms && (payTypeLower.includes('partial') || payTypeLower.includes('50%'));
+  const is100PaidTerms = !isCreditTerms && (payTypeLower.includes('100%') || payTypeLower.includes('full') || payTypeLower.includes('advance'));
+  const requiresPaymentProofForApproval = !isCreditTerms && Boolean(
     isWhileDispatch ||
     isPartialPaidTerms ||
     accountsVerificationModal?.awaitingSalesPaymentProof ||
@@ -505,17 +513,16 @@ export default function AccountsVerificationModal({
     (accountsVerificationModal?.balanceAmount !== undefined && accountsVerificationModal?.balanceAmount !== null && Number(accountsVerificationModal.balanceAmount) <= 0 && Number(accountsVerificationModal.partialAmount) > 0 && hasUploadedPaymentProof)
   );
 
-  const isMissingRequiredPaymentProof = Boolean(
+  const isMissingRequiredPaymentProof = !isCreditTerms && Boolean(
     isPartialPaidTerms ? !hasBalancePaymentProof : (requiresPaymentProofForApproval && !hasUploadedPaymentProof)
   );
 
   const isVerified = Boolean(
     currentPayStatus && 
-    currentPayDate && 
-    effectiveTotalAmountNum > 0 &&
+    (isCreditTerms || (currentPayDate && effectiveTotalAmountNum > 0)) &&
     !isMissingRequiredPaymentProof
   );
-  const isPartialVerified = Boolean(currentPayStatus || currentPayDate || effectiveTotalAmountNum > 0) && !isVerified;
+  const isPartialVerified = Boolean(isCreditTerms ? !isVerified : (currentPayStatus || currentPayDate || effectiveTotalAmountNum > 0)) && !isVerified;
 
   const payStatusConfig = {
     '100% Paid': { bg: '#DCFCE7', color: '#166534', label: '100% Paid', icon: <CheckCircle style={{ width: '18px', height: '18px' }} /> },
@@ -532,11 +539,11 @@ export default function AccountsVerificationModal({
       alert(`⛔ CANNOT APPROVE — PAYMENT PROOF PENDING\n\nThis order has payment terms "${payType || 'Payment While Dispatch / Partial Payment'}". The required ${isPartialPaidTerms ? 'remaining balance ' : ''}payment proof slip has NOT been uploaded by the Sales person yet.\n\nBy strict company policy, this order remains in Payment Proof Pending until the Sales person attaches the payment proof receipt.`);
       return;
     }
-    if (!currentPayDate) {
+    if (!isCreditTerms && !currentPayDate) {
       alert('⚠️ Please enter the verified Payment Date from the payment slip before completing accounts verification.');
       return;
     }
-    if (effectiveTotalAmountNum <= 0) {
+    if (!isCreditTerms && effectiveTotalAmountNum <= 0) {
       alert('⚠️ Please enter the verified Total Amount (₹) from the payment slip (or apply an Adjust Payment amount) before completing accounts verification.');
       return;
     }
@@ -577,14 +584,14 @@ export default function AccountsVerificationModal({
       grandTotal: cleanNum(accountsVerificationModal?.grandTotal, 0) > 0
         ? cleanNum(accountsVerificationModal.grandTotal, 0)
         : (orderValue > 0 ? orderValue : effectiveTotalAmountNum),
-      paymentDate: currentPayDate,
+      paymentDate: isCreditTerms ? '' : currentPayDate,
       isAccountsDone: true,
       invoiceConfirmed: false,
       accountsVerification: {
         ...(verifiedBOM.accountsVerification || {}),
         paymentStatus: currentPayStatus,
-        paymentDate: currentPayDate,
-        totalAmount: effectiveTotalAmountNum,
+        paymentDate: isCreditTerms ? '' : currentPayDate,
+        totalAmount: isCreditTerms ? verifiedOrderTotal : effectiveTotalAmountNum,
         verifiedSlipAmount: verifiedSlipAmountNum,
         adjustedAmount: adjustedAmountNum,
         adjustedFromRef: String(adjustedFromRef || '').trim(),
@@ -683,8 +690,8 @@ export default function AccountsVerificationModal({
       sameAsBilling: verifiedBOM.sameAsBilling,
       accountsVerification: {
         paymentStatus: currentPayStatus,
-        paymentDate: currentPayDate,
-        totalAmount: effectiveTotalAmountNum,
+        paymentDate: isCreditTerms ? '' : currentPayDate,
+        totalAmount: isCreditTerms ? verifiedOrderTotal : effectiveTotalAmountNum,
         verifiedSlipAmount: verifiedSlipAmountNum,
         adjustedAmount: adjustedAmountNum,
         adjustedFromRef: String(adjustedFromRef || '').trim(),
@@ -944,9 +951,13 @@ export default function AccountsVerificationModal({
             <IndianRupee style={{ width: isMobile ? '18px' : '22px', height: isMobile ? '18px' : '22px', color: '#FFFFFF' }} />
           </div>
           <div>
-            <div style={{ fontSize: '11px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Amount</div>
-            <div style={{ fontSize: isMobile ? '16px' : '18px', fontWeight: '900', color: (currentTotalAmount !== '' && parseFloat(currentTotalAmount) > 0) ? '#0F172A' : '#94A3B8', lineHeight: 1.2 }}>
-              {currentTotalAmount !== '' && parseFloat(currentTotalAmount) > 0 ? `₹ ${parseFloat(currentTotalAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : 'Pending Entry'}
+            <div style={{ fontSize: '11px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              {isCreditTerms ? 'Order Value (Credit)' : 'Total Amount'}
+            </div>
+            <div style={{ fontSize: isMobile ? '16px' : '18px', fontWeight: '900', color: (isCreditTerms || (currentTotalAmount !== '' && parseFloat(currentTotalAmount) > 0)) ? '#0F172A' : '#94A3B8', lineHeight: 1.2 }}>
+              {isCreditTerms
+                ? `₹ ${verifiedOrderTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
+                : (currentTotalAmount !== '' && parseFloat(currentTotalAmount) > 0 ? `₹ ${parseFloat(currentTotalAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : 'Pending Entry')}
             </div>
           </div>
         </div>
@@ -969,17 +980,21 @@ export default function AccountsVerificationModal({
             <Calendar style={{ width: isMobile ? '18px' : '22px', height: isMobile ? '18px' : '22px', color: '#FFFFFF' }} />
           </div>
           <div>
-            <div style={{ fontSize: '11px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Payment Date</div>
-            <div style={{ fontSize: isMobile ? '13px' : '14px', fontWeight: '900', color: currentPayDate ? '#0F172A' : '#94A3B8', lineHeight: 1.3 }}>
-              {(() => {
-                if (!currentPayDate) return 'Pending Entry';
-                try {
-                  const d = new Date(currentPayDate);
-                  return !isNaN(d.getTime()) ? d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : currentPayDate;
-                } catch (e) {
-                  return currentPayDate;
-                }
-              })()}
+            <div style={{ fontSize: '11px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              {isCreditTerms ? 'Credit Terms' : 'Payment Date'}
+            </div>
+            <div style={{ fontSize: isMobile ? '13px' : '14px', fontWeight: '900', color: (isCreditTerms || currentPayDate) ? '#0F172A' : '#94A3B8', lineHeight: 1.3 }}>
+              {isCreditTerms
+                ? `${creditDays || 30} Days Credit`
+                : (() => {
+                    if (!currentPayDate) return 'Pending Entry';
+                    try {
+                      const d = new Date(currentPayDate);
+                      return !isNaN(d.getTime()) ? d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : currentPayDate;
+                    } catch (e) {
+                      return currentPayDate;
+                    }
+                  })()}
             </div>
           </div>
         </div>
@@ -1078,238 +1093,307 @@ export default function AccountsVerificationModal({
         </div>
 
         <div style={{ padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {/* Payment Date and Total Amount Row */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-            <div>
-              <label style={{ fontSize: '12px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '6px' }}>
-                Payment Date <span style={{ color: '#EF4444' }}>*</span> {isAlreadyCompleted ? <span style={{ fontSize: '10px', color: '#166534', fontWeight: '700' }}>(Verified)</span> : <span style={{ fontSize: '11px', color: '#B45309', fontWeight: '600' }}>— Enter date verified from slip</span>}
-              </label>
-              <input id="accounts-verification-slice-0-10" name="slice010" aria-label="Slice 0 10"
-                type="date"
-                disabled={isAlreadyCompleted}
-                value={currentPayDate ? String(currentPayDate).slice(0, 10) : ''}
-                onChange={(e) => {
-                  if (isAlreadyCompleted) return;
-                  const val = e.target.value;
-                  setAccountsVerificationModal(prev => prev ? ({
-                    ...prev,
-                    paymentDate: val,
-                    accountsVerification: { ...(prev.accountsVerification || {}), paymentDate: val }
-                  }) : null);
-                }}
-                style={{
-                  width: '100%', height: '42px', borderRadius: '10px',
-                  border: (!currentPayDate && !isAlreadyCompleted) ? '1.5px solid #F59E0B' : '1px solid #CBD5E1', padding: '0 12px',
-                  fontSize: '13px', fontWeight: '600', color: '#0F172A',
-                  outline: 'none', backgroundColor: isAlreadyCompleted ? '#F1F5F9' : '#FFFFFF',
-                  cursor: isAlreadyCompleted ? 'not-allowed' : 'pointer',
-                  boxSizing: 'border-box'
-                }}
-               />
-            </div>
-
-            <div>
-              <label style={{ fontSize: '12px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '6px' }}>
-                Total Amount (₹) <span style={{ color: '#EF4444' }}>*</span> {isAlreadyCompleted ? <span style={{ fontSize: '10px', color: '#166534', fontWeight: '700' }}>(Verified)</span> : <span style={{ fontSize: '11px', color: '#B45309', fontWeight: '600' }}>— Enter amount verified from slip</span>}
-              </label>
-              <input id="accounts-verification-current-total-amount" name="currentTotalAmount" aria-label="Enter verified amount received ( 793800)"
-                type="number"
-                step="0.01"
-                placeholder="Enter verified amount received (e.g. 793800)"
-                disabled={isAlreadyCompleted}
-                value={currentTotalAmount}
-                onChange={(e) => {
-                  if (isAlreadyCompleted) return;
-                  const val = e.target.value;
-                  setAccountsVerificationModal(prev => prev ? ({
-                    ...prev,
-                    grandTotal: cleanNum(prev.grandTotal, 0) > 0 ? prev.grandTotal : (parseFloat(val) || 0),
-                    accountsVerification: { ...(prev.accountsVerification || {}), totalAmount: val }
-                  }) : null);
-                }}
-                style={{
-                  width: '100%', height: '42px', borderRadius: '10px',
-                  border: ((currentTotalAmount === '' || cleanNum(currentTotalAmount, 0) <= 0) && !isAlreadyCompleted) ? '1.5px solid #F59E0B' : '1px solid #CBD5E1', padding: '0 12px',
-                  fontSize: '13px', fontWeight: '700', color: '#0F172A',
-                  outline: 'none', backgroundColor: isAlreadyCompleted ? '#F1F5F9' : '#FFFFFF',
-                  cursor: isAlreadyCompleted ? 'not-allowed' : 'text',
-                  boxSizing: 'border-box'
-                }}
-               />
-            </div>
-          </div>
-
-          {/* Adjust Payment (Accounts Only — Always visible in both Verification & View modes) */}
-          <div style={{ marginTop: '14px' }}>
-            {!showAdjustPayment && adjustedAmountNum <= 0 && !isAlreadyCompleted && !isAccountsViewOnly ? (
-              <button
-                type="button"
-                onClick={() => setShowAdjustPayment(true)}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: '6px',
-                  padding: '8px 14px', borderRadius: '8px',
-                  border: '1px solid #0E7490', backgroundColor: '#ECFEFF',
-                  color: '#0E7490', fontSize: '12px', fontWeight: '800', cursor: 'pointer'
-                }}
-              >
-                + Adjust Payment
-              </button>
-            ) : (
+          {isCreditTerms ? (
+            <div style={{
+              backgroundColor: '#F0FDF4',
+              border: '1.5px solid #86EFAC',
+              borderRadius: '12px',
+              padding: '16px 20px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{ width: '34px', height: '34px', borderRadius: '8px', backgroundColor: '#DCFCE7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <ShieldCheck size={20} color="#166534" />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '14px', fontWeight: '800', color: '#166534' }}>
+                      Credit Payment Terms — No Payment Slip or Upfront Amount Entry Required
+                    </div>
+                    <div style={{ fontSize: '11.5px', color: '#15803D' }}>
+                      This order is authorized on Credit. Payment date and received amount are not collected at this stage. Accounts can verify and pass directly to Billing.
+                    </div>
+                  </div>
+                </div>
+                <span style={{
+                  fontSize: '11px',
+                  fontWeight: '800',
+                  color: '#166534',
+                  backgroundColor: '#DCFCE7',
+                  border: '1px solid #BBF7D0',
+                  padding: '4px 10px',
+                  borderRadius: '999px'
+                }}>
+                  {creditDays || 30} Days Credit Period
+                </span>
+              </div>
               <div style={{
-                backgroundColor: '#F0F9FF', border: '1px solid #BAE6FD',
-                borderRadius: '12px', padding: '14px',
-                display: 'flex', flexDirection: 'column', gap: '12px'
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                gap: '10px',
+                padding: '12px',
+                backgroundColor: '#FFFFFF',
+                borderRadius: '8px',
+                border: '1px solid #BBF7D0'
               }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: '12.5px', fontWeight: '800', color: '#0369A1' }}>
-                      Adjust Payment (From Previous Payment / Advance)
-                    </span>
-                    {(isAlreadyCompleted || isAccountsViewOnly) && (
-                      <span style={{
-                        fontSize: '11px', fontWeight: '800', padding: '2px 9px', borderRadius: '999px',
-                        backgroundColor: adjustedAmountNum > 0 ? '#DCFCE7' : '#F1F5F9',
-                        color: adjustedAmountNum > 0 ? '#166534' : '#64748B',
-                        border: adjustedAmountNum > 0 ? '1px solid #BBF7D0' : '1px solid #CBD5E1'
-                      }}>
-                        {adjustedAmountNum > 0
-                          ? `Adjusted: ₹ ${adjustedAmountNum.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
-                          : 'No Adjustment Applied (₹ 0.00)'}
-                      </span>
-                    )}
-                  </div>
-                  {!isAlreadyCompleted && !isAccountsViewOnly && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowAdjustPayment(false);
-                        setAccountsVerificationModal(prev => prev ? ({
-                          ...prev,
-                          accountsVerification: {
-                            ...(prev.accountsVerification || {}),
-                            adjustedAmount: '',
-                            adjustedFromRef: '',
-                            adjustedNote: ''
-                          }
-                        }) : null);
-                      }}
-                      style={{
-                        border: '1px solid #FECACA', backgroundColor: '#FEF2F2',
-                        color: '#DC2626', borderRadius: '6px', padding: '4px 10px',
-                        fontSize: '11px', fontWeight: '700', cursor: 'pointer'
-                      }}
-                    >
-                      Remove Adjustment
-                    </button>
-                  )}
+                <div>
+                  <span style={{ fontSize: '10px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', display: 'block' }}>Order Total Value</span>
+                  <span style={{ fontSize: '14px', fontWeight: '900', color: '#0F172A' }}>
+                    ₹ {verifiedOrderTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div>
+                  <span style={{ fontSize: '10px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', display: 'block' }}>Payment Term</span>
+                  <span style={{ fontSize: '13px', fontWeight: '800', color: '#166534' }}>
+                    {currentPayStatus || 'Credit Payment'} ({creditDays || 30} Days)
+                  </span>
+                </div>
+                <div>
+                  <span style={{ fontSize: '10px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', display: 'block' }}>Billing Clearance</span>
+                  <span style={{ fontSize: '13px', fontWeight: '800', color: '#0E7490' }}>
+                    Cleared to Generate Invoice
+                  </span>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* Payment Date and Total Amount Row */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '6px' }}>
+                    Payment Date <span style={{ color: '#EF4444' }}>*</span> {isAlreadyCompleted ? <span style={{ fontSize: '10px', color: '#166534', fontWeight: '700' }}>(Verified)</span> : <span style={{ fontSize: '11px', color: '#B45309', fontWeight: '600' }}>— Enter date verified from slip</span>}
+                  </label>
+                  <input id="accounts-verification-slice-0-10" name="slice010" aria-label="Slice 0 10"
+                    type="date"
+                    disabled={isAlreadyCompleted}
+                    value={currentPayDate ? String(currentPayDate).slice(0, 10) : ''}
+                    onChange={(e) => {
+                      if (isAlreadyCompleted) return;
+                      const val = e.target.value;
+                      setAccountsVerificationModal(prev => prev ? ({
+                        ...prev,
+                        paymentDate: val,
+                        accountsVerification: { ...(prev.accountsVerification || {}), paymentDate: val }
+                      }) : null);
+                    }}
+                    style={{
+                      width: '100%', height: '42px', borderRadius: '10px',
+                      border: (!currentPayDate && !isAlreadyCompleted) ? '1.5px solid #F59E0B' : '1px solid #CBD5E1', padding: '0 12px',
+                      fontSize: '13px', fontWeight: '600', color: '#0F172A',
+                      outline: 'none', backgroundColor: isAlreadyCompleted ? '#F1F5F9' : '#FFFFFF',
+                      cursor: isAlreadyCompleted ? 'not-allowed' : 'pointer',
+                      boxSizing: 'border-box'
+                    }}
+                   />
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: '10px' }}>
-                  <div>
-                    <label style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '4px' }}>
-                      Adjusted Amount (₹)
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      placeholder="e.g. 40000"
-                      disabled={isAlreadyCompleted || isAccountsViewOnly}
-                      value={adjustedAmountRaw}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setAccountsVerificationModal(prev => prev ? ({
-                          ...prev,
-                          accountsVerification: { ...(prev.accountsVerification || {}), adjustedAmount: val }
-                        }) : null);
-                      }}
-                      style={{
-                        width: '100%', height: '38px', borderRadius: '8px',
-                        border: '1px solid #93C5FD', padding: '0 10px',
-                        fontSize: '13px', fontWeight: '700', color: '#0F172A',
-                        backgroundColor: (isAlreadyCompleted || isAccountsViewOnly) ? '#F1F5F9' : '#FFFFFF',
-                        boxSizing: 'border-box', outline: 'none'
-                      }}
-                    />
-                  </div>
-
-                  <div>
-                    <label style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '4px' }}>
-                      Previous Order / Receipt Ref (Optional)
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Optional — e.g. PI-00045 / UTR-XXXX"
-                      disabled={isAlreadyCompleted || isAccountsViewOnly}
-                      value={adjustedFromRef}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setAccountsVerificationModal(prev => prev ? ({
-                          ...prev,
-                          accountsVerification: { ...(prev.accountsVerification || {}), adjustedFromRef: val }
-                        }) : null);
-                      }}
-                      style={{
-                        width: '100%', height: '38px', borderRadius: '8px',
-                        border: '1px solid #93C5FD', padding: '0 10px',
-                        fontSize: '12.5px', fontWeight: '600', color: '#0F172A',
-                        backgroundColor: (isAlreadyCompleted || isAccountsViewOnly) ? '#F1F5F9' : '#FFFFFF',
-                        boxSizing: 'border-box', outline: 'none'
-                      }}
-                    />
-                  </div>
-
-                  <div>
-                    <label style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '4px' }}>
-                      Note (Optional)
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Excess from old order"
-                      disabled={isAlreadyCompleted || isAccountsViewOnly}
-                      value={adjustedNote}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setAccountsVerificationModal(prev => prev ? ({
-                          ...prev,
-                          accountsVerification: { ...(prev.accountsVerification || {}), adjustedNote: val }
-                        }) : null);
-                      }}
-                      style={{
-                        width: '100%', height: '38px', borderRadius: '8px',
-                        border: '1px solid #93C5FD', padding: '0 10px',
-                        fontSize: '12.5px', fontWeight: '600', color: '#0F172A',
-                        backgroundColor: (isAlreadyCompleted || isAccountsViewOnly) ? '#F1F5F9' : '#FFFFFF',
-                        boxSizing: 'border-box', outline: 'none'
-                      }}
-                    />
-                  </div>
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '6px' }}>
+                    Total Amount (₹) <span style={{ color: '#EF4444' }}>*</span> {isAlreadyCompleted ? <span style={{ fontSize: '10px', color: '#166534', fontWeight: '700' }}>(Verified)</span> : <span style={{ fontSize: '11px', color: '#B45309', fontWeight: '600' }}>— Enter amount verified from slip</span>}
+                  </label>
+                  <input id="accounts-verification-current-total-amount" name="currentTotalAmount" aria-label="Enter verified amount received ( 793800)"
+                    type="number"
+                    step="0.01"
+                    placeholder="Enter verified amount received (e.g. 793800)"
+                    disabled={isAlreadyCompleted}
+                    value={currentTotalAmount}
+                    onChange={(e) => {
+                      if (isAlreadyCompleted) return;
+                      const val = e.target.value;
+                      setAccountsVerificationModal(prev => prev ? ({
+                        ...prev,
+                        grandTotal: cleanNum(prev.grandTotal, 0) > 0 ? prev.grandTotal : (parseFloat(val) || 0),
+                        accountsVerification: { ...(prev.accountsVerification || {}), totalAmount: val }
+                      }) : null);
+                    }}
+                    style={{
+                      width: '100%', height: '42px', borderRadius: '10px',
+                      border: ((currentTotalAmount === '' || cleanNum(currentTotalAmount, 0) <= 0) && !isAlreadyCompleted) ? '1.5px solid #F59E0B' : '1px solid #CBD5E1', padding: '0 12px',
+                      fontSize: '13px', fontWeight: '700', color: '#0F172A',
+                      outline: 'none', backgroundColor: isAlreadyCompleted ? '#F1F5F9' : '#FFFFFF',
+                      cursor: isAlreadyCompleted ? 'not-allowed' : 'text',
+                      boxSizing: 'border-box'
+                    }}
+                   />
                 </div>
+              </div>
 
-                {(() => {
-                  const targetOrderAmt = orderValue > 0 ? orderValue : cleanNum(accountsVerificationModal?.grandTotal, 0);
-                  const remainingBal = Math.max(0, targetOrderAmt - effectiveTotalAmountNum);
-                  return (
-                    <div style={{
-                      display: 'flex', flexWrap: 'wrap', gap: '14px', alignItems: 'center',
-                      padding: '8px 12px', borderRadius: '8px', backgroundColor: '#FFFFFF',
-                      border: '1px solid #E0F2FE', fontSize: '12px', fontWeight: '700'
-                    }}>
-                      <span style={{ color: '#475569' }}>Order Total: <strong style={{ color: '#0F172A' }}>₹ {targetOrderAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></span>
-                      <span style={{ color: '#475569' }}>Paid Now: <strong style={{ color: '#0E7490' }}>₹ {verifiedSlipAmountNum.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></span>
-                      <span style={{ color: '#475569' }}>Adjusted: <strong style={{ color: '#0369A1' }}>₹ {adjustedAmountNum.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></span>
-                      <span style={{ color: '#475569' }}>Total Settled: <strong style={{ color: '#059669' }}>₹ {effectiveTotalAmountNum.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></span>
-                      {targetOrderAmt > 0 && (
-                        <span style={{ color: remainingBal <= 0 ? '#059669' : '#B45309' }}>
-                          Balance: <strong>₹ {remainingBal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
+              {/* Adjust Payment (Accounts Only — Always visible in both Verification & View modes) */}
+              <div style={{ marginTop: '14px' }}>
+                {!showAdjustPayment && adjustedAmountNum <= 0 && !isAlreadyCompleted && !isAccountsViewOnly ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowAdjustPayment(true)}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: '6px',
+                      padding: '8px 14px', borderRadius: '8px',
+                      border: '1px solid #0E7490', backgroundColor: '#ECFEFF',
+                      color: '#0E7490', fontSize: '12px', fontWeight: '800', cursor: 'pointer'
+                    }}
+                  >
+                    + Adjust Payment
+                  </button>
+                ) : (
+                  <div style={{
+                    backgroundColor: '#F0F9FF', border: '1px solid #BAE6FD',
+                    borderRadius: '12px', padding: '14px',
+                    display: 'flex', flexDirection: 'column', gap: '12px'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '12.5px', fontWeight: '800', color: '#0369A1' }}>
+                          Adjust Payment (From Previous Payment / Advance)
                         </span>
+                        {(isAlreadyCompleted || isAccountsViewOnly) && (
+                          <span style={{
+                            fontSize: '11px', fontWeight: '800', padding: '2px 9px', borderRadius: '999px',
+                            backgroundColor: adjustedAmountNum > 0 ? '#DCFCE7' : '#F1F5F9',
+                            color: adjustedAmountNum > 0 ? '#166534' : '#64748B',
+                            border: adjustedAmountNum > 0 ? '1px solid #BBF7D0' : '1px solid #CBD5E1'
+                          }}>
+                            {adjustedAmountNum > 0
+                              ? `Adjusted: ₹ ${adjustedAmountNum.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
+                              : 'No Adjustment Applied (₹ 0.00)'}
+                          </span>
+                        )}
+                      </div>
+                      {!isAlreadyCompleted && !isAccountsViewOnly && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowAdjustPayment(false);
+                            setAccountsVerificationModal(prev => prev ? ({
+                              ...prev,
+                              accountsVerification: {
+                                ...(prev.accountsVerification || {}),
+                                adjustedAmount: '',
+                                adjustedFromRef: '',
+                                adjustedNote: ''
+                              }
+                            }) : null);
+                          }}
+                          style={{
+                            border: '1px solid #FECACA', backgroundColor: '#FEF2F2',
+                            color: '#DC2626', borderRadius: '6px', padding: '4px 10px',
+                            fontSize: '11px', fontWeight: '700', cursor: 'pointer'
+                          }}
+                        >
+                          Remove Adjustment
+                        </button>
                       )}
                     </div>
-                  );
-                })()}
+
+                    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: '10px' }}>
+                      <div>
+                        <label style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '4px' }}>
+                          Adjusted Amount (₹)
+                        </label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          placeholder="e.g. 40000"
+                          disabled={isAlreadyCompleted || isAccountsViewOnly}
+                          value={adjustedAmountRaw}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setAccountsVerificationModal(prev => prev ? ({
+                              ...prev,
+                              accountsVerification: { ...(prev.accountsVerification || {}), adjustedAmount: val }
+                            }) : null);
+                          }}
+                          style={{
+                            width: '100%', height: '38px', borderRadius: '8px',
+                            border: '1px solid #93C5FD', padding: '0 10px',
+                            fontSize: '13px', fontWeight: '700', color: '#0F172A',
+                            backgroundColor: (isAlreadyCompleted || isAccountsViewOnly) ? '#F1F5F9' : '#FFFFFF',
+                            boxSizing: 'border-box', outline: 'none'
+                          }}
+                        />
+                      </div>
+
+                      <div>
+                        <label style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '4px' }}>
+                          Previous Order / Receipt Ref (Optional)
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Optional — e.g. PI-00045 / UTR-XXXX"
+                          disabled={isAlreadyCompleted || isAccountsViewOnly}
+                          value={adjustedFromRef}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setAccountsVerificationModal(prev => prev ? ({
+                              ...prev,
+                              accountsVerification: { ...(prev.accountsVerification || {}), adjustedFromRef: val }
+                            }) : null);
+                          }}
+                          style={{
+                            width: '100%', height: '38px', borderRadius: '8px',
+                            border: '1px solid #93C5FD', padding: '0 10px',
+                            fontSize: '12.5px', fontWeight: '600', color: '#0F172A',
+                            backgroundColor: (isAlreadyCompleted || isAccountsViewOnly) ? '#F1F5F9' : '#FFFFFF',
+                            boxSizing: 'border-box', outline: 'none'
+                          }}
+                        />
+                      </div>
+
+                      <div>
+                        <label style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '4px' }}>
+                          Note (Optional)
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Excess from old order"
+                          disabled={isAlreadyCompleted || isAccountsViewOnly}
+                          value={adjustedNote}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setAccountsVerificationModal(prev => prev ? ({
+                              ...prev,
+                              accountsVerification: { ...(prev.accountsVerification || {}), adjustedNote: val }
+                            }) : null);
+                          }}
+                          style={{
+                            width: '100%', height: '38px', borderRadius: '8px',
+                            border: '1px solid #93C5FD', padding: '0 10px',
+                            fontSize: '12.5px', fontWeight: '600', color: '#0F172A',
+                            backgroundColor: (isAlreadyCompleted || isAccountsViewOnly) ? '#F1F5F9' : '#FFFFFF',
+                            boxSizing: 'border-box', outline: 'none'
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {(() => {
+                      const targetOrderAmt = orderValue > 0 ? orderValue : cleanNum(accountsVerificationModal?.grandTotal, 0);
+                      const remainingBal = Math.max(0, targetOrderAmt - effectiveTotalAmountNum);
+                      return (
+                        <div style={{
+                          display: 'flex', flexWrap: 'wrap', gap: '14px', alignItems: 'center',
+                          padding: '8px 12px', borderRadius: '8px', backgroundColor: '#FFFFFF',
+                          border: '1px solid #E0F2FE', fontSize: '12px', fontWeight: '700'
+                        }}>
+                          <span style={{ color: '#475569' }}>Order Total: <strong style={{ color: '#0F172A' }}>₹ {targetOrderAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></span>
+                          <span style={{ color: '#475569' }}>Paid Now: <strong style={{ color: '#0E7490' }}>₹ {verifiedSlipAmountNum.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></span>
+                          <span style={{ color: '#475569' }}>Adjusted: <strong style={{ color: '#0369A1' }}>₹ {adjustedAmountNum.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></span>
+                          <span style={{ color: '#475569' }}>Total Settled: <strong style={{ color: '#059669' }}>₹ {effectiveTotalAmountNum.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></span>
+                          {targetOrderAmt > 0 && (
+                            <span style={{ color: remainingBal <= 0 ? '#059669' : '#B45309' }}>
+                              Balance: <strong>₹ {remainingBal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+            </>
+          )}
 
           {/* Customer Credit Terms & Credit Amount Notice for Accounts Verification */}
           {(() => {

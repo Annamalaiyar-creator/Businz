@@ -270,6 +270,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
             { label: 'Dispatch Dashboard', icon: LayoutDashboard },
             { label: 'Work Orders', icon: ClipboardList, badge: realWOCount > 0 ? String(realWOCount) : undefined },
             { label: 'Dispatch Orders', icon: Truck, badge: realPendingDispatchCount > 0 ? String(realPendingDispatchCount) : undefined },
+            { label: 'Customer Order Tracking', targetTab: 'Customer Order Tracking', icon: PackageCheck },
             { label: 'Stock Status', icon: Layers }
           ]
         },
@@ -344,6 +345,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           items: [
             { label: 'BOM Orders', icon: GitBranch },
             { label: 'Proforma Invoice', icon: Receipt },
+            { label: 'Order Tracking', targetTab: 'Customer Order Tracking', icon: PackageCheck },
             { label: 'Inventory Stores', icon: Warehouse },
             { label: 'Raw Material Directory', icon: Layers }
           ]
@@ -464,6 +466,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           id: 'dispatch_logistics',
           dashboardSubTab: 'dispatch',
           items: [
+            { label: 'Customer Order Tracking', targetTab: 'Customer Order Tracking', icon: PackageCheck },
             { label: 'Delivery Challans', targetTab: 'Delivery Challans', icon: FileText }
           ]
         },
@@ -517,6 +520,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
             { label: 'Admin Dashboard', targetTab: 'Dashboard', icon: LayoutDashboard },
             { label: 'User & Access Control', targetTab: 'User Management', icon: Users },
             { label: 'Database & DB Health', targetTab: 'System Health', icon: Activity },
+            { label: 'Customer Order Tracking', targetTab: 'Customer Order Tracking', icon: PackageCheck },
             { label: 'Active Sessions', targetTab: 'Active Sessions', icon: Lock },
             { label: 'Backup Vault', targetTab: 'Backup Vault', icon: HardDrive }
           ]

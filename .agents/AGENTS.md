@@ -105,6 +105,22 @@ The following core workflows and modules have been thoroughly tested, verified, 
    - **Dashboard Exception**:
      - Simple overview cards/dashboard preview tables (`ProductionAdminView.jsx`, `RecentPurchaseOrders.jsx`) MUST remain clean without checkboxes.
 
+## Maximum Source Code File Length Rule (< 4,000 Lines Mandate)
+- **Hard Ceiling**: No application source code file (`.js`, `.jsx`, `.ts`, `.tsx`, `.sql`, `.css`, etc.) may exceed **4,000 lines of code**.
+- **Proactive Modularization**: If an existing file exceeds 4,000 lines, or if a new feature causes a file to approach 4,000 lines, it MUST be safely split into focused, single-responsibility sub-modules:
+  - **Backend Server (`server/index.js`)**: Split into modular Express routers (`server/routes/*.js`), middleware (`server/middleware/*.js`), and domain services (`server/services/*.js`).
+  - **Frontend Large Views**: Extract standalone modals, filter bars, large tab views, and heavy PDF/print templates into dedicated sub-components in modular folders (e.g., `src/components/purchaseOrders/*`, `src/components/ceoDashboard/*`, `src/components/inventory/*`).
+  - **Engineering Configs & Dictionaries**: Extract static data definitions, formulas, and presets into dedicated utility files.
+- **Zero-Break Invariance Mandate**: Modularization MUST be strictly structural. It MUST NEVER alter:
+  - Any business logic, calculations, or status lifecycles.
+  - Any API endpoint paths, parameter contracts, or response formats.
+  - Any UI look-and-feel, table styles, floating action bars, or user workflows.
+  - Any state persistence (PostgreSQL, Supabase memory store, Zoho sync, disk storage).
+- **Mandatory Verification**: Every split file must immediately pass:
+  1. `npm run build` (0 lint errors, 0 Vite bundling errors).
+  2. `node --check` on any touched backend file (0 syntax errors).
+  3. Runtime testing on localhost to confirm identical functionality with zero regressions.
+
 ## Permanent Engineering Rules for All New Features (STRICT MANDATE)
 
 These rules apply to every new feature, module, screen, database change, API change, realtime listener, sync mechanism, and cloud integration. DO NOT violate these rules unless explicitly approved by the user.

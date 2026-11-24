@@ -28,6 +28,8 @@ const CeoExecutiveDashboardView = lazy(() => import('./components/views/CeoExecu
 const TechSupportDashboardView = lazy(() => import('./components/views/TechSupportDashboardView'));
 const TechnicalAdminDashboardView = lazy(() => import('./components/views/TechnicalAdminDashboardView'));
 const DeveloperPortalView = lazy(() => import('./components/DeveloperPortalView'));
+const CustomerOrderTrackingPortal = lazy(() => import('./components/tracking/CustomerOrderTrackingPortal'));
+const CustomerOrderTrackingView = lazy(() => import('./components/views/CustomerOrderTrackingView'));
 
 import { ShoppingCart, Factory, Shield, User, ArrowRight, Receipt, RefreshCw, Clock } from 'lucide-react';
 import {
@@ -1215,6 +1217,21 @@ function App() {
     };
   }, []);
 
+  // BUSINZ Track: Standalone Public Customer Order Tracking Portal (/order/:token or /track/:token or ?track_token=)
+  const isCustomerTrackingRoute = typeof window !== 'undefined' && (
+    window.location.pathname.startsWith('/order/') ||
+    window.location.pathname.startsWith('/track/') ||
+    new URLSearchParams(window.location.search).has('track_token')
+  );
+
+  if (isCustomerTrackingRoute) {
+    return (
+      <Suspense fallback={<AppViewLoadingFallback activeTab="Order Tracking" />}>
+        <CustomerOrderTrackingPortal />
+      </Suspense>
+    );
+  }
+
   if (!isAuthenticated || !userRole) {
     return <LoginScreen onLoginSuccess={handleLoginSuccess} infoMessage={idleLogoutNotice} />;
   }
@@ -1308,6 +1325,8 @@ function App() {
               />
             ) : (activeTab === 'Inventory Stock Conversion' || activeTab === 'Enter Coil Purchase (in Ton)' || activeTab === 'Inventory - (Auto Conversion)') ? (
               <InventoryAutoConversion />
+            ) : (activeTab === 'Customer Order Tracking' || activeTab === 'Order Tracking') ? (
+              <CustomerOrderTrackingView userRole={userRole} onNavigateTab={handleTabChange} />
             ) : (activeTab === 'Sales Dashboard' || (activeTab === 'Dashboard' && (userRole === 'Sales' || userRole === 'Sales Executive' || userRole === 'Sales Head'))) ? (
               <SalesExecutiveDashboardView userRole={userRole} onNavigateTab={handleTabChange} />
             ) : (activeTab !== 'Dashboard' && activeTab !== 'Executive Dashboard' && activeTab !== 'Procurement Dashboard' && activeTab !== 'Finance & Accounts' && activeTab !== 'Design & BOM Center' && activeTab !== 'Finance Dashboard' && activeTab !== 'Billing Dashboard' && activeTab !== 'Tech Support Dashboard') ? (
