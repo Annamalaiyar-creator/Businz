@@ -271,9 +271,8 @@ try {
   if (fs.existsSync(custDisk)) {
     const list = JSON.parse(fs.readFileSync(custDisk, 'utf8'));
     if (Array.isArray(list) && list.length > 0) {
-      const deduplicated = deduplicateCustomerRecords(list);
-      supabaseMemoryStore.customer_store = deduplicated;
-      supabaseMemoryStore.crm_customers = deduplicated;
+      supabaseMemoryStore.customer_store = list;
+      supabaseMemoryStore.crm_customers = list;
     }
   }
 } catch (_) {}
@@ -458,15 +457,15 @@ const loadDatabaseCustomers = async (forceRefresh = false) => {
         };
       });
 
-      const deduplicated = deduplicateCustomerRecords(mapped);
+      const customerList = mapped;
 
-      supabaseMemoryStore.customer_store = deduplicated;
-      supabaseMemoryStore.crm_customers = deduplicated;
+      supabaseMemoryStore.customer_store = customerList;
+      supabaseMemoryStore.crm_customers = customerList;
       try {
-        fs.writeFileSync(getStoreFilePath('customer_store.json'), JSON.stringify(deduplicated, null, 2), 'utf8');
-        fs.writeFileSync(getStoreFilePath('crm_customers.json'), JSON.stringify(deduplicated, null, 2), 'utf8');
+        fs.writeFileSync(getStoreFilePath('customer_store.json'), JSON.stringify(customerList, null, 2), 'utf8');
+        fs.writeFileSync(getStoreFilePath('crm_customers.json'), JSON.stringify(customerList, null, 2), 'utf8');
       } catch (_) {}
-      return deduplicated;
+      return customerList;
     }
   } catch (err) {
     console.warn('[loadDatabaseCustomers] Supabase fetch notice:', err?.message || err);

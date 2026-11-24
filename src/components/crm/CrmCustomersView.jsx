@@ -353,48 +353,9 @@ export default function CrmCustomersView({
     }
   };
 
-  // Canonical deduplicated customers list
+  // All customers list (Preserves all records and branch offices without automatic collapsing or deletion)
   const canonicalCustomers = useMemo(() => {
-    const normName = (n) => String(n || '').toLowerCase().replace(/\b(private|pvt|limited|ltd|llp|inc|corporation|corp|enterprises|solutions)\b/g, '').replace(/[^a-z0-9]/g, '').trim();
-    const normGst = (g) => {
-      const clean = String(g || '').toUpperCase().replace(/[^A-Z0-9]/g, '').trim();
-      return clean.length >= 10 ? clean : '';
-    };
-
-    const dedupMap = new Map();
-    (customers || []).forEach(c => {
-      if (!c) return;
-      const gKey = normGst(c.gstNumber || c.gstNo || c.gstin);
-      const nKey = normName(c.companyName || c.customerName || c.name);
-      const rawCode = String(c.customerCode || c.id || c.code || '').trim();
-      const isRealCode = /^(?:VRM-CS-\d{4}-\d+|VRMS\/CS\/\d{2}-\d{2}\/\d+)$/i.test(rawCode);
-
-      const dedupKey = isRealCode ? `code_${rawCode.toLowerCase()}` : (nKey ? `name_${nKey}` : (gKey ? `gst_${gKey}` : `code_${rawCode.toLowerCase()}`));
-      if (!dedupMap.has(dedupKey)) {
-        dedupMap.set(dedupKey, c);
-      } else {
-        const existing = dedupMap.get(dedupKey);
-        const existingHasRealCode = /^(?:VRM-CS-\d{4}-\d+|VRMS\/CS\/\d{2}-\d{2}\/\d+)$/i.test(String(existing.customerCode || existing.id || '').trim());
-        const existingHasGst = normGst(existing.gstNumber || existing.gstNo || existing.gstin);
-        const cHasGst = normGst(c.gstNumber || c.gstNo || c.gstin);
-
-        const preferred = (isRealCode && !existingHasRealCode) ? c : existing;
-        const merged = {
-          ...existing,
-          ...c,
-          id: isRealCode ? c.customerCode || c.id : preferred.id,
-          customerCode: isRealCode ? c.customerCode || c.code : preferred.customerCode,
-          gstNumber: cHasGst || existingHasGst || preferred.gstNumber || '',
-          gstNo: cHasGst || existingHasGst || preferred.gstNo || '',
-          companyName: preferred.companyName || c.companyName || existing.companyName,
-          customerName: preferred.customerName || c.customerName || existing.customerName,
-          createdAt: existing.createdAt || c.createdAt
-        };
-        dedupMap.set(dedupKey, merged);
-      }
-    });
-
-    return Array.from(dedupMap.values());
+    return (customers || []).filter(Boolean);
   }, [customers]);
 
   // Sub-tabs config matching BOM design pattern

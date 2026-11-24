@@ -467,7 +467,7 @@ router.get('/api/customers', async (req, res) => {
   try {
     const customers = await loadDatabaseCustomers();
     const rawAll = (customers && customers.length > 0) ? customers : loadLocalCustomers();
-    const all = deduplicateCustomerRecords(rawAll);
+    const all = rawAll;
     
     const q = String(req.query.q || req.query.search || '').trim().toLowerCase();
     const full = req.query.full === 'true';
@@ -594,7 +594,7 @@ router.get('/api/customers/credit-requests', requireBusinzSession, async (req, r
   try {
     const customers = await loadDatabaseCustomers();
     const rawAll = (customers && customers.length > 0) ? customers : loadLocalCustomers();
-    const all = deduplicateCustomerRecords(rawAll);
+    const all = rawAll;
     const summarize = (c) => ({
       customerCode: c.customerCode || c.code || c.id || '',
       companyName: c.companyName || c.name || c.c2 || '',
