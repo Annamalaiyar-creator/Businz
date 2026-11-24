@@ -16,6 +16,7 @@ import { isTamilNaduIntra, extractGstRate } from "../../utils/gstHelper";
 import { notifyInvoiceCompletedReadyForDispatch, notifyAddressProofPendingToSales } from "../../services/notificationService";
 import VRMTaxInvoicePrintTemplate, { VRMTaxInvoicePrintSheet } from "../VRMTaxInvoicePrintTemplate";
 import { getHsnCode } from "../../utils/hsnCodeService";
+import { autoDispatchOrderStatusToCustomer } from "../../utils/whatsappDispatchService";
 
 const isBomCodeMatching = (codeA, codeB) => {
   if (!codeA || !codeB) return false;
@@ -1028,6 +1029,9 @@ export default function InvoiceDetailModal({
                     const matchedUpdated = updatedBoms.find(b => b.bomCode === targetBomCode || b.code === targetBomCode || (matchingBom && b.bomCode === matchingBom.bomCode));
                     if (matchedUpdated) {
                       saveCloudBomRow(matchedUpdated);
+                      try {
+                        autoDispatchOrderStatusToCustomer(matchedUpdated, 'INVOICE_CONFIRMED');
+                      } catch (_) {}
                       fetch('/api/boms', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },

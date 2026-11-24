@@ -12,6 +12,7 @@ import { isRailPreset, SALES_UOM_OPTIONS, isSalesLoginRole, normalizeSalesUomVal
 import { saveCloudStore, saveCloudBomRow } from "../../utils/supabaseDataSync";
 import { notifyBomSentToDispatch, notifyBomCreatedToSales } from "../../services/notificationService";
 import { extractGstRate } from "../../utils/gstHelper";
+import { autoDispatchOrderStatusToCustomer } from "../../utils/whatsappDispatchService";
 
 export default function ConfirmingBomModal({
   confirmingBomModal,
@@ -302,6 +303,9 @@ export default function ConfirmingBomModal({
                   try {
                     localStorage.setItem('controlroom_bom_store', JSON.stringify(updated.map(stripDataUrlsFromRecord)));
                     saveCloudBomRow({ ...confirmingBomModal, ...updatedBomRecord });
+                    try {
+                      autoDispatchOrderStatusToCustomer({ ...confirmingBomModal, ...updatedBomRecord }, 'BOM_CONFIRMED');
+                    } catch (_) {}
                   } catch (_) {}
                   return updated;
                 });

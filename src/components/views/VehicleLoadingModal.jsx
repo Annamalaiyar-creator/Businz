@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import {
   Trash2, X, CheckCircle, Phone, UploadCloud, Truck, Package,
   Upload, Camera, Image, Loader2, FileText, Eye, ChevronLeft, User,
-  Info, FileCheck, Check, Clock
+  Info, FileCheck, Check, Clock, MessageSquare
 } from "lucide-react";
 import { saveCloudStore, saveCloudBomRow, saveCloudInvoiceRow } from "../../utils/supabaseDataSync";
 import { centralInventoryStore } from "../../utils/centralInventoryStore";
@@ -12,6 +12,8 @@ import { ActiveMediaPreviewModal } from "./DispatchAndPreviewModals";
 import { getMediaFromCache, saveMediaToCache } from "../../utils/mediaUtils";
 import { stripDataUrlsFromRecord } from "../../utils/otherViewsShared";
 import { notifyDispatchCompletedToSales } from "../../services/notificationService";
+import { autoDispatchOrderStatusToCustomer } from "../../utils/whatsappDispatchService";
+import SendWhatsAppStatusModal from "./SendWhatsAppStatusModal";
 
 function readFileAsDataUrl(file) {
   return new Promise((resolve) => {
@@ -210,6 +212,7 @@ export default function VehicleLoadingModal({
     return () => window.removeEventListener('resize', handleResize);
   }, []);
   const [localMediaPreviewModal, setLocalMediaPreviewModal] = useState(null);
+  const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
 
   const salesTransportMode = (() => {
     const raw = bom.transportMode || bom.deliveryMode || existingLoading.deliveryMode || '';
@@ -606,6 +609,11 @@ export default function VehicleLoadingModal({
       console.warn('Dispatch completion notification error:', nErr);
     }
 
+    // Automatically send dispatch & tracking update to customer on WhatsApp
+    try {
+      autoDispatchOrderStatusToCustomer(updatedBomData, 'DISPATCHED');
+    } catch (_) {}
+
     const completedSummary = {
       bomCode: bCode,
       invoiceNo: invNo,
@@ -792,14 +800,36 @@ return (
       </div>
 
       {/* Action Buttons in Header */}
-      {!isReadOnly && (
-        <div className="dispatch-banner-actions" style={{
-          display: 'flex',
-          gap: '10px',
-          flexShrink: 0,
-          width: isMobile ? '100%' : 'auto',
-          marginTop: isMobile ? '6px' : '0'
-        }}>
+      <div className="dispatch-banner-actions" style={{
+        display: 'flex',
+        gap: '10px',
+        flexShrink: 0,
+        width: isMobile ? '100%' : 'auto',
+        marginTop: isMobile ? '6px' : '0'
+      }}>
+        <button
+          type="button"
+          onClick={() => setShowWhatsAppModal(true)}
+          style={{
+            border: 'none',
+            backgroundColor: '#25D366',
+            backgroundImage: 'linear-gradient(135deg, #128C7E 0%, #25D366 100%)',
+            color: '#FFFFFF',
+            height: isMobile ? '44px' : '42px',
+            padding: '0 16px',
+            borderRadius: '10px', fontSize: '13px', fontWeight: '800',
+            cursor: 'pointer',
+            boxShadow: '0 4px 12px rgba(37,211,102,0.3)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+            width: isMobile ? '100%' : 'auto',
+            whiteSpace: 'nowrap'
+          }}
+          title="Send Real-Time Dispatch Status & Tracking Link to Customer on WhatsApp"
+        >
+          <MessageSquare size={16} /> WhatsApp Status
+        </button>
+
+        {!isReadOnly && (
           <button
             type="button"
             onClick={handleInitiateConfirm}
@@ -824,8 +854,8 @@ return (
                 ? 'Upload LR Copy & Close BOM'
                 : 'Confirm Loading & Dispatch'}
           </button>
-        </div>
-      )}
+        )}
+      </div>
     </div>
 
     {/* ─── 1. VERIFIED PACKED ITEMS & CARGO MANIFEST CARD ─── */}
@@ -1328,6 +1358,14 @@ return (
           setLocalMediaPreviewModal(null);
           setActiveMediaPreviewModal(null);
         }}
+      />
+    )}
+
+    {/* Send Real-Time Status via WhatsApp Modal */}
+    {showWhatsAppModal && (
+      <SendWhatsAppStatusModal
+        order={bom}
+        onClose={() => setShowWhatsAppModal(false)}
       />
     )}
   </div>

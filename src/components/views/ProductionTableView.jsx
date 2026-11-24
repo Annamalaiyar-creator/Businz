@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   Plus, Search, Calendar, RotateCcw, XCircle, Trash2, Eye,
-  CreditCard, Printer, X, Edit3, Package, FileText, FileCode, Truck, CheckCircle, Clock, RotateCw
+  CreditCard, Printer, X, Edit3, Package, FileText, FileCode, Truck, CheckCircle, Clock, RotateCw, MessageSquare
 } from 'lucide-react';
 import StatusBadge from '../StatusBadge';
 import ModernDateRangePicker from '../ModernDateRangePicker';
@@ -39,6 +39,7 @@ export default function ProductionTableView({
   onEditRecord,
   onQuickPreview,
   onUploadPayment,
+  onSendWhatsAppStatus,
   kpiFilterMeta,
   onClearKpiFilter,
   showAlert
@@ -1063,6 +1064,45 @@ export default function ProductionTableView({
               </button>
             );
           })()}
+
+          {/* Send WhatsApp Status Button (for BOM, Dispatch, Accounts, Invoice) */}
+          {['BOM', 'BOM Orders', 'BOM / Routing', 'Dispatch Orders', 'Accounts Verification', 'Invoice Management'].includes(activeTab) && (
+            <button
+              onClick={() => {
+                const codeVal = (selectedRows && selectedRows.length > 0) ? selectedRows[0] : null;
+                const targetRow = codeVal
+                  ? ((filteredRows || []).find(r => r.code === codeVal || r.id === codeVal || r.bomCode === codeVal) || (bomStore || []).find(b => b.bomCode === codeVal || b.code === codeVal || b.id === codeVal))
+                  : null;
+                if (targetRow && typeof onSendWhatsAppStatus === 'function') {
+                  onSendWhatsAppStatus(targetRow);
+                } else if (showAlert) {
+                  showAlert('Please select an order to send WhatsApp status.');
+                }
+              }}
+              style={{
+                backgroundColor: '#FFFFFF',
+                border: '1px solid #BBF7D0',
+                color: '#075E54',
+                borderRadius: '10px',
+                padding: '6px 14px',
+                fontSize: '12px',
+                fontWeight: '800',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
+                boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F0FDF4'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
+              title="Send Real-Time WhatsApp Order Status to Customer"
+            >
+              <MessageSquare size={14} color="#25D366" /> WhatsApp Status
+            </button>
+          )}
 
           {/* View Payment Details Button - Excluded for Dispatch, Accounts, Invoice Management, and Delivery Challans */}
           {activeTab !== 'Dispatch Orders' && activeTab !== 'Accounts Verification' && activeTab !== 'Invoice Management' && activeTab !== 'Delivery Challans' && pageConfig?.title !== 'Delivery Challan Ledger (Rule 55 CGST)' && !String(pageConfig?.title || '').toLowerCase().includes('challan') && (

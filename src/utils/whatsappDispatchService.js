@@ -261,3 +261,125 @@ export function formatBomWhatsAppText(bom, customNote = '') {
   msg += `Best Regards,\n*${rep}*\nBUSINZ • VRM Energy India Pvt Ltd`;
   return msg;
 }
+
+/**
+ * Formatted Real-Time Order & Dispatch Status Message for Customers
+ */
+export function formatCustomerOrderStatusText(order, customNote = '') {
+  if (!order) return '';
+  const custName = order.customerName || order.companyName || order.vendor || order.customer || 'Valued Client';
+  const bCode = order.bomCode || order.code || order.id || 'ORDER-2026';
+  const s = String(order.status || '').toLowerCase();
+  
+  let stageTitle = 'Order In Progress';
+  let stageEmoji = '📋';
+  const details = [];
+
+  const isDispatched = order.status === 'Completed' || order.status === 'Fully Dispatched & Delivered' || s.includes('dispatched') || order.dispatchedAt || order.vehicleLoading?.loadedAt;
+  const isInvoiceDone = order.invoiceConfirmed || s.includes('invoice confirmed');
+  const isPackingDone = order.packingStatus === 'PACKING_VERIFIED' || order.dispatchPackingVerified || s.includes('packed');
+  
+  if (isDispatched) {
+    stageTitle = 'Dispatched & Out for Delivery';
+    stageEmoji = '🚚';
+    const vl = order.vehicleLoading || {};
+    const transporter = vl.transporterName || order.transporterName || order.transporter || 'Direct / Transport';
+    const lrNo = vl.lrNo || order.lrNo || (order.transportMode === 'Self-Pickup' ? 'Self-Pickup' : null);
+    const vehicleNo = vl.vehicleNo || order.vehicleNo || null;
+    if (transporter) details.push(`*Transporter:* ${transporter}`);
+    if (lrNo && lrNo !== 'N/A') details.push(`*LR / Consignment No:* ${lrNo}`);
+    if (vehicleNo) details.push(`*Vehicle No:* ${vehicleNo}`);
+    if (order.invoiceNo) details.push(`*Invoice No:* ${order.invoiceNo}`);
+  } else if (isInvoiceDone) {
+    stageTitle = 'Invoice Confirmed & Billed';
+    stageEmoji = '🧾';
+    if (order.invoiceNo) details.push(`*Invoice No:* ${order.invoiceNo}`);
+    details.push(`*Status:* Ready for Vehicle Loading & Dispatch`);
+  } else if (isPackingDone) {
+    stageTitle = 'Packing Completed & Verified';
+    stageEmoji = '📦';
+    const dp = Array.isArray(order.dispatchPacking) ? order.dispatchPacking : [];
+    const packedCount = dp.filter(p => p.packed).length;
+    if (dp.length > 0) details.push(`*Items Packed:* ${packedCount} of ${dp.length} verified`);
+    details.push(`*Status:* Passed to Accounts & Invoicing`);
+  } else {
+    stageTitle = 'BOM Order Confirmed & In Production';
+    stageEmoji = '🛠️';
+    details.push(`*Status:* Material Staging & Factory Production Active`);
+  }
+
+  const trackingToken = order.trackingToken || order.tracking_token;
+  const trackingUrl = trackingToken ? `${typeof window !== 'undefined' ? window.location.origin : ''}/order/${trackingToken}` : null;
+
+  let msg = `*${stageEmoji} ORDER STATUS UPDATE - BUSINZ*\n`;
+  msg += `-----------------------------------------\n`;
+  msg += `*Order Ref:* ${bCode}\n`;
+  msg += `*Customer:* ${custName}\n`;
+  msg += `*Current Stage:* ${stageTitle}\n`;
+  details.forEach(d => { msg += `${d}\n`; });
+  msg += `-----------------------------------------\n`;
+
+  if (trackingUrl) {
+    msg += `🔗 *Live Order & Dispatch Tracking:*\n${trackingUrl}\n\n`;
+  }
+
+  if (customNote) {
+    msg += `*Note:* ${customNote}\n\n`;
+  } else {
+    if (isDispatched) {
+      msg += `Dear ${custName},\nYour order has been officially dispatched from our facility. You can track real-time delivery milestones, view the LR consignment copy, and check packing photos using the tracking link above.\n\n`;
+    } else if (isInvoiceDone) {
+      msg += `Dear ${custName},\nYour order has been invoiced and is being scheduled for vehicle loading and dispatch.\n\n`;
+    } else if (isPackingDone) {
+      msg += `Dear ${custName},\nYour order materials have been thoroughly inspected, packed, and verified by our dispatch team.\n\n`;
+    } else {
+      msg += `Dear ${custName},\nYour Bill of Materials (BOM) has been confirmed and routed into our production schedule.\n\n`;
+    }
+  }
+
+  msg += `Best Regards,\n*BUSINZ • VRM Energy India Pvt Ltd*\nFor immediate assistance, reply directly to this message.`;
+  return msg;
+}
+
+/**
+ * Automatically dispatches real-time order status to customer over WhatsApp
+ */
+export async function autoDispatchOrderStatusToCustomer(order, stageEvent = 'STATUS_UPDATE', customNote = '') {
+  if (!order) return { success: false, reason: 'No order data' };
+
+  // Resolve customer mobile number
+  const rawPhone = order.mobile || order.phone || order.contactPhone || order.contact_person_phone || order.contact?.phone || order.primaryContact?.phone || order.c4;
+  if (!rawPhone || String(rawPhone).replace(/[^0-9]/g, '').length < 10) {
+    return { success: false, reason: 'No valid customer phone number' };
+  }
+
+  const cleanPhone = String(rawPhone).replace(/[^0-9]/g, '');
+  const to = cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone;
+  const text = formatCustomerOrderStatusText(order, customNote);
+
+  try {
+    const res = await fetch('/api/whatsapp/auto-status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        bomCode: order.bomCode || order.code || order.id,
+        customerPhone: to,
+        customerName: order.customerName || order.companyName || 'Valued Client',
+        stageEvent,
+        text,
+        details: {
+          status: order.status,
+          packingStatus: order.packingStatus,
+          invoiceNo: order.invoiceNo,
+          transporter: order.vehicleLoading?.transporterName || order.transporterName,
+          lrNo: order.vehicleLoading?.lrNo || order.lrNo,
+          vehicleNo: order.vehicleLoading?.vehicleNo || order.vehicleNo
+        }
+      })
+    });
+    return await res.json().catch(() => ({ success: true, simulated: true }));
+  } catch (err) {
+    console.warn('[Auto WhatsApp Status Notice]:', err.message);
+    return { success: false, error: err.message };
+  }
+}

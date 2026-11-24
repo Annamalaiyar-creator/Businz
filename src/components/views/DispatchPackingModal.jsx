@@ -12,6 +12,7 @@ import { centralInventoryStore } from "../../utils/centralInventoryStore";
 import { ActiveMediaPreviewModal } from "./DispatchAndPreviewModals";
 import { uploadBomDocumentFile, deleteBomDocumentFile } from "../../utils/bomStorageClient";
 import { resolveDocumentUrlAsync } from "../../utils/documentResolver";
+import { autoDispatchOrderStatusToCustomer } from "../../utils/whatsappDispatchService";
 
 function getAuthBomHeaders() {
   const sesId = typeof window !== 'undefined' && window.localStorage
@@ -992,6 +993,9 @@ export default function DispatchPackingModal({
 
     // 3. Persist atomically to Supabase cloud store and localStorage
     saveCloudBomRow(updatedPackedBom);
+    try {
+      autoDispatchOrderStatusToCustomer(updatedPackedBom, 'PACKING_VERIFIED');
+    } catch (_) {}
     try {
       const currentLocal = JSON.parse(localStorage.getItem('controlroom_bom_store') || '[]');
       const updatedLocal = currentLocal.map(b => (b.bomCode === targetCode || b.code === targetCode || b.id === targetCode || b.id === dispatchPackingModal.id) ? { ...b, ...updatedPackedBom } : b);

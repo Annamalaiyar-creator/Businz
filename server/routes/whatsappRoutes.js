@@ -226,6 +226,88 @@ export function createWhatsAppRouter({ broadcastRealtimeEvent, createDbLead }) {
     }
   });
 
+  // Automated Customer Order Status Dispatch Endpoint
+  router.post('/api/whatsapp/auto-status', async (req, res) => {
+    const { bomCode, customerPhone, customerName, stageEvent, text, details } = req.body;
+    if (!customerPhone || !text) {
+      return res.status(400).json({ error: 'Customer phone and text message are required.' });
+    }
+
+    const cleanPhone = String(customerPhone).replace(/[^0-9]/g, '');
+    const to = cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone;
+
+    let dispatched = false;
+    let dispatchMethod = 'none';
+    let dispatchError = null;
+
+    // 1. Try sending via any active multi-session WhatsApp (e.g. connected sales rep or company phone)
+    try {
+      const sessions = getAllUserSessions();
+      const activeSession = sessions.find(s => s && s.isReady && s.userId);
+      if (activeSession) {
+        await sendUserWhatsAppMessage(activeSession.userId, {
+          to,
+          text
+        });
+        dispatched = true;
+        dispatchMethod = `whatsapp_session:${activeSession.userId}`;
+      }
+    } catch (sockErr) {
+      console.warn('[WhatsApp Multi Auto-Status Notice]:', sockErr.message);
+      dispatchError = sockErr.message;
+    }
+
+    // 2. If not dispatched via socket and Meta Cloud API credentials are set, send via Meta API
+    if (!dispatched && WHATSAPP_ACCESS_TOKEN && WHATSAPP_PHONE_NUMBER_ID) {
+      try {
+        const metaUrl = `https://graph.facebook.com/v20.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`;
+        const metaRes = await fetch(metaUrl, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            messaging_product: 'whatsapp',
+            recipient_type: 'individual',
+            to,
+            type: 'text',
+            text: { preview_url: true, body: text }
+          })
+        });
+        const metaData = await metaRes.json();
+        if (metaRes.ok && metaData.messages?.[0]?.id) {
+          dispatched = true;
+          dispatchMethod = 'meta_cloud_api';
+        }
+      } catch (metaErr) {
+        console.warn('[WhatsApp Meta API Auto-Status Notice]:', metaErr.message);
+        if (!dispatchError) dispatchError = metaErr.message;
+      }
+    }
+
+    if (broadcastRealtimeEvent) {
+      broadcastRealtimeEvent('order_whatsapp_status_sent', {
+        bomCode,
+        customerPhone: to,
+        customerName,
+        stageEvent,
+        dispatched,
+        dispatchMethod,
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    res.json({
+      success: true,
+      dispatched,
+      method: dispatchMethod,
+      bomCode,
+      recipient: to,
+      error: dispatchError
+    });
+  });
+
   // AI Solar Enquiry Analysis endpoint
   router.post('/api/crm/ai/analyze-enquiry', (req, res) => {
     const { message = '' } = req.body;

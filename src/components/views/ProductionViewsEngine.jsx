@@ -25,6 +25,7 @@ import LrUploadPopupModal from './LrUploadPopupModal';
 const DeliveryChallanModal = lazy(() => import('./DeliveryChallanModal'));
 import QuickPreviewDrawer from './QuickPreviewDrawer';
 import ProductionTableView from './ProductionTableView';
+import SendWhatsAppStatusModal from './SendWhatsAppStatusModal';
 import { UploadPaymentModal, UpdatePaymentModal, ReuploadAddressProofModal } from './PaymentAndProofModals';
 import { CompletedBomSummaryModal, ActiveMediaPreviewModal, PreviewAddressProofModal, DispatchChecklistPreviewModal, ViewingProofDocModal, BomCancelPromptModal } from './DispatchAndPreviewModals';
 import { buildProductionConfigs } from './productionConfigs';
@@ -708,6 +709,7 @@ export default function ProductionViewsEngine(props) {
   const [showFloatingMoreMenu, setShowFloatingMoreMenu] = useState(false);
   const [quickPreviewRecord, setQuickPreviewRecord] = useState(null);
   const [confirmingBomModal, setConfirmingBomModal] = useState(null); // Full BOM object being confirmed by Salesperson
+  const [whatsappStatusOrder, setWhatsappStatusOrder] = useState(null); // Full BOM/Order object for manual WhatsApp status dispatch
   const [uploadPaymentModal, setUploadPaymentModal] = useState(null); // Full BOM object uploading payment proof
   const [paymentProofFile, setPaymentProofFile] = useState(null);
   const [paymentStageType, setPaymentStageType] = useState('100% Advance'); // '100% Advance' | '50% Advance' | '50% Dispatch' | 'Net 30 Days'
@@ -2128,6 +2130,7 @@ export default function ProductionViewsEngine(props) {
               pageConfig={pageConfig}
               activeTab={activeTab}
               userRole={userRole}
+              onSendWhatsAppStatus={(row) => setWhatsappStatusOrder(row)}
               onPrintTaxInvoice={(row) => setPrintTaxInvoiceModal(row)}
               onPrintBom={(row) => setPrintBomModal(row)}
               filteredRows={filteredRows}
@@ -2578,6 +2581,14 @@ export default function ProductionViewsEngine(props) {
           bomCancelPromptModal={bomCancelPromptModal}
           onClose={() => setBomCancelPromptModal(null)}
           onConfirmCancel={(bom, reason) => executeCancelBom(bom, reason)}
+        />
+      )}
+
+      {/* MANUAL WHATSAPP STATUS DISPATCH MODAL */}
+      {whatsappStatusOrder && (
+        <SendWhatsAppStatusModal
+          order={whatsappStatusOrder}
+          onClose={() => setWhatsappStatusOrder(null)}
         />
       )}
 
