@@ -7,7 +7,7 @@ import {
   sendUserWhatsAppMessage,
   getUserChats,
   addUserChat
-} from '../whatsappSessionManager.js';
+} from '../whatsappMultiService.js';
 
 export function createWhatsAppRouter({ broadcastRealtimeEvent, createDbLead }) {
   const router = express.Router();

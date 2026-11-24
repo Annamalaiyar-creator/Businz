@@ -6,7 +6,7 @@ import {
   deleteBomDocument,
   getBomDocumentMetadata
 } from '../bomDocumentService.js';
-import { getStoreFilePath } from '../runtimeStorage.js';
+import { getStoreFilePath } from '../runtimePaths.js';
 
 export function createBomDocumentRouter({ requireBusinzSession, safeWriteJsonFileAsync }) {
   const router = express.Router();

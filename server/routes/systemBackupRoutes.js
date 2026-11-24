@@ -4,7 +4,7 @@ import path from 'path';
 import { isOptimizationTestMode } from '../optimizationTestGuard.js';
 import { getSystemDiagnostics, logMemoryDiagnostic } from '../memoryDiagnostics.js';
 import { createFullBackup, listBackups, restoreFromBackup } from '../backupEngine.js';
-import { getBackupDir } from '../runtimeStorage.js';
+import { getBackupDir } from '../runtimePaths.js';
 
 export function createSystemBackupRouter({ supabase, supabaseMemoryStore, getVerifiedUserSession, isMaintenanceModeActive }) {
   const router = express.Router();

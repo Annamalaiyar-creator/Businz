@@ -3691,7 +3691,7 @@ app.use(createInvoiceRouter({
 // Proforma Invoices / Estimates endpoints
 // Returns next sequential PI number matching unified sequence VRM-PI-[YYYY]-[SEQ] (e.g. VRM-PI-2026-01) directly from authoritative database
 import createSequenceRouter from './routes/sequenceRoutes.js';
-app.use(createSequenceRouter({ supabaseMemoryStore }));
+app.use(createSequenceRouter({ supabaseMemoryStore, loadDatabaseLeads }));
 
 
 import createEstimateRouter from './routes/estimateRoutes.js';

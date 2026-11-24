@@ -2,12 +2,14 @@ import express from 'express';
 import fs from 'fs';
 import { getFinancialYear, getNextSequence } from '../sequenceService.js';
 import { getNextDatabasePiNumber } from '../piPersistence.js';
-import { loadDatabaseLeads } from '../leadsPersistence.js';
 import { query } from '../db.js';
-import { getStoreFilePath } from '../runtimeStorage.js';
+import { getStoreFilePath } from '../runtimePaths.js';
 
-export function createSequenceRouter({ supabaseMemoryStore }) {
+export function createSequenceRouter({ supabaseMemoryStore, loadDatabaseLeads }) {
   const router = express.Router();
+  const getLeads = typeof loadDatabaseLeads === 'function'
+    ? loadDatabaseLeads
+    : async () => (Array.isArray(supabaseMemoryStore?.crm_leads) ? supabaseMemoryStore.crm_leads : []);
 
   // Next PI / Estimate Number
   router.get(['/api/next-pi-number', '/api/next-estimate-number'], async (req, res) => {
@@ -53,7 +55,7 @@ export function createSequenceRouter({ supabaseMemoryStore }) {
   router.get(['/api/next-lead-number', '/api/crm/leads/next-number'], async (req, res) => {
     try {
       const fy = getFinancialYear();
-      const leads = await loadDatabaseLeads();
+      const leads = await getLeads();
       const { code, nextNum } = getNextSequence('LD', leads);
       res.json({ nextLeadNo: code, nextLeadNumber: code, nextNum, financialYear: fy });
     } catch (err) {
