@@ -842,10 +842,13 @@ export default function BomOrdersView(props) {
     return { isValid: missingList.length === 0, missingList, errors };
   };
   const getEffectiveSalesPerson = () => {
+    const storedName = (localStorage.getItem('controlroom_logged_user_name') || '').trim();
+    if (storedName && storedName !== 'undefined' && storedName !== 'null' && storedName.toLowerCase() !== 'vijay') {
+      if (storedName.includes('@') && EMAIL_TO_SALES_NAME[storedName.toLowerCase()]) return EMAIL_TO_SALES_NAME[storedName.toLowerCase()];
+      if (!storedName.includes('@')) return storedName;
+    }
     const curEmp = (localStorage.getItem('controlroom_logged_emp_id') || '').trim().toUpperCase();
-    if (curEmp && CODE_TO_SALES_NAME[curEmp]) return CODE_TO_SALES_NAME[curEmp];
     const curEmail = (localStorage.getItem('controlroom_logged_email') || localStorage.getItem('controlroom_logged_user') || '').trim().toLowerCase();
-    if (curEmail && EMAIL_TO_SALES_NAME[curEmail]) return EMAIL_TO_SALES_NAME[curEmail];
     try {
       const storedEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
       const cloudEmps = JSON.parse(localStorage.getItem('controlroom_employees_store') || '[]');
@@ -863,11 +866,8 @@ export default function BomOrdersView(props) {
         if (match && (match.employee_name || match.name)) return match.employee_name || match.name;
       }
     } catch (_) {}
-    const storedName = (localStorage.getItem('controlroom_logged_user_name') || '').trim();
-    if (storedName && storedName !== 'undefined' && storedName !== 'null' && storedName.toLowerCase() !== 'vijay') {
-      if (storedName.includes('@') && EMAIL_TO_SALES_NAME[storedName.toLowerCase()]) return EMAIL_TO_SALES_NAME[storedName.toLowerCase()];
-      if (!storedName.includes('@')) return storedName;
-    }
+    if (curEmp && CODE_TO_SALES_NAME[curEmp]) return CODE_TO_SALES_NAME[curEmp];
+    if (curEmail && EMAIL_TO_SALES_NAME[curEmail]) return EMAIL_TO_SALES_NAME[curEmail];
     if (userRole === 'Technical Administrator' || userRole === 'CEO') return 'Annamalaiyar';
     if (userRole === 'Procurement Head') return 'ARUN BOOPATHI M';
     if (userRole === 'Production Head') return 'Senthil Kumar';
@@ -878,10 +878,27 @@ export default function BomOrdersView(props) {
   const defaultSalesPersonName = getEffectiveSalesPerson();
   const [newBomSalesPerson, setNewBomSalesPerson] = useState(defaultSalesPersonName);
 
+  useEffect(() => {
+    const handleUserUpdate = (e) => {
+      const newName = e?.detail?.name || (localStorage.getItem('controlroom_logged_user_name') || '').trim();
+      if (newName) {
+        setNewBomSalesPerson(newName);
+      }
+    };
+    window.addEventListener('businz_user_updated', handleUserUpdate);
+    window.addEventListener('controlroom_storage_update', handleUserUpdate);
+    return () => {
+      window.removeEventListener('businz_user_updated', handleUserUpdate);
+      window.removeEventListener('controlroom_storage_update', handleUserUpdate);
+    };
+  }, []);
+
   const currentEmpId = (localStorage.getItem('controlroom_logged_emp_id') || localStorage.getItem('controlroom_logged_user_id') || '').trim().toUpperCase();
   const rawEmpName = (localStorage.getItem('controlroom_logged_user_name') || '').trim();
   const currentLoggedEmail = (localStorage.getItem('controlroom_logged_user') || '').trim().toLowerCase();
-  const currentEmpName = (currentEmpId && CODE_TO_SALES_NAME[currentEmpId]) ? CODE_TO_SALES_NAME[currentEmpId] : rawEmpName;
+  const currentEmpName = (rawEmpName && rawEmpName !== 'undefined' && rawEmpName !== 'null' && rawEmpName.toLowerCase() !== 'vijay')
+    ? rawEmpName
+    : ((currentEmpId && CODE_TO_SALES_NAME[currentEmpId]) ? CODE_TO_SALES_NAME[currentEmpId] : rawEmpName);
   const currentUserName = props.currentUserName || props.userName || props.currentUser?.name || currentEmpName || defaultSalesPersonName || userRole;
 
   const curCode = (currentEmpId || '').trim().toUpperCase();

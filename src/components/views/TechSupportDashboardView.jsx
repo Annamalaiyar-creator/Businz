@@ -35,7 +35,7 @@ export default function TechSupportDashboardView({ userRole = 'Tech Support', on
   const [backupNotice, setBackupNotice] = useState(null);
 
   // Dynamic logged-in user name
-  const loggedUserName = (() => {
+  const [loggedUserName, setLoggedUserName] = useState(() => {
     try {
       const stored = localStorage.getItem('controlroom_logged_user_name');
       if (stored && stored !== 'undefined' && stored !== 'null' && stored.trim()) return stored.trim();
@@ -45,7 +45,20 @@ export default function TechSupportDashboardView({ userRole = 'Tech Support', on
       }
     } catch (_) {}
     return 'Tech Support';
-  })();
+  });
+
+  useEffect(() => {
+    const handleUserUpdate = (e) => {
+      const newName = e?.detail?.name || (localStorage.getItem('controlroom_logged_user_name') || '').trim();
+      if (newName) setLoggedUserName(newName);
+    };
+    window.addEventListener('businz_user_updated', handleUserUpdate);
+    window.addEventListener('controlroom_storage_update', handleUserUpdate);
+    return () => {
+      window.removeEventListener('businz_user_updated', handleUserUpdate);
+      window.removeEventListener('controlroom_storage_update', handleUserUpdate);
+    };
+  }, []);
 
   // Fetch all necessary tech support data
   const loadDashboardData = async () => {

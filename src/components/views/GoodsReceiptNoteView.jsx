@@ -207,10 +207,10 @@ export default function GoodsReceiptNoteView(props) {
   );
 
   const getLoggedInUserName = () => {
+    const storedName = typeof window !== 'undefined' ? (localStorage.getItem('controlroom_logged_user_name') || '').trim() : '';
+    if (storedName && storedName !== 'undefined' && storedName !== 'null' && storedName.toLowerCase() !== 'vijay') return storedName;
     const curEmp = (typeof window !== 'undefined' ? localStorage.getItem('controlroom_logged_emp_id') : '')?.trim()?.toUpperCase();
     if (curEmp && CODE_TO_SALES_NAME[curEmp]) return CODE_TO_SALES_NAME[curEmp];
-    const storedName = typeof window !== 'undefined' ? localStorage.getItem('controlroom_logged_user_name') : '';
-    if (storedName && storedName !== 'undefined' && storedName !== 'null' && storedName.toLowerCase() !== 'vijay') return storedName;
     try {
       const storedEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
       const cloudEmps = JSON.parse(localStorage.getItem('controlroom_employees_store') || '[]');

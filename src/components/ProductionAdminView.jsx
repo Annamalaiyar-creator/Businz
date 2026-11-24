@@ -99,6 +99,30 @@ export default function ProductionAdminView({ activeTab, userRole }) {
     }
   });
 
+  const [loggedUserName, setLoggedUserName] = useState(() => {
+    const storedName = typeof localStorage !== 'undefined' ? (localStorage.getItem('controlroom_logged_user_name') || '').trim() : '';
+    if (storedName && storedName !== 'undefined' && storedName !== 'null') return storedName;
+    const curEmp = typeof localStorage !== 'undefined' ? (localStorage.getItem('controlroom_logged_emp_id') || '').trim().toUpperCase() : '';
+    if (curEmp && CODE_TO_SALES_NAME[curEmp]) return CODE_TO_SALES_NAME[curEmp];
+    if (userRole === 'Production Head') return 'Senthil Kumar';
+    if (userRole === 'Dispatch Head') return 'Kalpana';
+    if (userRole === 'Technical Administrator' || userRole === 'CEO') return 'Annamalaiyar';
+    return userRole || 'Production Team';
+  });
+
+  useEffect(() => {
+    const handleUserUpdate = (e) => {
+      const newName = e?.detail?.name || (localStorage.getItem('controlroom_logged_user_name') || '').trim();
+      if (newName) setLoggedUserName(newName);
+    };
+    window.addEventListener('businz_user_updated', handleUserUpdate);
+    window.addEventListener('controlroom_storage_update', handleUserUpdate);
+    return () => {
+      window.removeEventListener('businz_user_updated', handleUserUpdate);
+      window.removeEventListener('controlroom_storage_update', handleUserUpdate);
+    };
+  }, []);
+
   const handleDismissAlert = (id) => {
     const updated = [...dismissedAlerts, id];
     setDismissedAlerts(updated);
@@ -728,29 +752,7 @@ export default function ProductionAdminView({ activeTab, userRole }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px', zIndex: 2 }}>
           <div>
             <h2 style={{ fontSize: '20px', fontWeight: '800', color: '#0F172A', margin: 0, letterSpacing: '-0.02em' }}>
-              Welcome back, {(() => {
-                const curEmp = (localStorage.getItem('controlroom_logged_emp_id') || '').trim().toUpperCase();
-                if (curEmp && CODE_TO_SALES_NAME[curEmp]) return CODE_TO_SALES_NAME[curEmp];
-                const storedName = localStorage.getItem('controlroom_logged_user_name');
-                if (storedName && storedName !== 'undefined' && storedName !== 'null') return storedName;
-                try {
-                  const storedEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
-                  const cloudEmps = JSON.parse(localStorage.getItem('controlroom_employees_store') || '[]');
-                  const allEmps = [...(Array.isArray(storedEmps) ? storedEmps : []), ...(Array.isArray(cloudEmps) ? cloudEmps : [])];
-                  if (curEmp) {
-                    const match = allEmps.find(e => e && (
-                      String(e.employee_code || '').toUpperCase() === curEmp || 
-                      String(e.code || '').toUpperCase() === curEmp ||
-                      (Array.isArray(e.alias_codes) && e.alias_codes.some(a => String(a).toUpperCase() === curEmp))
-                    ));
-                    if (match && (match.employee_name || match.name)) return match.employee_name || match.name;
-                  }
-                } catch(e) {}
-                if (userRole === 'Production Head') return 'Senthil Kumar';
-                if (userRole === 'Dispatch Head') return 'Kalpana';
-                if (userRole === 'Technical Administrator' || userRole === 'CEO') return 'Annamalaiyar';
-                return storedName || userRole || 'Production Team';
-              })()}!
+              Welcome back, {loggedUserName}!
             </h2>
             <p style={{ fontSize: '13px', color: '#64748B', margin: '4px 0 0 0', fontWeight: '500' }}>
               Here is your plant output overview, work order progress & shift efficiency metrics for today.

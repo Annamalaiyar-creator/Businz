@@ -308,10 +308,10 @@ export default function CrmQuotationsView({
 
   // Resolve currently logged in account user's name dynamically (matching Header & auth state)
   const getActiveUserName = () => {
+    const stored = (localStorage.getItem('controlroom_logged_user_name') || '').trim();
+    if (stored && stored !== 'undefined' && stored !== 'null' && stored !== '' && stored.toLowerCase() !== 'vijay') return stored;
     const curEmp = (localStorage.getItem('controlroom_logged_emp_id') || '').trim().toUpperCase();
     if (curEmp && CODE_TO_SALES_NAME[curEmp]) return CODE_TO_SALES_NAME[curEmp];
-    const stored = localStorage.getItem('controlroom_logged_user_name');
-    if (stored && stored !== 'undefined' && stored !== 'null' && stored.trim() !== '' && stored.toLowerCase() !== 'vijay') return stored.trim();
     try {
       const storedEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
       const cloudEmps = JSON.parse(localStorage.getItem('controlroom_employees_store') || '[]');

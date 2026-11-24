@@ -197,9 +197,11 @@ export const authenticateUser = (empId, username, password, selectedRoleObj = nu
   const rawRoleName = accountRecord.role;
   const finalRoleName = normalizeDepartmentRole(rawRoleName);
   const finalEmpId = accountRecord.employee_code || accountRecord.code || cleanEmpId || identifier;
-  let finalDisplayName = (finalEmpId && CODE_TO_SALES_NAME[finalEmpId])
-    ? CODE_TO_SALES_NAME[finalEmpId]
-    : (accountRecord.employee_name || cleanUsername);
+  let finalDisplayName = (accountRecord.employee_name && accountRecord.employee_name.trim() && accountRecord.employee_name !== 'undefined')
+    ? accountRecord.employee_name.trim()
+    : ((finalEmpId && CODE_TO_SALES_NAME[finalEmpId])
+      ? CODE_TO_SALES_NAME[finalEmpId]
+      : (cleanUsername));
   if (!finalDisplayName && cleanUsername.includes('@')) {
     const emailPrefix = cleanUsername.split('@')[0].replace(/[._-]/g, ' ');
     finalDisplayName = emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1);

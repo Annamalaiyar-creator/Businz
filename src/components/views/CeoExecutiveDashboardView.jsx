@@ -492,12 +492,8 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
       setCurrentLoggedName(userRole === 'HR' ? 'HR Operations' : 'Velmurugan Rathinam');
     };
 
-    window.addEventListener('storage', handleUserUpdate);
-    window.addEventListener('controlroom_storage_update', handleUserUpdate);
-    return () => {
-      window.removeEventListener('storage', handleUserUpdate);
-      window.removeEventListener('controlroom_storage_update', handleUserUpdate);
-    };
+    ['storage', 'controlroom_storage_update', 'businz_user_updated'].forEach(e => window.addEventListener(e, handleUserUpdate));
+    return () => ['storage', 'controlroom_storage_update', 'businz_user_updated'].forEach(e => window.removeEventListener(e, handleUserUpdate));
   }, [userRole]);
 
   const avatarInitials = useMemo(() => {

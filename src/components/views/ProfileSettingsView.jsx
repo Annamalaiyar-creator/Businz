@@ -209,9 +209,32 @@ export default function ProfileSettingsView({ userRole, onNavigateTab }) {
         if (profile.email) localStorage.setItem('controlroom_logged_user_email', String(profile.email).trim());
         if (profile.phone) localStorage.setItem('controlroom_logged_user_phone', String(profile.phone).trim());
 
-        // Notify Header and all components immediately of the updated name
+        const empId = (localStorage.getItem('controlroom_logged_emp_id') || '').trim().toUpperCase();
+        const userEmail = (localStorage.getItem('controlroom_logged_user') || '').trim().toLowerCase();
+        try {
+          ['controlroom_employees_list', 'controlroom_employees_store'].forEach(key => {
+            const list = JSON.parse(localStorage.getItem(key) || '[]');
+            if (Array.isArray(list)) {
+              const updated = list.map(emp => {
+                if (!emp) return emp;
+                const codeMatch = empId && (String(emp.employee_code || emp.code || '').trim().toUpperCase() === empId);
+                const emailMatch = userEmail && (String(emp.email || '').trim().toLowerCase() === userEmail);
+                if (codeMatch || emailMatch) {
+                  return { ...emp, employee_name: cleanName, name: cleanName };
+                }
+                return emp;
+              });
+              localStorage.setItem(key, JSON.stringify(updated));
+            }
+          });
+        } catch (_) {}
+
+        // Notify Header, Dashboards, and all views immediately of the updated name
         window.dispatchEvent(new CustomEvent('businz_user_updated', {
           detail: { name: cleanName, email: profile.email, phone: profile.phone }
+        }));
+        window.dispatchEvent(new CustomEvent('controlroom_storage_update', {
+          detail: { key: 'controlroom_logged_user_name', value: cleanName }
         }));
 
         setSavedSuccess(true);
@@ -223,6 +246,13 @@ export default function ProfileSettingsView({ userRole, onNavigateTab }) {
       console.error('Error updating profile:', err);
       localStorage.setItem('controlroom_logged_user_name', cleanName);
       localStorage.setItem('vrm_user_name', cleanName);
+      localStorage.setItem('businz_user_name', cleanName);
+      window.dispatchEvent(new CustomEvent('businz_user_updated', {
+        detail: { name: cleanName, email: profile.email, phone: profile.phone }
+      }));
+      window.dispatchEvent(new CustomEvent('controlroom_storage_update', {
+        detail: { key: 'controlroom_logged_user_name', value: cleanName }
+      }));
       setSavedSuccess(true);
       setTimeout(() => setSavedSuccess(false), 3500);
     } finally {

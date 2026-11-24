@@ -26,6 +26,28 @@ export default function AccountsFinanceDashboard({ userRole = 'Accounts Head', o
   const [invoices, setInvoices] = useState([]);
   const [purchaseOrders, setPurchaseOrders] = useState([]);
 
+  const [loggedUserName, setLoggedUserName] = useState(() => {
+    const storedName = localStorage.getItem('controlroom_logged_user_name');
+    if (storedName && storedName !== 'undefined' && storedName !== 'null' && storedName.trim()) return storedName.trim();
+    if (userRole === 'Accounts Head') return 'Venkatesh';
+    if (userRole === 'Accounts Executive') return 'Priya';
+    if (userRole === 'Invoice Executive') return 'Anand';
+    return 'Accounts Team';
+  });
+
+  useEffect(() => {
+    const handleUserUpdate = (e) => {
+      const newName = e?.detail?.name || (localStorage.getItem('controlroom_logged_user_name') || '').trim();
+      if (newName) setLoggedUserName(newName);
+    };
+    window.addEventListener('businz_user_updated', handleUserUpdate);
+    window.addEventListener('controlroom_storage_update', handleUserUpdate);
+    return () => {
+      window.removeEventListener('businz_user_updated', handleUserUpdate);
+      window.removeEventListener('controlroom_storage_update', handleUserUpdate);
+    };
+  }, []);
+
   // Load store data
   useEffect(() => {
     const loadStores = async () => {
@@ -296,14 +318,7 @@ export default function AccountsFinanceDashboard({ userRole = 'Accounts Head', o
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px', zIndex: 2, minWidth: 0 }}>
           <div>
             <h2 style={{ fontSize: '18px', fontWeight: '800', color: '#0F172A', margin: 0, letterSpacing: '-0.02em', wordBreak: 'break-word' }}>
-              Welcome back, {(() => {
-                const storedName = localStorage.getItem('controlroom_logged_user_name');
-                if (storedName && storedName !== 'undefined' && storedName !== 'null') return storedName;
-                if (userRole === 'Accounts Head') return 'Venkatesh';
-                if (userRole === 'Accounts Executive') return 'Priya';
-                if (userRole === 'Invoice Executive') return 'Anand';
-                return 'Accounts Team';
-              })()}!
+              Welcome back, {loggedUserName}!
             </h2>
             <p style={{ fontSize: '12px', color: '#64748B', margin: '4px 0 0 0', fontWeight: '500' }}>
               Here is your financial summary, live invoice clearances & enterprise cash flow metrics for today.

@@ -172,6 +172,7 @@ export default function createUserProfileRouter(dependencies) {
             const bCreatorCode = String(b.createdById || b.created_by_id || '').trim().toLowerCase();
             const bCreatorName = String(b.createdBy || b.created_by || '').trim().toLowerCase();
             const bSalesCode = String(b.salesPersonCode || b.sales_person_code || '').trim().toLowerCase();
+            const bSalesName = String(b.salesPerson || b.sales_person || '').trim().toLowerCase();
 
             let matched = false;
             let nextB = { ...b };
@@ -183,7 +184,7 @@ export default function createUserProfileRouter(dependencies) {
               matched = true;
             }
 
-            if (empCode && bSalesCode === empCode.toLowerCase()) {
+            if ((empCode && bSalesCode === empCode.toLowerCase()) || (oldName && bSalesName === oldName.toLowerCase())) {
               nextB.salesPerson = cleanName;
               nextB.sales_person = cleanName;
               bomsModified = true;
@@ -205,7 +206,77 @@ export default function createUserProfileRouter(dependencies) {
         console.warn('[Profile Update] bom_store json notice:', bStoreErr.message);
       }
 
-      // 6. Broadcast Realtime Updates to all clients & browser sessions
+      // 6. Update Proforma Invoices in database, memory, and disk store
+      let pisUpdatedCount = 0;
+      if (isDbConnected()) {
+        try {
+          const updatePiRes = await query(
+            `UPDATE public.proforma_invoices 
+             SET sales_person = $1, created_by = $1, updated_at = NOW() 
+             WHERE (created_by_id IS NOT NULL AND LOWER(created_by_id) = LOWER($2)) 
+                OR (sales_person_code IS NOT NULL AND LOWER(sales_person_code) = LOWER($2))
+                OR (created_by IS NOT NULL AND LOWER(created_by) = LOWER($3))
+                OR (sales_person IS NOT NULL AND LOWER(sales_person) = LOWER($3))`,
+            [cleanName, empCode, oldName]
+          );
+          pisUpdatedCount += (updatePiRes?.rowCount || 0);
+        } catch (piDbErr) {
+          console.warn('[Profile Update] public.proforma_invoices notice:', piDbErr.message);
+        }
+      }
+
+      for (const storeKey of ['sales_pi_store', 'proforma_invoice_store']) {
+        try {
+          const piDiskPath = getStoreFilePath(`${storeKey}.json`);
+          let currentPis = supabaseMemoryStore?.[storeKey];
+          if (!Array.isArray(currentPis) && fs.existsSync(piDiskPath)) {
+            try { currentPis = JSON.parse(fs.readFileSync(piDiskPath, 'utf8')); } catch (_) {}
+          }
+
+          if (Array.isArray(currentPis) && currentPis.length > 0) {
+            let pisModified = false;
+            const updatedPis = currentPis.map(p => {
+              if (!p) return p;
+              const pCreatorCode = String(p.createdById || p.created_by_id || '').trim().toLowerCase();
+              const pCreatorName = String(p.createdBy || p.created_by || '').trim().toLowerCase();
+              const pSalesCode = String(p.salesPersonCode || p.sales_person_code || p.salesperson_code || '').trim().toLowerCase();
+              const pSalesName = String(p.salesPerson || p.salesperson || p.sales_person || '').trim().toLowerCase();
+
+              let matched = false;
+              let nextP = { ...p };
+
+              if ((empCode && pCreatorCode === empCode.toLowerCase()) || (oldName && pCreatorName === oldName.toLowerCase())) {
+                nextP.createdBy = cleanName;
+                nextP.created_by = cleanName;
+                pisModified = true;
+                matched = true;
+              }
+
+              if ((empCode && pSalesCode === empCode.toLowerCase()) || (oldName && pSalesName === oldName.toLowerCase())) {
+                nextP.salesPerson = cleanName;
+                nextP.salesperson = cleanName;
+                nextP.sales_person = cleanName;
+                pisModified = true;
+                matched = true;
+              }
+
+              return matched ? nextP : p;
+            });
+
+            if (pisModified) {
+              supabaseMemoryStore[storeKey] = updatedPis;
+              await safeWriteJsonFileAsync(piDiskPath, updatedPis);
+              try {
+                await saveDatabaseStore(storeKey, updatedPis);
+              } catch (_) {}
+            }
+          }
+        } catch (pStoreErr) {
+          console.warn(`[Profile Update] ${storeKey} notice:`, pStoreErr.message);
+        }
+      }
+
+      // 7. Broadcast Realtime Updates to all clients & browser sessions
       try {
         broadcastRealtimeEvent('user_profile_updated', {
           employee_code: empCode,
@@ -220,6 +291,13 @@ export default function createUserProfileRouter(dependencies) {
           employee_code: empCode,
           newName: cleanName,
           bomsUpdated: bomsUpdatedCount
+        });
+
+        broadcastRealtimeEvent('pi_updated', {
+          action: 'profile_name_changed',
+          employee_code: empCode,
+          newName: cleanName,
+          pisUpdated: pisUpdatedCount
         });
       } catch (_) {}
 

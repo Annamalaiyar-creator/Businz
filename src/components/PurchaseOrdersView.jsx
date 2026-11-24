@@ -43,10 +43,10 @@ export default function PurchaseOrdersView({ userRole = 'Procurement Head', targ
   const isCeoLogin = Boolean(isExecutiveOrMD || activeRole === 'CEO' || activeRole === 'Managing Director' || activeRole === 'MD');
   
   const getLoggedInUserName = () => {
+    const storedName = typeof window !== 'undefined' ? (localStorage.getItem('controlroom_logged_user_name') || '').trim() : '';
+    if (storedName && storedName !== 'undefined' && storedName !== 'null' && storedName.toLowerCase() !== 'vijay') return storedName;
     const curEmp = (typeof window !== 'undefined' ? localStorage.getItem('controlroom_logged_emp_id') : '')?.trim()?.toUpperCase();
     if (curEmp && CODE_TO_SALES_NAME[curEmp]) return CODE_TO_SALES_NAME[curEmp];
-    const storedName = localStorage.getItem('controlroom_logged_user_name');
-    if (storedName && storedName !== 'undefined' && storedName !== 'null' && storedName.toLowerCase() !== 'vijay') return storedName;
     try {
       const storedEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
       const cloudEmps = JSON.parse(localStorage.getItem('controlroom_employees_store') || '[]');

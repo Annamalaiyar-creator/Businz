@@ -329,14 +329,27 @@ export default function BillingDashboardView({ userRole = 'Billing', onNavigateT
     document.body.removeChild(link);
   };
 
-  const loggedUserName = (() => {
+  const [loggedUserName, setLoggedUserName] = useState(() => {
     try {
       const stored = localStorage.getItem('controlroom_logged_user_name');
-      if (stored && stored !== 'undefined' && stored !== 'null') return stored;
+      if (stored && stored !== 'undefined' && stored !== 'null' && stored.trim()) return stored.trim();
     } catch (_) {}
     if (userRole === 'Invoice Executive' || userRole === 'Billing') return 'Anand';
     return 'Billing Executive';
-  })();
+  });
+
+  useEffect(() => {
+    const handleUserUpdate = (e) => {
+      const newName = e?.detail?.name || (localStorage.getItem('controlroom_logged_user_name') || '').trim();
+      if (newName) setLoggedUserName(newName);
+    };
+    window.addEventListener('businz_user_updated', handleUserUpdate);
+    window.addEventListener('controlroom_storage_update', handleUserUpdate);
+    return () => {
+      window.removeEventListener('businz_user_updated', handleUserUpdate);
+      window.removeEventListener('controlroom_storage_update', handleUserUpdate);
+    };
+  }, []);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', width: '100%', boxSizing: 'border-box' }}>

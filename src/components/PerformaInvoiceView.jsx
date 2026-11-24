@@ -391,9 +391,28 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   };
 
   const currentEmpId = (localStorage.getItem('controlroom_logged_emp_id') || '').trim().toUpperCase();
-  const rawEmpName = (localStorage.getItem('controlroom_logged_user_name') || '').trim();
   const currentLoggedEmail = (localStorage.getItem('controlroom_logged_user') || '').trim().toLowerCase();
-  const currentEmpName = (currentEmpId && CODE_TO_SALES_NAME[currentEmpId]) ? CODE_TO_SALES_NAME[currentEmpId] : rawEmpName;
+  const [currentEmpName, setCurrentEmpName] = useState(() => {
+    const stored = (localStorage.getItem('controlroom_logged_user_name') || '').trim();
+    if (stored && stored !== 'undefined' && stored !== 'null' && stored.toLowerCase() !== 'vijay') {
+      return stored;
+    }
+    if (currentEmpId && CODE_TO_SALES_NAME[currentEmpId]) return CODE_TO_SALES_NAME[currentEmpId];
+    return stored || '';
+  });
+
+  useEffect(() => {
+    const handleNameUpdate = (e) => {
+      const newName = e?.detail?.name || (localStorage.getItem('controlroom_logged_user_name') || '').trim();
+      if (newName) setCurrentEmpName(newName);
+    };
+    window.addEventListener('businz_user_updated', handleNameUpdate);
+    window.addEventListener('controlroom_storage_update', handleNameUpdate);
+    return () => {
+      window.removeEventListener('businz_user_updated', handleNameUpdate);
+      window.removeEventListener('controlroom_storage_update', handleNameUpdate);
+    };
+  }, []);
   const isRestrictedSalesUser = Boolean(
     userRole &&
     ['Sales', 'Sales Executive', 'Salesperson', 'Sales Rep', 'Sales Representative', 'Sales Head'].some(r => r.toLowerCase() === userRole.toLowerCase().trim()) &&
@@ -523,11 +542,15 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
   };
 
   const getEffectiveSalesPerson = () => {
-    const curEmp = (localStorage.getItem('controlroom_logged_emp_id') || '').trim().toUpperCase();
-    if (curEmp && CODE_TO_SALES_NAME[curEmp]) return CODE_TO_SALES_NAME[curEmp];
+    const storedUser = (localStorage.getItem('controlroom_logged_user_name') || '').trim();
+    if (storedUser && storedUser !== 'undefined' && storedUser !== 'null' && storedUser.toLowerCase() !== 'vijay') {
+      if (storedUser.includes('@') && EMAIL_TO_SALES_NAME[storedUser.toLowerCase()]) return EMAIL_TO_SALES_NAME[storedUser.toLowerCase()];
+      if (!storedUser.includes('@')) return storedUser;
+    }
     if (currentEmpName && currentEmpName !== 'undefined' && currentEmpName !== 'null' && currentEmpName.toLowerCase() !== 'vijay' && !currentEmpName.includes('@')) return currentEmpName;
+
+    const curEmp = (localStorage.getItem('controlroom_logged_emp_id') || '').trim().toUpperCase();
     const curEmail = (localStorage.getItem('controlroom_logged_email') || localStorage.getItem('controlroom_logged_user') || '').trim().toLowerCase();
-    if (curEmail && EMAIL_TO_SALES_NAME[curEmail]) return EMAIL_TO_SALES_NAME[curEmail];
     try {
       const storedEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
       const cloudEmps = JSON.parse(localStorage.getItem('controlroom_employees_store') || '[]');
@@ -545,13 +568,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         if (match && (match.employee_name || match.name)) return match.employee_name || match.name;
       }
     } catch (_) {}
-    if (currentEmpName && currentEmpName !== 'undefined' && currentEmpName !== 'null' && !currentEmpName.includes('@')) return currentEmpName;
-    const storedUser = localStorage.getItem('controlroom_logged_user_name') || localStorage.getItem('controlroom_logged_user');
-    if (storedUser && storedUser.trim() && storedUser !== 'undefined' && storedUser !== 'null') {
-      const trimmed = storedUser.trim();
-      if (trimmed.includes('@') && EMAIL_TO_SALES_NAME[trimmed.toLowerCase()]) return EMAIL_TO_SALES_NAME[trimmed.toLowerCase()];
-      if (!trimmed.includes('@')) return trimmed;
-    }
+    if (curEmp && CODE_TO_SALES_NAME[curEmp]) return CODE_TO_SALES_NAME[curEmp];
+    if (curEmail && EMAIL_TO_SALES_NAME[curEmail]) return EMAIL_TO_SALES_NAME[curEmail];
     if (userRole === 'Sales Head') return 'Sales Head';
     if (userRole === 'Accounts Head') return 'Venkatesh';
     if (userRole === 'Technical Administrator' || userRole === 'CEO') return 'Annamalaiyar';
@@ -1482,10 +1500,10 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
 
   // Resolve currently logged in user dynamically (matching Header & BOM creation)
   const getActiveUserName = () => {
+    const stored = (localStorage.getItem('controlroom_logged_user_name') || '').trim();
+    if (stored && stored !== 'undefined' && stored !== 'null' && stored !== '' && stored.toLowerCase() !== 'vijay') return stored;
     const curEmp = (localStorage.getItem('controlroom_logged_emp_id') || '').trim().toUpperCase();
     if (curEmp && CODE_TO_SALES_NAME[curEmp]) return CODE_TO_SALES_NAME[curEmp];
-    const stored = localStorage.getItem('controlroom_logged_user_name');
-    if (stored && stored !== 'undefined' && stored !== 'null' && stored.trim() !== '' && stored.toLowerCase() !== 'vijay') return stored.trim();
     try {
       const storedEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
       const cloudEmps = JSON.parse(localStorage.getItem('controlroom_employees_store') || '[]');

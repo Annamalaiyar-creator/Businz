@@ -216,12 +216,13 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
 
   const isCeoOrMd = userRole === 'CEO' || userRole === 'MD' || userRole === 'Managing Director' || userRole === 'Technical Administrator' || userRole === 'Super Admin' || userRole === 'Admin';
   const isManagementRole = userRole === 'Sales Head' || userRole === 'Management' || isCeoOrMd;
-  const loggedUserName = (() => {
+  const [loggedUserName, setLoggedUserName] = useState(() => {
     if (typeof localStorage === 'undefined') return userRole || 'Sales Executive';
-    const empId = (localStorage.getItem('controlroom_logged_emp_id') || '').trim().toUpperCase();
-    if (empId && CODE_TO_SALES_NAME[empId]) {
-      return CODE_TO_SALES_NAME[empId];
+    const stored = (localStorage.getItem('controlroom_logged_user_name') || '').trim();
+    if (stored && stored !== 'undefined' && stored !== 'null' && stored.toLowerCase() !== 'vijay') {
+      return stored;
     }
+    const empId = (localStorage.getItem('controlroom_logged_emp_id') || '').trim().toUpperCase();
     if (empId) {
       try {
         const emps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
@@ -241,12 +242,24 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
         }
       } catch (_) {}
     }
-    const stored = (localStorage.getItem('controlroom_logged_user_name') || '').trim();
-    if (stored && stored !== 'undefined' && stored !== 'null' && stored.toLowerCase() !== 'vijay') {
-      return stored;
+    if (empId && CODE_TO_SALES_NAME[empId]) {
+      return CODE_TO_SALES_NAME[empId];
     }
     return userRole || 'Sales Executive';
-  })();
+  });
+
+  useEffect(() => {
+    const handleUserUpdate = (e) => {
+      const newName = e?.detail?.name || (localStorage.getItem('controlroom_logged_user_name') || '').trim();
+      if (newName) setLoggedUserName(newName);
+    };
+    window.addEventListener('businz_user_updated', handleUserUpdate);
+    window.addEventListener('controlroom_storage_update', handleUserUpdate);
+    return () => {
+      window.removeEventListener('businz_user_updated', handleUserUpdate);
+      window.removeEventListener('controlroom_storage_update', handleUserUpdate);
+    };
+  }, []);
 
   // Dynamic mobile viewport detection (<= 768px)
   const [isMobile, setIsMobile] = useState(() => {
