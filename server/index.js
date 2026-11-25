@@ -3342,6 +3342,7 @@ app.use(createCustomerRouter({
   loadLocalCustomers,
   saveLocalCustomers,
   safeWriteJsonFileAsync,
+  parseSafeNumber,
   query,
   supabaseMemoryStore
 }));

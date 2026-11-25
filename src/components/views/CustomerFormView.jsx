@@ -243,13 +243,17 @@ export default function CustomerFormView({
               // Persist via single awaited /api/customers call and verify before updating UI
               let resJson = {};
               try {
+                const sesId = typeof window !== 'undefined'
+                  ? (localStorage.getItem('controlroom_device_session_id') || localStorage.getItem('businz_device_session_id'))
+                  : null;
                 const res = await fetch('/api/customers', {
                   method: 'POST',
                   headers: {
                     'Content-Type': 'application/json',
                     'x-user-emp-id': loggedInEmpId || 'SE-1000',
                     'x-user-name': repName,
-                    'x-user-role': activeUserRole || 'Sales Executive'
+                    'x-user-role': activeUserRole || 'Sales Executive',
+                    ...(sesId ? { 'x-session-id': sesId } : {})
                   },
                   body: JSON.stringify({ ...targetCustObj, isNew: !editingCustomer })
                 });
@@ -693,106 +697,6 @@ export default function CustomerFormView({
 
         </div>
 
-      </div>
-
-      {/* CREDIT FACILITY & CEO APPROVAL */}
-      <div style={{ backgroundColor: '#FFFFFF', borderRadius: '16px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', borderBottom: '1px solid #F1F5F9', paddingBottom: '10px' }}>
-          <div>
-            <h3 style={{ margin: 0, fontSize: '14px', fontWeight: '800', color: '#0E7490', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              CREDIT FACILITY &amp; CEO APPROVAL
-            </h3>
-            <span style={{ fontSize: '11.5px', color: '#64748B' }}>
-              Only CEO-approved credit customers will see the Credit Payment option in PI &amp; BOM orders.
-            </span>
-          </div>
-          {creditApproved && (
-            <span style={{ fontSize: '11px', fontWeight: '800', color: '#166534', backgroundColor: '#DCFCE7', border: '1px solid #BBF7D0', padding: '4px 10px', borderRadius: '999px' }}>
-              ✓ CEO Approved Credit Customer
-            </span>
-          )}
-          {!creditApproved && requestCreditApproval && (
-            <span style={{ fontSize: '11px', fontWeight: '800', color: '#B45309', backgroundColor: '#FEF3C7', border: '1px solid #FDE68A', padding: '4px 10px', borderRadius: '999px' }}>
-              ⏳ Pending CEO Approval
-            </span>
-          )}
-        </div>
-
-        {isCeoOrAdmin ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '700', color: '#0F172A' }}>
-              <input
-                type="checkbox"
-                checked={Boolean(creditApproved)}
-                onChange={(e) => {
-                  const checked = e.target.checked;
-                  setCreditApproved(checked);
-                  if (checked) {
-                    setRequestCreditApproval(false);
-                    if (!creditLimitInput && creditRequestedLimitInput) setCreditLimitInput(creditRequestedLimitInput);
-                  } else {
-                    setCreditLimitInput('');
-                  }
-                }}
-                style={{ width: '16px', height: '16px', accentColor: '#0E7490', cursor: 'pointer' }}
-              />
-              Approve Credit Facility for this Customer (CEO Only)
-            </label>
-            {creditApproved && (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                    Approved Credit Limit (₹) <span style={{ color: '#EF4444' }}>*</span>
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="any"
-                    placeholder="e.g. 500000"
-                    value={creditLimitInput}
-                    onChange={(e) => setCreditLimitInput(e.target.value)}
-                    style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', fontWeight: '700', color: '#0F172A', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}
-                  />
-                </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                    Default Credit Days
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="365"
-                    placeholder="30"
-                    value={creditDaysInput}
-                    onChange={(e) => setCreditDaysInput(e.target.value)}
-                    style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', fontWeight: '700', color: '#0F172A', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-        ) : creditApproved ? (
-          <div style={{ padding: '12px 16px', backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: '10px', fontSize: '12.5px', color: '#166534', fontWeight: '700' }}>
-            CEO Approved Credit Limit: ₹{Number(creditLimitInput || 0).toLocaleString('en-IN')} • {creditDaysInput || 30} Days (Managed by CEO)
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '700', color: '#0F172A' }}>
-              <input
-                type="checkbox"
-                checked={Boolean(requestCreditApproval)}
-                onChange={(e) => setRequestCreditApproval(e.target.checked)}
-                style={{ width: '16px', height: '16px', accentColor: '#0E7490', cursor: 'pointer' }}
-              />
-              Request Credit Facility (Send to CEO for Approval)
-            </label>
-            {requestCreditApproval && (
-              <div style={{ padding: '12px 14px', backgroundColor: '#ECFEFF', border: '1px solid #A5F3FC', borderRadius: '10px', fontSize: '12px', color: '#0E7490', fontWeight: '600' }}>
-                This customer will be sent to the CEO Approval Queue. Only the CEO can approve credit access and set the Credit Limit &amp; Credit Days.
-              </div>
-            )}
-          </div>
-        )}
       </div>
 
     </div>

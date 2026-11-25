@@ -975,9 +975,15 @@ export default function CrmCustomersView({
     // 1. Persist to Central Customers API first and verify server confirmation before updating UI
     let resJson = {};
     try {
+      const sesId = typeof window !== 'undefined'
+        ? (localStorage.getItem('controlroom_device_session_id') || localStorage.getItem('businz_device_session_id'))
+        : null;
       const response = await fetch('/api/customers', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(sesId ? { 'x-session-id': sesId } : {})
+        },
         body: JSON.stringify({ ...record, isNew: !editingCustomer })
       });
       resJson = await response.json().catch(() => ({}));
@@ -1617,113 +1623,6 @@ export default function CrmCustomersView({
             </div>
           </div>
         </div>
-
-        {/* SECTION 5: CREDIT FACILITY & CEO APPROVAL */}
-        {(() => {
-          const activeRoleStr = String(typeof window !== 'undefined' ? (localStorage.getItem('controlroom_user_role') || '') : '').toLowerCase();
-          const isExecRole = ['ceo', 'md', 'managing director', 'technical administrator', 'admin', 'super admin'].some(k => activeRoleStr.includes(k));
-          const isApprovedAlready = Boolean(formCust.creditApproved || String(formCust.creditStatus || '').toLowerCase() === 'approved');
-          return (
-            <div style={{ backgroundColor: 'white', padding: '24px', borderRadius: '16px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <div style={{ width: '28px', height: '28px', borderRadius: '8px', backgroundColor: '#0E7490', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: '800' }}>
-                    5
-                  </div>
-                  <h3 style={{ fontSize: '14px', fontWeight: '800', color: '#0E7490', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                    CREDIT FACILITY &amp; CEO APPROVAL
-                  </h3>
-                </div>
-                {isApprovedAlready && (
-                  <span style={{ fontSize: '11px', fontWeight: '800', color: '#166534', backgroundColor: '#DCFCE7', border: '1px solid #BBF7D0', padding: '4px 10px', borderRadius: '999px' }}>
-                    ✓ CEO Approved Credit Customer
-                  </span>
-                )}
-                {!isApprovedAlready && formCust.requestCreditApproval && (
-                  <span style={{ fontSize: '11px', fontWeight: '800', color: '#B45309', backgroundColor: '#FEF3C7', border: '1px solid #FDE68A', padding: '4px 10px', borderRadius: '999px' }}>
-                    ⏳ Pending CEO Approval
-                  </span>
-                )}
-              </div>
-
-              {isExecRole ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '700', color: '#0F172A' }}>
-                    <input
-                      type="checkbox"
-                      checked={Boolean(formCust.creditApproved)}
-                      onChange={(e) => {
-                        const checked = e.target.checked;
-                        setFormCust(prev => ({
-                          ...prev,
-                          creditApproved: checked,
-                          creditStatus: checked ? 'approved' : 'none',
-                          requestCreditApproval: false,
-                          creditLimit: checked ? (prev.creditLimit || prev.creditRequestedLimit || '') : 0
-                        }));
-                      }}
-                      style={{ width: '16px', height: '16px', accentColor: '#0E7490', cursor: 'pointer' }}
-                    />
-                    Approve Credit Facility for this Customer (CEO Only)
-                  </label>
-                  {formCust.creditApproved && (
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
-                      <div>
-                        <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                          Approved Credit Limit (₹) <span style={{ color: '#EF4444' }}>*</span>
-                        </label>
-                        <input
-                          type="number"
-                          min="0"
-                          step="any"
-                          placeholder="e.g. 500000"
-                          value={formCust.creditLimit ?? ''}
-                          onChange={(e) => setFormCust({ ...formCust, creditLimit: e.target.value })}
-                          style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', fontWeight: '700', color: '#0F172A', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}
-                        />
-                      </div>
-                      <div>
-                        <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                          Default Credit Days
-                        </label>
-                        <input
-                          type="number"
-                          min="1"
-                          max="365"
-                          placeholder="30"
-                          value={formCust.creditDays ?? '30'}
-                          onChange={(e) => setFormCust({ ...formCust, creditDays: e.target.value })}
-                          style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', fontWeight: '700', color: '#0F172A', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ) : isApprovedAlready ? (
-                <div style={{ padding: '12px 16px', backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: '10px', fontSize: '12.5px', color: '#166534', fontWeight: '700' }}>
-                  CEO Approved Credit Limit: ₹{Number(formCust.creditLimit || 0).toLocaleString('en-IN')} • {formCust.creditDays || 30} Days (Managed by CEO)
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '700', color: '#0F172A' }}>
-                    <input
-                      type="checkbox"
-                      checked={Boolean(formCust.requestCreditApproval)}
-                      onChange={(e) => setFormCust({ ...formCust, requestCreditApproval: e.target.checked })}
-                      style={{ width: '16px', height: '16px', accentColor: '#0E7490', cursor: 'pointer' }}
-                    />
-                    Request Credit Facility (Send to CEO for Approval)
-                  </label>
-                  {formCust.requestCreditApproval && (
-                    <div style={{ padding: '12px 14px', backgroundColor: '#ECFEFF', border: '1px solid #A5F3FC', borderRadius: '10px', fontSize: '12px', color: '#0E7490', fontWeight: '600' }}>
-                      This customer will be sent to the CEO Approval Queue. Only the CEO can approve credit access and set the Credit Limit &amp; Credit Days.
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })()}
 
         {/* Bottom Submission Action Bar */}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '14px', paddingBottom: '20px' }}>

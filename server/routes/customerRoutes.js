@@ -25,8 +25,115 @@ export default function createCustomerRouter(dependencies) {
     supabaseMemoryStore
   } = dependencies;
 
-router.post('/api/customers', requireBusinzSession, async (req, res) => {
-  const loadedCustomers = await loadDatabaseCustomers();
+  const parseSafeNumber = (val, fallback = 0) => {
+    if (val === undefined || val === null || val === '') return fallback;
+    const num = Number(val);
+    return isNaN(num) ? fallback : num;
+  };
+
+  let customersSchemaEnsured = false;
+  async function ensureCustomersSchema() {
+    if (customersSchemaEnsured || !query) return;
+    try {
+      await query(`
+        CREATE TABLE IF NOT EXISTS public.customers (
+          id TEXT PRIMARY KEY,
+          customer_code TEXT,
+          company_name TEXT NOT NULL,
+          customer_name TEXT,
+          customer_type TEXT DEFAULT 'Customer',
+          industry TEXT,
+          gst_number TEXT,
+          pan_number TEXT,
+          billing_address TEXT,
+          city TEXT,
+          state TEXT,
+          pincode TEXT,
+          billing_address_obj JSONB DEFAULT '{}'::jsonb,
+          dispatch_address TEXT,
+          dispatch_city TEXT,
+          dispatch_state TEXT,
+          dispatch_pincode TEXT,
+          delivery_address_obj JSONB DEFAULT '{}'::jsonb,
+          same_as_billing BOOLEAN DEFAULT false,
+          credit_limit NUMERIC DEFAULT 0,
+          credit_days INTEGER DEFAULT 0,
+          payment_terms TEXT DEFAULT 'Due on Receipt',
+          assigned_salesperson TEXT,
+          source TEXT DEFAULT 'Manual',
+          primary_contact JSONB DEFAULT '{}'::jsonb,
+          email TEXT,
+          phone TEXT,
+          status TEXT DEFAULT 'Active',
+          notes TEXT,
+          credit_approved BOOLEAN DEFAULT FALSE,
+          credit_status TEXT DEFAULT 'none',
+          credit_requested_limit NUMERIC DEFAULT 0,
+          credit_requested_by TEXT DEFAULT '',
+          credit_requested_at TIMESTAMPTZ,
+          credit_approved_by TEXT DEFAULT '',
+          credit_approved_at TIMESTAMPTZ,
+          credit_rejection_reason TEXT DEFAULT '',
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+      `).catch(() => {});
+
+      const cols = [
+        'customer_code TEXT',
+        'company_name TEXT',
+        'customer_name TEXT',
+        "customer_type TEXT DEFAULT 'Customer'",
+        'industry TEXT',
+        'gst_number TEXT',
+        'pan_number TEXT',
+        'billing_address TEXT',
+        'city TEXT',
+        'state TEXT',
+        'pincode TEXT',
+        "billing_address_obj JSONB DEFAULT '{}'::jsonb",
+        'dispatch_address TEXT',
+        'dispatch_city TEXT',
+        'dispatch_state TEXT',
+        'dispatch_pincode TEXT',
+        "delivery_address_obj JSONB DEFAULT '{}'::jsonb",
+        'same_as_billing BOOLEAN DEFAULT false',
+        'credit_limit NUMERIC DEFAULT 0',
+        'credit_days INTEGER DEFAULT 0',
+        "payment_terms TEXT DEFAULT 'Due on Receipt'",
+        'assigned_salesperson TEXT',
+        "source TEXT DEFAULT 'Manual'",
+        "primary_contact JSONB DEFAULT '{}'::jsonb",
+        'email TEXT',
+        'phone TEXT',
+        "status TEXT DEFAULT 'Active'",
+        'notes TEXT',
+        'credit_approved BOOLEAN DEFAULT FALSE',
+        "credit_status TEXT DEFAULT 'none'",
+        'credit_requested_limit NUMERIC DEFAULT 0',
+        "credit_requested_by TEXT DEFAULT ''",
+        'credit_requested_at TIMESTAMPTZ',
+        "credit_approved_by TEXT DEFAULT ''",
+        'credit_approved_at TIMESTAMPTZ',
+        "credit_rejection_reason TEXT DEFAULT ''"
+      ];
+      for (const c of cols) {
+        await query(`ALTER TABLE public.customers ADD COLUMN IF NOT EXISTS ${c}`).catch(() => {});
+      }
+
+      await query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_customers_code_unique ON public.customers (customer_code)`).catch(() => {});
+      customersSchemaEnsured = true;
+    } catch (err) {
+      console.warn('[ensureCustomersSchema Notice]:', err.message);
+    }
+  }
+
+  ensureCustomersSchema().catch(() => {});
+
+  router.post('/api/customers', requireBusinzSession, async (req, res) => {
+    try {
+      await ensureCustomersSchema().catch(() => {});
+      const loadedCustomers = await loadDatabaseCustomers();
   const localCustomers = Array.isArray(loadedCustomers) ? loadedCustomers : [];
   const isBulk = Array.isArray(req.body);
   const incomingList = isBulk ? req.body : [req.body];
@@ -460,6 +567,13 @@ router.post('/api/customers', requireBusinzSession, async (req, res) => {
     customer: isBulk ? savedRecords[0] : savedRecords[0],
     customers: savedRecords
   });
+} catch (err) {
+  console.error('[POST /api/customers unhandled error]:', err);
+  return res.status(500).json({
+    success: false,
+    error: err.message || 'Failed to save customer to database'
+  });
+}
 });
 
 // BUSINZ Native Customers endpoint (Native BUSINZ Store - Bounded & Fast per Rules 4, 8, 12)

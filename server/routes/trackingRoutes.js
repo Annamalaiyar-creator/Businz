@@ -22,18 +22,28 @@ const router = express.Router();
 // Auto-ensure tracking schema is ready
 ensureTrackingSchema().catch(err => console.warn('[BUSINZ Track Schema Router Notice]:', err.message));
 
+// Safe decode helper to avoid URIError crashes
+function safeDecode(str) {
+  if (!str || typeof str !== 'string') return '';
+  try {
+    return decodeURIComponent(str).trim();
+  } catch (_) {
+    return String(str).trim();
+  }
+}
+
 // Helper to extract raw token from query or URL
 function extractTokenFromReq(req) {
-  if (req.query.token) return decodeURIComponent(req.query.token).trim();
-  if (req.query.track_token) return decodeURIComponent(req.query.track_token).trim();
-  if (req.query.bomCode) return decodeURIComponent(req.query.bomCode).trim();
-  if (req.params.token) return decodeURIComponent(req.params.token).trim();
-  if (req.params.bomCode) return decodeURIComponent(req.params.bomCode).trim();
-  if (req.params[0]) return decodeURIComponent(req.params[0]).trim();
+  if (req.query.token) return safeDecode(req.query.token);
+  if (req.query.track_token) return safeDecode(req.query.track_token);
+  if (req.query.bomCode) return safeDecode(req.query.bomCode);
+  if (req.params.token) return safeDecode(req.params.token);
+  if (req.params.bomCode) return safeDecode(req.params.bomCode);
+  if (req.params[0]) return safeDecode(req.params[0]);
   const urlPath = req.url.split('?')[0] || '';
   const match = urlPath.match(/^\/api\/track\/(.+)$/);
   if (match && match[1]) {
-    return decodeURIComponent(match[1].replace(/\/events\/?$/, '').replace(/\/issues\/?$/, '').replace(/\/confirm-delivery\/?$/, '')).trim();
+    return safeDecode(match[1].replace(/\/events\/?$/, '').replace(/\/issues\/?$/, '').replace(/\/confirm-delivery\/?$/, ''));
   }
   return '';
 }

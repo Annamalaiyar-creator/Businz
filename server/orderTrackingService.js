@@ -920,7 +920,15 @@ export async function getTrackingByToken(rawToken, { clientIp = '', userAgent = 
     cleanRaw.replace(/^VRMS/i, 'VRM'),
     cleanRaw.replace(/^VRM/i, 'VRMS'),
     decodedToken.replace(/^VRMS/i, 'VRM'),
-    decodedToken.replace(/^VRM/i, 'VRMS')
+    decodedToken.replace(/^VRM/i, 'VRMS'),
+    cleanRaw.replace(/^VRMS/i, 'VRM').replace(/\//g, '-'),
+    cleanRaw.replace(/^VRMS/i, 'VRM').replace(/-/g, '/'),
+    cleanRaw.replace(/^VRM/i, 'VRMS').replace(/\//g, '-'),
+    cleanRaw.replace(/^VRM/i, 'VRMS').replace(/-/g, '/'),
+    decodedToken.replace(/^VRMS/i, 'VRM').replace(/\//g, '-'),
+    decodedToken.replace(/^VRMS/i, 'VRM').replace(/-/g, '/'),
+    decodedToken.replace(/^VRM/i, 'VRMS').replace(/\//g, '-'),
+    decodedToken.replace(/^VRM/i, 'VRMS').replace(/-/g, '/')
   ])).filter(Boolean);
 
   const tokenHash = hashTrackingToken(decodedToken);
@@ -994,6 +1002,32 @@ export async function getTrackingByToken(rawToken, { clientIp = '', userAgent = 
       }
     } catch (e) {
       console.warn('[getTrackingByToken JSON Search Notice]:', e.message);
+    }
+
+    // 1d. Search public.controlroom_store JSON fallback
+    if (!bom) {
+      try {
+        const crRes = await query(
+          `SELECT value FROM public.controlroom_store WHERE key = 'bom_store' LIMIT 1`
+        ).catch(() => ({ rows: [] }));
+        if (crRes.rows && crRes.rows.length > 0 && Array.isArray(crRes.rows[0].value)) {
+          const boms = crRes.rows[0].value;
+          const matched = boms.find(b => {
+            if (!b) return false;
+            const bCode = String(b.bomCode || b.bom_code || b.code || b.id || '').toUpperCase();
+            const bPi = String(b.sourcePiNo || b.source_pi_no || '').toUpperCase();
+            return variants.some(v => {
+              const u = v.toUpperCase();
+              return bCode === u || bPi === u || bCode.includes(u) || u.includes(bCode);
+            });
+          });
+          if (matched) {
+            bom = matched;
+          }
+        }
+      } catch (e) {
+        console.warn('[getTrackingByToken controlroom_store Notice]:', e.message);
+      }
     }
   }
 
