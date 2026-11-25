@@ -1162,8 +1162,15 @@ export default function ProductionTableView({
             );
           })()}
 
-          {/* Send WhatsApp Status Button (for BOM, Dispatch, Accounts, Invoice) */}
-          {['BOM', 'BOM Orders', 'BOM / Routing', 'Dispatch Orders', 'Accounts Verification', 'Invoice Management'].includes(activeTab) && (
+          {/* Send WhatsApp Status Button (Strictly for Sales Person in BOM views) */}
+          {['BOM', 'BOM Orders', 'BOM / Routing', 'Sales BOM', 'BOM Orders & Client Specifications'].includes(activeTab) &&
+           activeTab !== 'Dispatch Orders' &&
+           activeTab !== 'Accounts Verification' &&
+           activeTab !== 'Invoice Management' &&
+           !String(userRole || '').toLowerCase().includes('dispatch') &&
+           !String(userRole || '').toLowerCase().includes('account') &&
+           !String(userRole || '').toLowerCase().includes('invoice') &&
+           !String(userRole || '').toLowerCase().includes('billing') && (
             <button
               onClick={() => {
                 const codeVal = (selectedRows && selectedRows.length > 0) ? selectedRows[0] : null;
@@ -1201,8 +1208,15 @@ export default function ProductionTableView({
             </button>
           )}
 
-          {/* Real-Time Live Order Tracking Button for Staff */}
-          {(activeTab === 'BOM / Routing' || activeTab === 'BOM' || activeTab === 'BOM Orders' || activeTab === 'Dispatch Orders' || activeTab === 'Accounts Verification' || activeTab === 'Invoice Management') && (
+          {/* Real-Time Live Order Tracking Button for Staff - Strictly for Sales Person only */}
+          {['BOM / Routing', 'BOM', 'BOM Orders', 'Sales BOM', 'BOM Orders & Client Specifications'].includes(activeTab) &&
+           activeTab !== 'Dispatch Orders' &&
+           activeTab !== 'Accounts Verification' &&
+           activeTab !== 'Invoice Management' &&
+           !String(userRole || '').toLowerCase().includes('dispatch') &&
+           !String(userRole || '').toLowerCase().includes('account') &&
+           !String(userRole || '').toLowerCase().includes('invoice') &&
+           !String(userRole || '').toLowerCase().includes('billing') && (
             <button
               onClick={() => {
                 const codeVal = (selectedRows && selectedRows.length > 0) ? selectedRows[0] : null;

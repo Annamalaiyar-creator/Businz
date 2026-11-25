@@ -270,7 +270,6 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
             { label: 'Dispatch Dashboard', icon: LayoutDashboard },
             { label: 'Work Orders', icon: ClipboardList, badge: realWOCount > 0 ? String(realWOCount) : undefined },
             { label: 'Dispatch Orders', icon: Truck, badge: realPendingDispatchCount > 0 ? String(realPendingDispatchCount) : undefined },
-            { label: 'Customer Order Tracking', targetTab: 'Customer Order Tracking', icon: PackageCheck },
             { label: 'Stock Status', icon: Layers }
           ]
         },
