@@ -33,7 +33,7 @@ function extractTokenFromReq(req) {
 }
 
 // 1. Public Customer Tracking Endpoint (Token-based, No Auth Required)
-router.get(['/api/track', '/api/track/*', '/api/track/:token'], async (req, res) => {
+router.get(['/api/track', '/api/track/:token'], async (req, res) => {
   try {
     const token = extractTokenFromReq(req);
     if (!token) {
@@ -116,7 +116,7 @@ router.get('/api/track/ensure/:bomCode', async (req, res) => {
 });
 
 // 2. Real-Time Tracking Server-Sent Events (SSE) Stream
-router.get(['/api/track/events', '/api/track/:token/events', '/api/track/*/events'], async (req, res) => {
+router.get(['/api/track/events', '/api/track/:token/events'], async (req, res) => {
   const token = extractTokenFromReq(req);
   if (!token) return res.status(400).end();
 
@@ -149,7 +149,7 @@ router.get(['/api/track/events', '/api/track/:token/events', '/api/track/*/event
 });
 
 // 3. Customer Issue Reporting
-router.post(['/api/track/issues', '/api/track/:token/issues', '/api/track/*/issues'], async (req, res) => {
+router.post(['/api/track/issues', '/api/track/:token/issues'], async (req, res) => {
   try {
     const token = extractTokenFromReq(req);
     const { issueCategory, issueDescription, contactNumber } = req.body;
@@ -179,7 +179,7 @@ router.post(['/api/track/issues', '/api/track/:token/issues', '/api/track/*/issu
 });
 
 // 4. Customer Delivery Confirmation
-router.post(['/api/track/confirm-delivery', '/api/track/:token/confirm-delivery', '/api/track/*/confirm-delivery'], async (req, res) => {
+router.post(['/api/track/confirm-delivery', '/api/track/:token/confirm-delivery'], async (req, res) => {
   try {
     const token = extractTokenFromReq(req);
     const { receivedBy, feedbackRating, feedbackNotes } = req.body;
