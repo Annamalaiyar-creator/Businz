@@ -3,6 +3,7 @@ import {
   Truck, Clock, AlertTriangle, ShieldAlert, FileCheck,
   Package, CheckCircle, X, Search, Calendar, SlidersHorizontal
 } from 'lucide-react';
+import { getBomActiveStage } from './bom/bomStageHelpers.js';
 
 const formatINRCompact = (val) => {
   const n = Number(val) || 0;
@@ -230,7 +231,7 @@ export default function CeoDispatchAnalyticsSection({
         b.invoiceConfirmed ||
         st.includes('invoice confirmed') ||
         st.includes('awaiting vehicle') ||
-        st.includes('ready for dispatch') ||
+        (st.includes('ready for dispatch') && !st.includes('packed')) ||
         invSt === 'invoice confirmed' ||
         invSt === 'confirmed' ||
         invSt === 'completed' ||
@@ -261,7 +262,16 @@ export default function CeoDispatchAnalyticsSection({
       else if (isDispatched) bucket = 'Dispatched';
       else if (isInvoiceConfirmed) bucket = 'Dispatch Pending';
       else if (isAccountsDone) bucket = 'Invoice Pending';
-      else if (isPacked) bucket = 'Accounts Pending';
+      else if (isPacked) {
+        const activeStg = getBomActiveStage(b);
+        if (activeStg.name === 'Payment Proof Pending (Sales)') {
+          bucket = 'Payment Slip Pending';
+        } else if (activeStg.name === 'Address Proof Pending (Sales)') {
+          bucket = 'Address Proof Pending';
+        } else {
+          bucket = 'Accounts Pending';
+        }
+      }
       else bucket = 'Dispatch Pending';
 
       const createdD = toDateObj(b.salesConfirmedAt || b.confirmedAt || b.date || b.bomDate || b.createdAt);
@@ -303,7 +313,12 @@ export default function CeoDispatchAnalyticsSection({
 
       let delayReason = 'Pending Processing';
       if (!isPacked) delayReason = 'Packing Pending';
-      else if (!isAccountsDone) delayReason = 'Accounts Verification Pending';
+      else if (!isAccountsDone) {
+        const activeStg = getBomActiveStage(b);
+        if (activeStg.name === 'Payment Proof Pending (Sales)') delayReason = 'Sales Payment Slip Missing';
+        else if (activeStg.name === 'Address Proof Pending (Sales)') delayReason = 'Sales Address Proof Missing';
+        else delayReason = 'Accounts Verification Pending';
+      }
       else if (!isInvoiceConfirmed) delayReason = 'Invoice Pending';
       else delayReason = 'Vehicle Loading Pending';
 
@@ -373,8 +388,10 @@ export default function CeoDispatchAnalyticsSection({
     // 1. DISPATCH STATUS
     const statusDefs = [
       { name: 'Dispatch Pending', color: '#0E7490' },
+      { name: 'Payment Slip Pending', color: '#D97706' },
+      { name: 'Address Proof Pending', color: '#EA580C' },
       { name: 'Accounts Pending', color: '#7C3AED' },
-      { name: 'Invoice Pending', color: '#D97706' },
+      { name: 'Invoice Pending', color: '#2563EB' },
       { name: 'Dispatched', color: '#059669' },
       { name: 'Cancelled', color: '#DC2626' }
     ];
@@ -564,8 +581,10 @@ export default function CeoDispatchAnalyticsSection({
   const statusBadgeStyle = (bucket) => {
     if (bucket === 'Dispatched') return { bg: '#DCFCE7', fg: '#15803D', border: '#BBF7D0' };
     if (bucket === 'Dispatch Pending') return { bg: '#ECFEFF', fg: '#0E7490', border: '#A5F3FC' };
+    if (bucket === 'Payment Slip Pending') return { bg: '#FFFBEB', fg: '#B45309', border: '#FDE68A' };
+    if (bucket === 'Address Proof Pending') return { bg: '#FFF7ED', fg: '#C2410C', border: '#FFEDD5' };
     if (bucket === 'Accounts Pending') return { bg: '#F5F3FF', fg: '#7C3AED', border: '#DDD6FE' };
-    if (bucket === 'Invoice Pending') return { bg: '#FEF3C7', fg: '#B45309', border: '#FDE68A' };
+    if (bucket === 'Invoice Pending') return { bg: '#EFF6FF', fg: '#1D4ED8', border: '#BFDBFE' };
     if (bucket === 'Cancelled') return { bg: '#FEE2E2', fg: '#DC2626', border: '#FECACA' };
     return { bg: '#ECFEFF', fg: '#0E7490', border: '#A5F3FC' };
   };

@@ -111,7 +111,87 @@ export const getBomActiveStage = (row) => {
     Boolean(row.awaitingSalesPaymentProof) ||
     Boolean(row.packingCompletedAt || row.packedAt || row.packingVerifiedAt || row.accountsVerification?.packedAt || row.packingStatus === 'PACKING_VERIFIED');
   if (isPackingVerified) {
-    return { name: 'Accounts Verification Pending', bg: '#FAF5FF', color: '#7E22CE', border: '#E9D5FF', dot: '#9333EA' };
+    const payType = String(
+      row.paymentTerms || 
+      row.payments?.paymentType || 
+      row.payments?.paymentTerms || 
+      row.salesPoDetails?.paymentTerms || 
+      row.paymentType || ''
+    ).toLowerCase();
+
+    const isCreditTerms = payType.includes('credit');
+    const isWhileDispatch = payType.includes('while dispatch') || payType.includes('before dispatch') || payType.includes('against delivery');
+    const isPartialPaidTerms = payType.includes('partial') || payType.includes('50%') || payType.includes('advance');
+
+    const rawProofForCheck = row.paymentProofDoc ||
+      row.payments?.proofDocObj ||
+      row.payments?.proofDoc ||
+      row.proofDoc ||
+      row.salesPoDetails?.proofDocObj ||
+      row.balancePaymentProofDoc ||
+      row.payments?.balanceProofDocObj ||
+      row.payments?.balanceProofDoc;
+
+    const hasUploadedPaymentProof = Boolean(
+      (typeof rawProofForCheck === 'string' && rawProofForCheck.trim().length > 0) ||
+      (rawProofForCheck && typeof rawProofForCheck === 'object' && (rawProofForCheck.url || rawProofForCheck.dataUrl || rawProofForCheck.fileData || rawProofForCheck.storagePath || rawProofForCheck.name)) ||
+      row.paymentProofDocName ||
+      (Array.isArray(row.paymentProofDocs) && row.paymentProofDocs.length > 0) ||
+      (Array.isArray(row.balancePaymentProofDocs) && row.balancePaymentProofDocs.length > 0) ||
+      row.balancePaymentProofDoc ||
+      row.payments?.balanceProofDoc ||
+      row.payments?.balanceSettled ||
+      row.creditSettled ||
+      row.paymentSettled
+    );
+
+    const isMissingPaymentProof = !isCreditTerms && Boolean(
+      row.awaitingSalesPaymentProof ||
+      statusStr.includes('awaiting sales payment proof') ||
+      ((isWhileDispatch || isPartialPaidTerms) && !hasUploadedPaymentProof)
+    );
+
+    const bAddr = String(row.billingAddress || row.companyBillingAddress || '').trim().toLowerCase();
+    const dAddr = String(row.deliveryAddress || row.siteAddress || row.consigneeAddress || '').trim().toLowerCase();
+    const isDifferentAddress = Boolean(bAddr && dAddr && bAddr !== dAddr);
+    const rawAddressProof = row.addressProofDoc || row.addressDoc || row.salesPoDetails?.addressDocObj || row.deliveryAddressProofDoc;
+    const hasAddressProof = Boolean(
+      (typeof rawAddressProof === 'string' && rawAddressProof.trim().length > 0) ||
+      (rawAddressProof && typeof rawAddressProof === 'object' && (rawAddressProof.url || rawAddressProof.dataUrl || rawAddressProof.fileData || rawAddressProof.name)) ||
+      row.addressProofDocName
+    );
+    const isMissingAddressProof = isDifferentAddress && !hasAddressProof;
+
+    if (isMissingPaymentProof) {
+      return { 
+        name: 'Payment Proof Pending (Sales)', 
+        bg: '#FFFBEB', 
+        color: '#B45309', 
+        border: '#FDE68A', 
+        dot: '#D97706',
+        responsibleDept: 'Sales'
+      };
+    }
+
+    if (isMissingAddressProof) {
+      return { 
+        name: 'Address Proof Pending (Sales)', 
+        bg: '#FFF7ED', 
+        color: '#C2410C', 
+        border: '#FFEDD5', 
+        dot: '#EA580C',
+        responsibleDept: 'Sales'
+      };
+    }
+
+    return { 
+      name: 'Accounts Verification Pending', 
+      bg: '#FAF5FF', 
+      color: '#7E22CE', 
+      border: '#E9D5FF', 
+      dot: '#9333EA',
+      responsibleDept: 'Accounts'
+    };
   }
 
   const isSalesConfirmed = Boolean(row.salesConfirmed || row.salesReconfirmed || row.creditSettled || row.paymentSettled) ||
@@ -284,7 +364,7 @@ export const getBomStageTiming = (b, matchingPi = null, matchingInvoice = null) 
         : (isInvoiceActive
             ? 'Invoice Pending'
             : (isAccountsActive
-                ? 'Accounts Verification Pending'
+                ? (getBomActiveStage(b).name)
                 : (isPackingActive
                     ? 'Dispatch Packing Pending'
                     : 'Sales Confirmation Pending'))));
