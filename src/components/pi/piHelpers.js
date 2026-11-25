@@ -92,8 +92,6 @@ export const EMAIL_TO_SALES_NAME = {
   'projectsales@jashsun.com': 'Pavithra',
   'velmuruganr@vrmstructures.in': 'Pavithra',
   'mms@vrmstructures.in': 'KALAISELVI T',
-  'sales@vrmstructures.in': 'KALAISELVI T',
-  'sales@vrmstrutures.in': 'KALAISELVI T',
   'kalpanaram17@vrmstructures.in': 'KalpanaRam',
   'vasanth.support@vrmstructures.in': 'Vasanth',
   'scm@vrmstructures.in': 'ARUN BOOPATHI M',
@@ -121,8 +119,6 @@ export const EMAIL_TO_SALES_CODE = {
   'projectsales@jashsun.com': 'SE-008',
   'velmuruganr@vrmstructures.in': 'SE-008',
   'mms@vrmstructures.in': 'SE-009',
-  'sales@vrmstructures.in': 'SE-009',
-  'sales@vrmstrutures.in': 'SE-009',
   'kalpanaram17@vrmstructures.in': 'TS-001',
   'vasanth.support@vrmstructures.in': 'TS-002',
   'scm@vrmstructures.in': 'PR-001',
@@ -136,11 +132,15 @@ export const EMAIL_TO_SALES_CODE = {
 export const canonicalizeSalespersonCode = (rawCode, name) => {
   const c = String(rawCode || '').trim().toUpperCase();
   if (c.startsWith('TS-')) return c;
+  // If already a valid SE code, preserve it directly
+  if (/^SE-\d{3,4}$/.test(c)) return c;
   if (c === 'SE-015' || (c === 'SE-VRM002' && String(name || '').toLowerCase().includes('mohith'))) return 'SE-004';
   if (c === 'SH-001' || c === 'SH-VRM001') return 'SE-001';
   if (c === 'SE-020') return 'SE-006';
   if (c === 'SE-010') return 'SE-008';
   if (c === 'SE-VRM090') return 'SE-009';
+  if (c === 'SE-VRM006') return 'SE-003';
+  if (c === 'SE-VRM004') return 'SE-004';
   const lowerName = String(name || '').toLowerCase().trim();
   if (EMAIL_TO_SALES_CODE[lowerName]) return EMAIL_TO_SALES_CODE[lowerName];
   if (lowerName.includes('sales.s4')) return 'SE-004';
@@ -151,8 +151,6 @@ export const canonicalizeSalespersonCode = (rawCode, name) => {
   if (lowerName.includes('sanjai') || lowerName.includes('sanjay')) return 'SE-002';
   if (lowerName.includes('manoj')) return 'SE-001';
   if (lowerName.includes('kumar') && lowerName.includes('vasanth')) return 'SE-003';
-  if (c === 'SE-003' || c === 'SE-VRM006') return 'SE-003';
-  if (c === 'SE-004' || c === 'SE-015') return 'SE-004';
   return c || '';
 };
 
@@ -170,7 +168,57 @@ export const resolvePiSalesPersonName = (pi) => {
   const assignedRaw = clean(pi?.assignedSalesperson || pi?.assignedToName);
   const creatorRaw = clean(pi?.createdBy || pi?.createdByName);
 
-  // Collect email candidates
+  const rawCode = String(
+    pi?.assignedSalespersonCode ||
+    pi?.assignedToCode ||
+    pi?.assignedToId ||
+    pi?.salesPersonCode ||
+    pi?.createdById ||
+    pi?.sales_person_code ||
+    pi?.created_by_id || ''
+  ).trim().toUpperCase();
+
+  const canonicalCode = canonicalizeSalespersonCode(rawCode, assignedRaw || primaryRaw || creatorRaw);
+
+  // 1. Dynamic lookup from localStorage employee cache (prioritizes latest edited employee profile names)
+  try {
+    const empsList = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
+    const empsStore = JSON.parse(localStorage.getItem('controlroom_employees_store') || '[]');
+    const allEmps = [...(Array.isArray(empsList) ? empsList : []), ...(Array.isArray(empsStore) ? empsStore : [])];
+
+    const targetCode = (canonicalCode || rawCode).toUpperCase().trim();
+    if (targetCode) {
+      const match = allEmps.find(e => {
+        if (!e) return false;
+        const c = String(e.employee_code || e.code || e.id || '').toUpperCase().trim();
+        const aliases = Array.isArray(e.alias_codes) ? e.alias_codes.map(a => String(a).toUpperCase().trim()) : [];
+        return c === targetCode || aliases.includes(targetCode);
+      });
+      if (match && (match.employee_name || match.name)) {
+        return clean(match.employee_name || match.name);
+      }
+    }
+  } catch (_) {}
+
+  // 2. Explicit assigned salesperson takes top priority if valid person name
+  if (assignedRaw && !assignedRaw.includes('@') && !nonSales.includes(assignedRaw.toLowerCase())) {
+    return assignedRaw;
+  }
+
+  // 3. Explicit primary salesperson name if valid person name
+  if (primaryRaw && !primaryRaw.includes('@') && !nonSales.includes(primaryRaw.toLowerCase())) {
+    return primaryRaw;
+  }
+
+  // 4. Fallback to canonical code mapping
+  if (canonicalCode && CODE_TO_SALES_NAME[canonicalCode]) {
+    return CODE_TO_SALES_NAME[canonicalCode];
+  }
+  if (rawCode && CODE_TO_SALES_NAME[rawCode]) {
+    return CODE_TO_SALES_NAME[rawCode];
+  }
+
+  // 5. Collect email candidates (strictly sales staff emails, NEVER pi.email which is customer contact!)
   const emailCandidates = [
     primaryRaw,
     assignedRaw,
@@ -178,18 +226,17 @@ export const resolvePiSalesPersonName = (pi) => {
     pi?.salesPersonEmail,
     pi?.salespersonEmail,
     pi?.createdByEmail,
-    pi?.email,
     pi?.creatorEmail
   ].map(e => String(e || '').toLowerCase().trim()).filter(e => e.includes('@'));
 
-  // 1. Direct match on known salesperson email mapping
+  // Direct match on known salesperson personal email
   for (const em of emailCandidates) {
     if (EMAIL_TO_SALES_NAME[em]) {
       return EMAIL_TO_SALES_NAME[em];
     }
   }
 
-  // 2. Prefix match for VRM sales mailbox aliases
+  // Prefix match for VRM sales mailbox aliases
   for (const em of emailCandidates) {
     if (em.includes('sales.s4')) return 'Mohith JV';
     if (em.includes('sales.s1')) return 'Manojraj Selvaraj';
@@ -200,47 +247,6 @@ export const resolvePiSalesPersonName = (pi) => {
   const raw = (!primaryRaw || primaryRaw.includes('@') || nonSales.includes(primaryRaw.toLowerCase()))
     ? (assignedRaw && !assignedRaw.includes('@') && !nonSales.includes(assignedRaw.toLowerCase()) ? assignedRaw : (primaryRaw || creatorRaw))
     : primaryRaw;
-
-  const rawCode = String(
-    pi?.assignedSalespersonCode ||
-    pi?.salesPersonCode ||
-    pi?.createdById ||
-    pi?.sales_person_code ||
-    pi?.created_by_id || ''
-  ).trim().toUpperCase();
-
-  const canonicalCode = canonicalizeSalespersonCode(rawCode, raw || primaryRaw || emailCandidates[0]);
-
-  if (canonicalCode && CODE_TO_SALES_NAME[canonicalCode]) {
-    if (!raw || raw.includes('@') || nonSales.includes(raw.toLowerCase())) {
-      return CODE_TO_SALES_NAME[canonicalCode];
-    }
-  }
-  if (rawCode && CODE_TO_SALES_NAME[rawCode]) {
-    if (!raw || raw.includes('@') || nonSales.includes(raw.toLowerCase())) {
-      return CODE_TO_SALES_NAME[rawCode];
-    }
-  }
-
-  // Check localStorage employees if present
-  try {
-    const emps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
-    for (const em of emailCandidates) {
-      const found = emps.find(e => (e.email || '').toLowerCase().trim() === em);
-      if (found && (found.employee_name || found.name)) {
-        return found.employee_name || found.name;
-      }
-    }
-    if (canonicalCode || rawCode) {
-      const found = emps.find(e => {
-        const c = String(e.employee_code || e.code || e.id || '').trim().toUpperCase();
-        return c === (canonicalCode || rawCode);
-      });
-      if (found && (found.employee_name || found.name)) {
-        return found.employee_name || found.name;
-      }
-    }
-  } catch (_) {}
 
   // If raw still includes an '@', never show raw email address to user
   if (raw && raw.includes('@')) {

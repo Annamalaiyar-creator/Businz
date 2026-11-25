@@ -693,7 +693,7 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     if (!curCode && !curName && !curEmail) return [];
 
     // Canonical Sales Team Definitions with Name matchers
-    const SALES_TEAM = [
+    const BASE_SALES_TEAM = [
       { code: 'SE-001', name: 'Manojraj Selvaraj', matchNames: ['manoj', 'manojraj', 'manoj raj'], emails: ['sales.s1@'], oldCodes: ['SH-001'] },
       { code: 'SE-002', name: 'Sanjai kumar', matchNames: ['sanjai', 'sanjay', 'sanjai kumar'], emails: ['sanjaikumar', 'sales@gmail.com'], oldCodes: [] },
       { code: 'SE-003', name: 'Vasanth Kumar S', matchNames: ['vasanth kumar s', 'vasanth kumar', 'vasanthkumar'], excludeNames: ['support', 'tech'], emails: ['vasanthkumar'], oldCodes: ['SE-VRM006'] },
@@ -704,6 +704,28 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       { code: 'SE-008', name: 'Pavithra', matchNames: ['pavithra', 'pavitra'], emails: ['projectsales'], oldCodes: ['SE-010'] },
       { code: 'SE-009', name: 'KALAISELVI T', matchNames: ['kalaiselvi', 'kalai'], emails: ['mms@'], oldCodes: ['SE-VRM090'] }
     ];
+
+    // Augment with dynamic employee names from server / localStorage so profile edits reflect immediately
+    const SALES_TEAM = BASE_SALES_TEAM.map(rep => {
+      let matchedEmp = null;
+      if (Array.isArray(salespersonsList)) {
+        matchedEmp = salespersonsList.find(s => s && (s.employee_code === rep.code || s.code === rep.code));
+      }
+      if (!matchedEmp) {
+        try {
+          const emps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
+          matchedEmp = Array.isArray(emps) ? emps.find(s => s && (s.employee_code === rep.code || s.code === rep.code)) : null;
+        } catch (_) {}
+      }
+      if (matchedEmp && (matchedEmp.employee_name || matchedEmp.name)) {
+        const empName = (matchedEmp.employee_name || matchedEmp.name).trim();
+        const lowerEmpName = empName.toLowerCase();
+        const nameParts = lowerEmpName.split(/\s+/).filter(p => p.length >= 3);
+        const matchNames = Array.from(new Set([...rep.matchNames, lowerEmpName, ...nameParts]));
+        return { ...rep, name: empName, matchNames };
+      }
+      return rep;
+    });
 
     // Detect which sales rep is currently logged in (Canonical Employee Code first, then Name, then Email)
     const activeRep = SALES_TEAM.find(rep => 
@@ -726,6 +748,14 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       const assignedCode = String(pi.assignedSalespersonCode || pi.assignedToCode || pi.assignedToId || '').toUpperCase().trim();
 
       if (activeRep) {
+        // 0. Explicit assignment or direct employee code match takes top priority
+        if (assignedCode && assignedCode === activeRep.code) {
+          return true;
+        }
+        if (piCode && (piCode === activeRep.code || (activeRep.oldCodes && activeRep.oldCodes.includes(piCode)))) {
+          return true;
+        }
+
         // 1. Primary Rule: NAME MATCHING
         // If PI contains activeRep's name keywords:
         const matchesActiveRepName = activeRep.matchNames.some(m => 
@@ -749,27 +779,12 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
           return true;
         }
 
-        // 3. Old code matching (e.g. SH-001 for Manojraj)
-        if (activeRep.oldCodes && activeRep.oldCodes.includes(piCode)) {
-          return true;
-        }
-
-        // 4. Directly assigned to activeRep
-        if (assignedCode && assignedCode === activeRep.code) {
-          return true;
-        }
-
-        // 5. Explicit new code match ONLY IF the PI has no conflicting other name
-        if (piCode === activeRep.code) {
-          return true;
-        }
-
         return false;
       }
 
       // Fallback for non-mapped sales users
-      if (curName && piNameText.includes(curName)) return true;
       if (curCode && (piCode === curCode || assignedCode === curCode)) return true;
+      if (curName && piNameText.includes(curName)) return true;
       if (curEmail && piEmail === curEmail) return true;
       return false;
     });

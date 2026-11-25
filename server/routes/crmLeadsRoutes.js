@@ -288,6 +288,16 @@ export default function createCrmLeadsRouter(dependencies) {
         return res.status(400).json({ success: false, error: 'Target assignee employee ID and Name are required.' });
       }
 
+      // Resolve assignee actual personal email if generic sales email was provided or missing
+      let finalAssignedEmail = assignedToEmail;
+      if (!finalAssignedEmail || finalAssignedEmail.toLowerCase().startsWith('sales@')) {
+        try {
+          const emps = await getDatabaseStore('employees_store');
+          const found = Array.isArray(emps) ? emps.find(e => e && (e.employee_code === assignedToId || e.code === assignedToId)) : null;
+          if (found && found.email) finalAssignedEmail = found.email;
+        } catch (_) {}
+      }
+
       const assignerUser = {
         employee_code: req.headers['x-user-emp-id'] || req.body.assignerEmpId || 'TS-001',
         employee_name: req.headers['x-user-name'] || req.body.assignerName || 'Tech Support',
@@ -304,7 +314,7 @@ export default function createCrmLeadsRouter(dependencies) {
           assignedToId,
           assignedToName,
           assignedToRole,
-          assignedToEmail,
+          assignedToEmail: finalAssignedEmail,
           assignedBy: assignerUser.employee_name,
           assignedByRole: assignerUser.role,
           reason
@@ -333,7 +343,7 @@ export default function createCrmLeadsRouter(dependencies) {
         salesperson: assignedToName,
         salesRep: assignedToName,
         salesPersonCode: assignedToId,
-        salesPersonEmail: assignedToEmail || (updatedPi ? updatedPi.salesPersonEmail : ''),
+        salesPersonEmail: finalAssignedEmail || (updatedPi ? updatedPi.salesPersonEmail : ''),
         assignedSalesperson: assignedToName,
         assignedSalespersonCode: assignedToId,
         assignedToCode: assignedToId,
