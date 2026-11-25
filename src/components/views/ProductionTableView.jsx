@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   Plus, Search, Calendar, RotateCcw, XCircle, Trash2, Eye,
-  CreditCard, Printer, X, Edit3, Package, FileText, FileCode, Truck, CheckCircle, Clock, RotateCw, MessageSquare
+  CreditCard, Printer, X, Edit3, Package, FileText, FileCode, Truck, CheckCircle, Clock, RotateCw, MessageSquare, BellRing
 } from 'lucide-react';
 import StatusBadge from '../StatusBadge';
 import ModernDateRangePicker from '../ModernDateRangePicker';
@@ -40,6 +40,7 @@ export default function ProductionTableView({
   onQuickPreview,
   onUploadPayment,
   onSendWhatsAppStatus,
+  onNotifySales,
   kpiFilterMeta,
   onClearKpiFilter,
   showAlert
@@ -1061,6 +1062,49 @@ export default function ProductionTableView({
                 onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
               >
                 <Eye size={14} style={{ color: '#0E7490' }} /> View Details
+              </button>
+            );
+          })()}
+
+          {/* Notify Sales / Send Alert Button for Accounts Verification */}
+          {activeTab === 'Accounts Verification' && (() => {
+            const codeVal = (selectedRows && selectedRows.length > 0) ? selectedRows[0] : null;
+            const targetRow = codeVal
+              ? ((filteredRows || []).find(r => r.code === codeVal || r.id === codeVal || r.bomCode === codeVal) || (bomStore || []).find(b => b.bomCode === codeVal || b.code === codeVal || b.id === codeVal))
+              : null;
+            if (!targetRow) return null;
+
+            return (
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (typeof onNotifySales === 'function') {
+                    onNotifySales(targetRow);
+                  }
+                }}
+                style={{
+                  backgroundColor: '#FFFBEB',
+                  border: '1.5px solid #F59E0B',
+                  color: '#92400E',
+                  borderRadius: '10px',
+                  padding: '6px 14px',
+                  fontSize: '12px',
+                  fontWeight: '800',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                  boxShadow: '0 1px 2px rgba(245,158,11,0.15)',
+                  transition: 'all 0.15s ease'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FEF3C7'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFBEB'}
+                title="Send alert to assigned Salesperson via WhatsApp & In-App Notification"
+              >
+                <BellRing size={14} color="#D97706" /> Notify Sales / Send Alert
               </button>
             );
           })()}

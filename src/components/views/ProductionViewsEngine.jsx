@@ -52,6 +52,7 @@ import {
   notifyInvoiceCompletedReadyForDispatch,
   notifyBomCancelledByDispatch
 } from '../../services/notificationService';
+import { notifySalesForMissingPaymentProof } from '../../utils/salesAlertHelper';
 
 
 export default function ProductionViewsEngine(props) {
@@ -2131,6 +2132,7 @@ export default function ProductionViewsEngine(props) {
               activeTab={activeTab}
               userRole={userRole}
               onSendWhatsAppStatus={(row) => setWhatsappStatusOrder(row)}
+              onNotifySales={(row) => notifySalesForMissingPaymentProof(row)}
               onPrintTaxInvoice={(row) => setPrintTaxInvoiceModal(row)}
               onPrintBom={(row) => setPrintBomModal(row)}
               filteredRows={filteredRows}

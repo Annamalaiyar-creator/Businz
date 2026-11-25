@@ -2,12 +2,13 @@ import React, { useState, useEffect } from "react";
 import {
   Eye, FileText, X, CheckCircle, Clock, XCircle, Calendar,
   UploadCloud, Download, Upload, Printer, Layers, Receipt, IndianRupee, Image,
-  Loader2, ExternalLink, AlertTriangle, User, Truck, Package, ShieldCheck
+  Loader2, ExternalLink, AlertTriangle, User, Truck, Package, ShieldCheck, BellRing
 } from "lucide-react";
 import { getMediaFromCache, getMediaFromCacheAsync, saveMediaToCache, formatCurrency, cleanNum, compressAndSaveFile, stripDataUrlsFromRecord } from "../../utils/otherViewsShared";
 import { resolveDocumentUrl, resolveDocumentUrlAsync } from "../../utils/documentResolver";
 import { saveCloudStore, saveCloudBomRow, saveCloudInvoiceRow } from "../../utils/supabaseDataSync";
 import { notifyAccountsVerificationCompleted } from "../../services/notificationService";
+import { notifySalesForMissingPaymentProof } from "../../utils/salesAlertHelper";
 import { supabase } from "../../supabaseClient";
 import StatusBadge from "../StatusBadge";
 import { extractGstRate } from "../../utils/gstHelper";
@@ -465,8 +466,11 @@ export default function AccountsVerificationModal({
   const requiresPaymentProofForApproval = !isCreditTerms && Boolean(
     isWhileDispatch ||
     isPartialPaidTerms ||
+    is100PaidTerms ||
     accountsVerificationModal?.awaitingSalesPaymentProof ||
-    String(accountsVerificationModal?.status || '').toLowerCase().includes('awaiting sales payment proof')
+    accountsVerificationModal?.accountsVerification?.paymentStatus === 'Awaiting Sales Payment Slip' ||
+    String(accountsVerificationModal?.status || '').toLowerCase().includes('awaiting sales payment proof') ||
+    String(accountsVerificationModal?.status || '').toLowerCase().includes('payment proof pending')
   );
 
   const rawProofForCheck = accountsVerificationModal?.paymentProofDoc ||
@@ -1861,9 +1865,37 @@ export default function AccountsVerificationModal({
                         <div style={{ fontSize: '12px', fontWeight: '700', color: '#92400E' }}>
                           ⚠️ Initial advance proof is attached above, but <strong>Remaining Balance Payment Proof</strong> is still pending from Sales.
                         </div>
-                        <span style={{ fontSize: '11px', fontWeight: '800', color: '#DC2626', backgroundColor: '#FEF2F2', border: '1px solid #FECACA', padding: '4px 10px', borderRadius: '6px' }}>
-                          Payment Proof Pending
-                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          <button
+                            type="button"
+                            onClick={() => notifySalesForMissingPaymentProof({
+                              ...accountsVerificationModal,
+                              effectiveTotalAmountNum,
+                              payType
+                            })}
+                            style={{
+                              backgroundColor: '#D97706',
+                              border: 'none',
+                              borderRadius: '6px',
+                              padding: '4px 10px',
+                              fontSize: '11px',
+                              fontWeight: '800',
+                              color: '#FFFFFF',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                              cursor: 'pointer',
+                              boxShadow: '0 2px 4px rgba(217, 119, 6, 0.3)',
+                              transition: 'all 0.15s ease'
+                            }}
+                            title="Send alert to assigned Salesperson via WhatsApp & In-App Notification"
+                          >
+                            <BellRing size={12} color="#FFFFFF" /> Notify Sales / Send Alert
+                          </button>
+                          <span style={{ fontSize: '11px', fontWeight: '800', color: '#DC2626', backgroundColor: '#FEF2F2', border: '1px solid #FECACA', padding: '4px 10px', borderRadius: '6px' }}>
+                            Payment Proof Pending
+                          </span>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -1893,19 +1925,47 @@ export default function AccountsVerificationModal({
                         </div>
                       </div>
                     </div>
-                    <div style={{
-                      backgroundColor: '#FEF2F2',
-                      border: '1px solid #FECACA',
-                      borderRadius: '8px',
-                      padding: '6px 12px',
-                      fontSize: '11px',
-                      fontWeight: '800',
-                      color: '#DC2626',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '5px'
-                    }}>
-                      <Clock size={13} color="#DC2626" /> Payment Proof Pending
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        onClick={() => notifySalesForMissingPaymentProof({
+                          ...accountsVerificationModal,
+                          effectiveTotalAmountNum,
+                          payType
+                        })}
+                        style={{
+                          backgroundColor: '#D97706',
+                          border: 'none',
+                          borderRadius: '8px',
+                          padding: '6px 14px',
+                          fontSize: '11.5px',
+                          fontWeight: '800',
+                          color: '#FFFFFF',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          cursor: 'pointer',
+                          boxShadow: '0 2px 4px rgba(217, 119, 6, 0.3)',
+                          transition: 'all 0.15s ease'
+                        }}
+                        title="Send alert to assigned Salesperson via WhatsApp & In-App Notification"
+                      >
+                        <BellRing size={13} color="#FFFFFF" /> Notify Sales / Send Alert
+                      </button>
+                      <div style={{
+                        backgroundColor: '#FEF2F2',
+                        border: '1px solid #FECACA',
+                        borderRadius: '8px',
+                        padding: '6px 12px',
+                        fontSize: '11px',
+                        fontWeight: '800',
+                        color: '#DC2626',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '5px'
+                      }}>
+                        <Clock size={13} color="#DC2626" /> Payment Proof Pending
+                      </div>
                     </div>
                   </div>
                 ) : (
@@ -2744,6 +2804,38 @@ export default function AccountsVerificationModal({
             Confirm verified payment date and total amount to complete accounts clearance.
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            {isMissingRequiredPaymentProof && (
+              <button
+                type="button"
+                onClick={() => notifySalesForMissingPaymentProof({
+                  ...accountsVerificationModal,
+                  effectiveTotalAmountNum,
+                  payType
+                })}
+                style={{
+                  height: '42px',
+                  padding: '0 20px',
+                  borderRadius: '10px',
+                  backgroundColor: '#FEF3C7',
+                  border: '1.5px solid #F59E0B',
+                  color: '#92400E',
+                  fontSize: '13px',
+                  fontWeight: '800',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  boxShadow: '0 2px 8px rgba(245, 158, 11, 0.2)',
+                  transition: 'all 0.15s ease'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FDE68A'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FEF3C7'}
+                title="Send alert to assigned Salesperson via WhatsApp & In-App Notification"
+              >
+                <BellRing style={{ width: '16px', height: '16px', color: '#D97706' }} />
+                Notify Sales / Send Alert
+              </button>
+            )}
             <button
               onClick={completeVerification}
               style={{
