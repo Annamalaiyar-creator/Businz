@@ -1217,10 +1217,11 @@ function App() {
     };
   }, []);
 
-  // BUSINZ Track: Standalone Public Customer Order Tracking Portal (/order/:token or /track/:token or ?track_token=)
+  // BUSINZ Track: Standalone Public Customer Order Tracking Portal (/order/:token or /track/:token or ?token=)
   const isCustomerTrackingRoute = typeof window !== 'undefined' && (
-    window.location.pathname.startsWith('/order/') ||
-    window.location.pathname.startsWith('/track/') ||
+    window.location.pathname.startsWith('/order') ||
+    window.location.pathname.startsWith('/track') ||
+    new URLSearchParams(window.location.search).has('token') ||
     new URLSearchParams(window.location.search).has('track_token')
   );
 

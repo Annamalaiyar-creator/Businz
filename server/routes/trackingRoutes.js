@@ -18,12 +18,26 @@ import {
 
 const router = express.Router();
 
+// Helper to extract raw token from query or URL
+function extractTokenFromReq(req) {
+  if (req.query.token) return decodeURIComponent(req.query.token).trim();
+  if (req.query.track_token) return decodeURIComponent(req.query.track_token).trim();
+  if (req.params.token) return decodeURIComponent(req.params.token).trim();
+  if (req.params[0]) return decodeURIComponent(req.params[0]).trim();
+  const urlPath = req.url.split('?')[0] || '';
+  const match = urlPath.match(/^\/api\/track\/(.+)$/);
+  if (match && match[1]) {
+    return decodeURIComponent(match[1].replace(/\/events\/?$/, '').replace(/\/issues\/?$/, '').replace(/\/confirm-delivery\/?$/, '')).trim();
+  }
+  return '';
+}
+
 // 1. Public Customer Tracking Endpoint (Token-based, No Auth Required)
-router.get('/api/track/:token', async (req, res) => {
+router.get(['/api/track', '/api/track/*', '/api/track/:token'], async (req, res) => {
   try {
-    const { token } = req.params;
-    if (!token || typeof token !== 'string') {
-      return res.status(400).json({ success: false, error: 'Tracking token is required' });
+    const token = extractTokenFromReq(req);
+    if (!token) {
+      return res.status(400).json({ success: false, error: 'Tracking token or BOM reference is required' });
     }
 
     const trackingData = await getTrackingByToken(token, {
@@ -102,8 +116,8 @@ router.get('/api/track/ensure/:bomCode', async (req, res) => {
 });
 
 // 2. Real-Time Tracking Server-Sent Events (SSE) Stream
-router.get('/api/track/:token/events', async (req, res) => {
-  const { token } = req.params;
+router.get(['/api/track/events', '/api/track/:token/events', '/api/track/*/events'], async (req, res) => {
+  const token = extractTokenFromReq(req);
   if (!token) return res.status(400).end();
 
   res.setHeader('Content-Type', 'text/event-stream');
@@ -135,9 +149,9 @@ router.get('/api/track/:token/events', async (req, res) => {
 });
 
 // 3. Customer Issue Reporting
-router.post('/api/track/:token/issues', async (req, res) => {
+router.post(['/api/track/issues', '/api/track/:token/issues', '/api/track/*/issues'], async (req, res) => {
   try {
-    const { token } = req.params;
+    const token = extractTokenFromReq(req);
     const { issueCategory, issueDescription, contactNumber } = req.body;
 
     if (!issueDescription || typeof issueDescription !== 'string') {
@@ -165,9 +179,9 @@ router.post('/api/track/:token/issues', async (req, res) => {
 });
 
 // 4. Customer Delivery Confirmation
-router.post('/api/track/:token/confirm-delivery', async (req, res) => {
+router.post(['/api/track/confirm-delivery', '/api/track/:token/confirm-delivery', '/api/track/*/confirm-delivery'], async (req, res) => {
   try {
-    const { token } = req.params;
+    const token = extractTokenFromReq(req);
     const { receivedBy, feedbackRating, feedbackNotes } = req.body;
 
     const tracking = await getTrackingByToken(token);

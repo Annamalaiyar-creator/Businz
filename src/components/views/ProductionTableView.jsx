@@ -1114,7 +1114,7 @@ export default function ProductionTableView({
                   : null;
                 if (targetRow) {
                   const tokenRef = targetRow.trackingToken || targetRow.tracking_token || targetRow.bomCode || targetRow.code || targetRow.id;
-                  window.open(`/order/${encodeURIComponent(tokenRef)}`, '_blank');
+                  window.open(`/order/?token=${encodeURIComponent(tokenRef)}`, '_blank');
                 } else if (showAlert) {
                   showAlert('Please select an order to open live real-time tracking.');
                 }

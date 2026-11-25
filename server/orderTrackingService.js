@@ -577,14 +577,20 @@ export async function getTrackingByToken(rawToken, { clientIp = '', userAgent = 
     throw new Error('Valid tracking token is required.');
   }
 
-  const token = rawToken.trim();
-  const tokenHash = hashTrackingToken(token);
+  const cleanRaw = String(rawToken || '').trim();
+  let decodedToken = cleanRaw;
+  try {
+    decodedToken = decodeURIComponent(cleanRaw).trim();
+  } catch (_) {}
+  const tokenHash = hashTrackingToken(decodedToken);
+  const rawHash = hashTrackingToken(cleanRaw);
 
   // 1. Query tracking record by hash, token, or bom_code
   let trackRes = await query(
     `SELECT * FROM public.order_tracking 
-     WHERE (token_hash = $1 OR tracking_token = $2 OR bom_code = $2) LIMIT 1`,
-    [tokenHash, token]
+     WHERE (token_hash = $1 OR token_hash = $2 OR tracking_token = $3 OR tracking_token = $4 
+            OR bom_code = $3 OR bom_code = $4 OR LOWER(bom_code) = LOWER($3) OR LOWER(bom_code) = LOWER($4)) LIMIT 1`,
+    [tokenHash, rawHash, cleanRaw, decodedToken]
   );
 
   // 1b. If not found in order_tracking, auto-initialize from bom_orders if token matches BOM Code/ID
@@ -592,8 +598,10 @@ export async function getTrackingByToken(rawToken, { clientIp = '', userAgent = 
     try {
       const bomCheckRes = await query(
         `SELECT * FROM public.bom_orders 
-         WHERE code = $1 OR bom_code = $1 OR id = $1 LIMIT 1`,
-        [token]
+         WHERE bom_code = $1 OR bom_code = $2 OR id = $1 OR id = $2 
+            OR LOWER(bom_code) = LOWER($1) OR LOWER(bom_code) = LOWER($2) 
+            OR LOWER(id) = LOWER($1) OR LOWER(id) = LOWER($2) LIMIT 1`,
+        [cleanRaw, decodedToken]
       );
       if (bomCheckRes.rows.length > 0) {
         const rawBom = bomCheckRes.rows[0];
@@ -608,6 +616,34 @@ export async function getTrackingByToken(rawToken, { clientIp = '', userAgent = 
       }
     } catch (e) {
       console.warn('[Auto-Track On Demand Notice]:', e.message);
+    }
+  }
+
+  // 1c. If still not in DB, check JSON disk store / memory fallback
+  if (trackRes.rows.length === 0) {
+    try {
+      const fs = await import('fs');
+      const path = await import('path');
+      const storeFile = path.resolve(process.cwd(), 'server', 'bom_store.json');
+      if (fs.existsSync(storeFile)) {
+        const fileContent = fs.readFileSync(storeFile, 'utf8');
+        const boms = JSON.parse(fileContent);
+        if (Array.isArray(boms)) {
+          const matched = boms.find(b => {
+            if (!b) return false;
+            const bId = String(b.bomCode || b.code || b.id || '').toUpperCase();
+            return bId === cleanRaw.toUpperCase() || bId === decodedToken.toUpperCase();
+          });
+          if (matched) {
+            const autoTrack = await getOrCreateOrderTracking(matched);
+            if (autoTrack && autoTrack.id) {
+              trackRes = { rows: [autoTrack] };
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[Fallback JSON BOM Search Notice]:', e.message);
     }
   }
 

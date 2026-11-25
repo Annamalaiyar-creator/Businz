@@ -28,15 +28,19 @@ import {
 } from 'lucide-react';
 
 export default function CustomerOrderTrackingPortal({ token: propToken }) {
-  // Extract token from prop, window.location.pathname (/order/:token or /track/:token), or URL query (?token=)
+  // Extract token from prop, URL query (?token= or ?track_token=), or full path after /order/ or /track/
   const token = propToken || (() => {
-    const pathParts = window.location.pathname.split('/').filter(Boolean);
-    const orderIdx = pathParts.findIndex(p => p === 'order' || p === 'track');
-    if (orderIdx !== -1 && pathParts[orderIdx + 1]) {
-      return pathParts[orderIdx + 1];
-    }
+    if (typeof window === 'undefined') return '';
     const params = new URLSearchParams(window.location.search);
-    return params.get('token') || params.get('track_token') || '';
+    const qToken = params.get('token') || params.get('track_token');
+    if (qToken) return decodeURIComponent(qToken).trim();
+
+    const pathname = window.location.pathname || '';
+    const match = pathname.match(/^\/(?:order|track)\/(.+)$/);
+    if (match && match[1]) {
+      return decodeURIComponent(match[1]).trim();
+    }
+    return '';
   })();
 
   const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'products' | 'documents'
@@ -69,7 +73,7 @@ export default function CustomerOrderTrackingPortal({ token: propToken }) {
       return;
     }
     try {
-      const res = await fetch(`/api/track/${token}`);
+      const res = await fetch(`/api/track?token=${encodeURIComponent(token)}`);
       const data = await res.json();
       if (!res.ok) {
         if (res.status === 404) {
@@ -82,7 +86,7 @@ export default function CustomerOrderTrackingPortal({ token: propToken }) {
         setLoading(false);
         return;
       }
-      setOrderData(data.order);
+      setOrderData(data.order || data.tracking);
       setError(null);
       setLoading(false);
     } catch (err) {
@@ -102,7 +106,7 @@ export default function CustomerOrderTrackingPortal({ token: propToken }) {
     let reconnectTimer = null;
     const connectSSE = () => {
       try {
-        const sse = new EventSource(`/api/track/${token}/events`);
+        const sse = new EventSource(`/api/track/events?token=${encodeURIComponent(token)}`);
         sseRef.current = sse;
 
         sse.onopen = () => {

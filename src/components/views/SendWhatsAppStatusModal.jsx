@@ -39,7 +39,7 @@ export default function SendWhatsAppStatusModal({ order, onClose }) {
   const [trackingUrl, setTrackingUrl] = useState(() => {
     const bCode = order.bomCode || order.code || order.id || 'ORDER-2026';
     const origin = typeof window !== 'undefined' ? window.location.origin : 'https://dev.businz.com';
-    return `${origin}/order/${encodeURIComponent(order.trackingToken || bCode)}`;
+    return `${origin}/order/?token=${encodeURIComponent(order.trackingToken || bCode)}`;
   });
 
   // Ensure tracking token is active and sync into live message text

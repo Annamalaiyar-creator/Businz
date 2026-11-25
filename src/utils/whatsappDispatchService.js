@@ -314,7 +314,7 @@ export function formatCustomerOrderStatusText(order, customNote = '') {
     const origin = (typeof window !== 'undefined' && window.location.origin)
       ? window.location.origin
       : 'https://dev.businz.com';
-    trackingUrl = `${origin}/order/${encodeURIComponent(tokenRef)}`;
+    trackingUrl = `${origin}/order/?token=${encodeURIComponent(tokenRef)}`;
   }
 
   let msg = `*${stageEmoji} ORDER STATUS UPDATE - BUSINZ*\n`;
