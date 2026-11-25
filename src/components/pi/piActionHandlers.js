@@ -1139,10 +1139,13 @@ export function createPiActionHandlers(ctx) {
         for (let attempt = 0; attempt < 3; attempt++) {
           try {
             const ctrl = new AbortController();
-            const tId = setTimeout(() => ctrl.abort(), 25000);
+            const tId = setTimeout(() => ctrl.abort(new Error('Request timed out while connecting to database.')), 45000);
             response = await fetch('/api/estimates', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 
+                'Content-Type': 'application/json',
+                'x-session-id': localStorage.getItem('businz_session_id') || ''
+              },
               body: postEstimatePayload,
               signal: ctrl.signal
             });
@@ -1158,7 +1161,11 @@ export function createPiActionHandlers(ctx) {
           }
         }
         if (!response) {
-          throw lastFetchErr || new Error('Network connection interrupted while saving Proforma Invoice.');
+          const isAbort = lastFetchErr?.name === 'AbortError' || String(lastFetchErr?.message || '').toLowerCase().includes('aborted');
+          const errMsg = isAbort
+            ? 'Connection timed out while saving to database (server was restarting or busy). Please click Save again.'
+            : (lastFetchErr?.message || 'Network connection interrupted while saving Proforma Invoice.');
+          throw new Error(errMsg);
         }
 
         const respText = await response.text();
