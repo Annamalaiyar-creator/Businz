@@ -2779,6 +2779,8 @@ export default function CreateBomFormPage(props) {
                       createdAt: new Date().toISOString(),
                       customerName: selCust?.c2 || selCust?.companyName || selCust?.customerName || selCust?.code || newBomProductName || 'Customer Order',
                       companyName: selCust?.c2 || selCust?.companyName || selCust?.customerName || selCust?.code || newBomProductName || '-',
+                      gstNo: selCust?.gst || selCust?.gstNumber || selCust?.gstNo || selCust?.gstin || selCust?.c3 || pendingPiFromStorage?.gstNo || pendingPiFromStorage?.customerGst || '',
+                      customerGst: selCust?.gst || selCust?.gstNumber || selCust?.gstNo || selCust?.gstin || selCust?.c3 || pendingPiFromStorage?.gstNo || pendingPiFromStorage?.customerGst || '',
                       mobile: selCust?.c4 || selCust?.primaryContact?.phone || selCust?.phone || selCust?.primaryContact?.whatsapp || '-',
                       email: selCust?.c5 || selCust?.primaryContact?.email || selCust?.email || '-',
                       billingAddress: billingFull,

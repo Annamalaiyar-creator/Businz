@@ -94,7 +94,7 @@ export const getBomActiveStage = (row) => {
     return { name: 'Vehicle Loading Pending', bg: '#ECFEFF', color: '#0E7490', border: '#A5F3FC', dot: '#0891B2' };
   }
 
-  const isAccountsVerified = Boolean(row.accountsVerified || row.isAccountsDone || row.accountsVerification?.verified) ||
+  const isAccountsVerified = Boolean(row.accountsVerified || (row.isAccountsDone && (row.accountsVerification?.verified || statusStr.includes('accounts verified') || statusStr.includes('passed to invoice'))) || row.accountsVerification?.verified) ||
     ['Accounts Verified - Proceed Billing', 'Accounts Verified & Passed to Invoice'].includes(row.status) ||
     (statusStr.includes('accounts verified') && !statusStr.includes('sent to accounts')) ||
     statusStr.includes('passed to invoice') ||
@@ -317,10 +317,10 @@ export const getBomStageTiming = (b, matchingPi = null, matchingInvoice = null) 
   const invoiceCompletedTime = formatTimeStr(pInvoice) || b.invoiceTime || null;
 
   // 4. Stage 4: Accounts Verification
-  const accDateFallback = (b.accountsVerified || b.isAccountsDone || b.accountsVerification?.verified || hasInvoice) ? (b.date || b.createdAt || null) : null;
+  const accDateFallback = (b.accountsVerified || (b.isAccountsDone && (b.accountsVerification?.verified || statusLower.includes('accounts verified') || statusLower.includes('passed to invoice'))) || b.accountsVerification?.verified || hasInvoice) ? (b.date || b.createdAt || null) : null;
   const pAccounts = firstValidDate(b.accountsVerifiedAt, b.accounts_verified_at, b.accountsVerification?.verifiedAt, accDateFallback);
   const dAccounts = pAccounts.date;
-  const hasAccounts = Boolean(dAccounts || b.accountsVerified || b.isAccountsDone || b.accountsVerification?.verified || hasInvoice || (statusLower.includes('accounts verified') && !statusLower.includes('sent to accounts')) || statusLower.includes('passed to invoice'));
+  const hasAccounts = Boolean(dAccounts || b.accountsVerified || (b.isAccountsDone && (b.accountsVerification?.verified || statusLower.includes('accounts verified') || statusLower.includes('passed to invoice'))) || b.accountsVerification?.verified || hasInvoice || (statusLower.includes('accounts verified') && !statusLower.includes('sent to accounts')) || statusLower.includes('passed to invoice'));
   const accountsCompletedTime = formatTimeStr(pAccounts) || b.accountsVerifiedTime || null;
 
   // 3. Stage 3: Dispatch Packing
@@ -429,15 +429,16 @@ export const getOrderLifecycle = (row) => {
   const isPendingInvLifecycle = statusStr.includes('passed to invoice') || statusStr.includes('awaiting invoice') || statusStr.includes('ready for invoice') || statusStr.includes('proceed billing');
   const isInvoiceGenerated = isDispatched || Boolean(row.invoiceConfirmed || row.invoiceConfirmedAt || row.stockDeductionDate) || (!isPendingInvLifecycle && (Boolean(row.invoiceGenerated || (row.invoiceNo && row.invoiceNo !== 'Pending Confirmation') || row.taxInvoiceNo) || ['Invoice Generated', 'Awaiting Vehicle Loading & Dispatch', 'Invoice Confirmed'].includes(row.status) || statusStr.includes('invoice')));
   const isAccountsVerified = isInvoiceGenerated ||
-    Boolean(row.accountsVerified || row.isAccountsDone || row.accountsVerification?.verified) ||
-    ['Dispatch Packing Verified - Sent to Accounts', 'Accounts Verified - Proceed Billing', 'Accounts Verified & Passed to Invoice'].includes(row.status) ||
-    statusStr.includes('accounts verified') ||
+    Boolean(row.accountsVerified || (row.isAccountsDone && (row.accountsVerification?.verified || statusStr.includes('accounts verified') || statusStr.includes('passed to invoice'))) || row.accountsVerification?.verified) ||
+    ['Accounts Verified - Proceed Billing', 'Accounts Verified & Passed to Invoice'].includes(row.status) ||
+    (statusStr.includes('accounts verified') && !statusStr.includes('sent to accounts')) ||
     statusStr.includes('passed to invoice');
   const isPackingVerified = isAccountsVerified ||
     Boolean(row.dispatchPackingVerified || row.packingVerified || row.dispatchPackingDone) ||
     (Array.isArray(row.dispatchPacking) && row.dispatchPacking.length > 0 && row.dispatchPacking.some(p => p.packed)) ||
-    ['Packed & Ready for Dispatch', 'Partially Packed', 'Packed — Awaiting Sales Payment Proof', 'Packed - Awaiting Sales Payment Proof'].includes(row.status) ||
+    ['Dispatch Packing Verified - Sent to Accounts', 'Packed & Ready for Dispatch', 'Partially Packed', 'Packed — Awaiting Sales Payment Proof', 'Packed - Awaiting Sales Payment Proof'].includes(row.status) ||
     statusStr.includes('packed') ||
+    statusStr.includes('sent to accounts') ||
     Boolean(row.awaitingSalesPaymentProof);
   const isSalesConfirmed = isPackingVerified ||
     Boolean(row.salesConfirmed || row.salesReconfirmed || row.creditSettled || row.paymentSettled) ||

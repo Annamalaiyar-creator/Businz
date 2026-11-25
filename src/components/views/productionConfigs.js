@@ -89,12 +89,13 @@ export function buildCanonicalInvoices({ bomStore: rawBomStore = [], invoiceList
     const acc = b.accountsVerification || {};
     const isAccVerified = Boolean(
       acc.verified === true ||
-      b.isAccountsDone === true ||
+      b.accountsVerified === true ||
       s.includes('accounts verified') ||
       s.includes('passed to invoice') ||
+      s.includes('proceed billing') ||
       b.invoiceConfirmed === true ||
       s.includes('invoice confirmed') ||
-      (Boolean(b.invoiceNo) && b.invoiceNo !== 'Pending Confirmation') ||
+      (Boolean(b.invoiceNo) && b.invoiceNo !== 'Pending Confirmation' && (acc.verified || s.includes('invoice') || s.includes('accounts verified') || s.includes('passed to invoice'))) ||
       s.includes('awaiting vehicle load') ||
       s.includes('dispatched') ||
       s.includes('delivered') ||
@@ -114,7 +115,7 @@ export function buildCanonicalInvoices({ bomStore: rawBomStore = [], invoiceList
       const invNo = hasExplicitInv ? b.invoiceNo : derivedInvNo;
       const isConf = Boolean(b.status === 'Invoice Confirmed' || b.status === 'Completed' || b.invoiceConfirmed === true);
       const s = String(b.status || '').toLowerCase();
-      const isAccDone = Boolean(b.accountsVerification?.verified || s.includes('accounts verified') || b.isAccountsDone);
+      const isAccDone = Boolean(b.accountsVerification?.verified || s.includes('accounts verified') || b.accountsVerified || s.includes('passed to invoice'));
 
       let statusVal = 'Ready for Invoicing';
       let payVal = 'Ready for Payment';
@@ -154,6 +155,7 @@ export function buildCanonicalInvoices({ bomStore: rawBomStore = [], invoiceList
         }));
 
       const oVal = Number(b.grandTotal || b.subTotal || b.totalAmount || b.accountsVerification?.totalAmount || 0);
+      const rawGst = b.gstNo || b.customerGst || b.clientGst || b.gstin || b.gst || (b.customer && b.customer.gstNo) || b.billingAddressObj?.gst || '';
 
       return {
         invNo: invNo,
@@ -161,6 +163,8 @@ export function buildCanonicalInvoices({ bomStore: rawBomStore = [], invoiceList
         date: b.date || new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
         vendor: b.customerName || b.companyName || b.customer || 'Customer',
         customerName: b.customerName || b.companyName || b.customer || 'Customer',
+        gstNo: rawGst,
+        customerGst: rawGst,
         poNo: bCode,
         bomCode: bCode,
         grnNo: 'GRN-VERIFIED',
@@ -455,6 +459,10 @@ export function buildCanonicalInvoices({ bomStore: rawBomStore = [], invoiceList
     const finalCode = (rawInvNo && rawInvNo !== 'Pending Confirmation' && !rawInvNo.toLowerCase().includes('pending')) ? rawInvNo : safeStringVal(matchingBom?.invoiceNo, fallbackInvNo);
 
     const vendorName = safeStringVal(i.vendor || i.customerName || matchingBom?.customerName, 'Customer');
+    const resolvedGst = safeStringVal(
+      i.gstNo || i.customerGst || matchingBom?.gstNo || matchingBom?.customerGst || matchingBom?.clientGst || matchingBom?.gstin || matchingBom?.gst || (matchingBom?.customer && matchingBom?.customer?.gstNo) || matchingBom?.billingAddressObj?.gst || '',
+      ''
+    );
     const paymentStatus = isConfirmed ? 'Completed & Locked' : (payStr || 'Ready for Payment');
     const finalStatus = isConfirmed ? 'Invoice Confirmed' : (statusStr || 'Ready for Payment');
     const formattedAmt = resolvedAmt > 0 ? formatCurrency(resolvedAmt) : (typeof i.invAmt === 'number' ? `₹ ${i.invAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : (typeof i.invAmt === 'string' ? i.invAmt : '₹ 0.00'));
@@ -464,7 +472,10 @@ export function buildCanonicalInvoices({ bomStore: rawBomStore = [], invoiceList
       code: finalCode,
       invNo: finalCode,
       invoiceNo: finalCode,
+      gstNo: resolvedGst,
+      customerGst: resolvedGst,
       c2: vendorName,
+      c2Sub: resolvedGst,
       c3: resolvedBomCode,
       c4: cleanDateStr(i.date),
       c5: formattedAmt,
@@ -609,16 +620,20 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
               };
 
               const isAccVerifiedOrder = (b) => {
+                if (!b) return false;
                 if (isPaymentProofPendingOrder(b)) {
                   return false;
                 }
                 const acc = b?.accountsVerification || {};
                 const s = String(b?.status || '').toLowerCase();
                 return Boolean(
-                  acc.verified ||
+                  acc.verified === true ||
+                  b?.accountsVerified === true ||
                   s.includes('accounts verified') ||
-                  b?.isAccountsDone ||
-                  (acc.paymentDate && acc.totalAmount && (acc.paymentStatus || b?.paymentType === 'Net 30 Days' || b?.paymentType === 'Credit Payment'))
+                  s.includes('passed to invoice') ||
+                  s.includes('proceed billing') ||
+                  s.includes('invoice confirmed') ||
+                  Boolean(acc.verifiedAt || b?.accountsVerifiedAt)
                 );
               };
 

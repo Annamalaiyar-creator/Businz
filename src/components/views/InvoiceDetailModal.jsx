@@ -1306,6 +1306,11 @@ export default function InvoiceDetailModal({
             <div>
               <div style={{ color: '#64748B', fontSize: '11px', fontWeight: '600' }}>Customer</div>
               <strong style={{ color: '#2563EB' }}>{customerText}</strong>
+              {(invGst || matchingBom?.gstNo || matchingBom?.customerGst) && (
+                <div style={{ marginTop: '2px', fontSize: '11px', fontWeight: '700', color: '#0E7490' }}>
+                  GSTIN: {invGst || matchingBom?.gstNo || matchingBom?.customerGst}
+                </div>
+              )}
             </div>
             <div>
               <div style={{ color: '#64748B', fontSize: '11px', fontWeight: '600' }}>Sales Person</div>

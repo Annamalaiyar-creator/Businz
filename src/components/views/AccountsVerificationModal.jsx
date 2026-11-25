@@ -2804,6 +2804,37 @@ export default function AccountsVerificationModal({
             Confirm verified payment date and total amount to complete accounts clearance.
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            {canCancelBom && (
+              <button
+                type="button"
+                onClick={() => {
+                  setAccountsVerificationModal(null);
+                  handleCancelBomOrder(accountsVerificationModal);
+                }}
+                style={{
+                  height: '42px',
+                  padding: '0 18px',
+                  borderRadius: '10px',
+                  backgroundColor: '#FEF2F2',
+                  border: '1.5px solid #FECACA',
+                  color: '#DC2626',
+                  fontSize: '13px',
+                  fontWeight: '800',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  boxShadow: '0 1px 3px rgba(220, 38, 38, 0.1)',
+                  transition: 'all 0.15s ease'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FEE2E2'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FEF2F2'}
+                title="Cancel this BOM and restore reserved stock"
+              >
+                <XCircle style={{ width: '16px', height: '16px', color: '#DC2626' }} />
+                Cancel BOM
+              </button>
+            )}
             {isMissingRequiredPaymentProof && (
               <button
                 type="button"

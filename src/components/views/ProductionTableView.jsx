@@ -445,7 +445,28 @@ export default function ProductionTableView({
                         onClick={() => onRowClick(row)}
                         style={{ padding: '14px 16px', fontWeight: '600', color: '#1E293B', cursor: 'pointer' }}
                       >
-                        {safeText(row.c2 || row.name, '—')}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                          <span>{safeText(row.c2 || row.name, '—')}</span>
+                          {(row.gstNo || row.customerGst || row.c2Sub) && (
+                            <span style={{
+                              fontSize: '11px',
+                              fontWeight: '700',
+                              color: '#0E7490',
+                              backgroundColor: '#ECFEFF',
+                              border: '1px solid #CFFAFE',
+                              borderRadius: '4px',
+                              padding: '1px 6px',
+                              width: 'fit-content',
+                              letterSpacing: '0.4px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}>
+                              <span>GST:</span>
+                              <span>{row.gstNo || row.customerGst || row.c2Sub}</span>
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td style={{
                         padding: '14px 16px',
@@ -1066,13 +1087,45 @@ export default function ProductionTableView({
             );
           })()}
 
-          {/* Notify Sales / Send Alert Button for Accounts Verification */}
+          {/* Notify Sales / Send Alert Button for Accounts Verification - Only when payment proof is pending */}
           {activeTab === 'Accounts Verification' && (() => {
             const codeVal = (selectedRows && selectedRows.length > 0) ? selectedRows[0] : null;
             const targetRow = codeVal
               ? ((filteredRows || []).find(r => r.code === codeVal || r.id === codeVal || r.bomCode === codeVal) || (bomStore || []).find(b => b.bomCode === codeVal || b.code === codeVal || b.id === codeVal))
               : null;
             if (!targetRow) return null;
+
+            // Only show if payment proof is genuinely MISSING
+            const pType = String(targetRow.paymentType || targetRow.paymentTerms || targetRow.c5 || '').toLowerCase();
+            const isCredit = pType.includes('credit') || pType.includes('net 30');
+            if (isCredit) return null;
+
+            const rawProof = targetRow.paymentProofDoc ||
+              targetRow.payments?.proofDocObj ||
+              targetRow.payments?.proofDoc ||
+              targetRow.proofDoc ||
+              targetRow.salesPoDetails?.proofDocObj ||
+              targetRow.balancePaymentProofDoc ||
+              targetRow.payments?.balanceProofDocObj ||
+              targetRow.payments?.balanceProofDoc ||
+              targetRow.accountsVerification?.paymentProofDoc ||
+              targetRow.accountsVerification?.balancePaymentProofDoc;
+
+            const hasAttachedProof = Boolean(
+              (typeof rawProof === 'string' && rawProof.trim().length > 0) ||
+              (rawProof && typeof rawProof === 'object' && (rawProof.url || rawProof.dataUrl || rawProof.fileData || rawProof.storagePath || rawProof.name)) ||
+              targetRow.paymentProofDocName ||
+              (Array.isArray(targetRow.paymentProofDocs) && targetRow.paymentProofDocs.length > 0) ||
+              (Array.isArray(targetRow.balancePaymentProofDocs) && targetRow.balancePaymentProofDocs.length > 0) ||
+              targetRow.paymentProofAttached ||
+              targetRow.accountsVerification?.paymentProofAttached ||
+              targetRow.accountsVerification?.paymentStatus === 'Payment Proof Attached' ||
+              targetRow.accountsVerification?.paymentStatus === 'Payment Proof Attached by Sales' ||
+              targetRow.paymentStatusText === '✓ Payment Proof Attached'
+            );
+
+            // If proof is already attached, hide the button
+            if (hasAttachedProof) return null;
 
             return (
               <button
@@ -1333,34 +1386,14 @@ export default function ProductionTableView({
             </button>
           )}
 
-          {/* Cancel BOM Order Button - Excluded for Delivery Challans */}
+          {/* Cancel BOM Order Button - Always available in Dispatch, Accounts, and Invoice logins */}
           {canCancelBom && activeTab !== 'Delivery Challans' && pageConfig?.title !== 'Delivery Challan Ledger (Rule 55 CGST)' && !String(pageConfig?.title || '').toLowerCase().includes('challan') && (() => {
             const hasCancellable = (selectedRows || []).some(codeVal => {
-              const r = (filteredRows || []).find(it => it.code === codeVal || it.id === codeVal || it.bomCode === codeVal) || (bomStore || []).find(b => (b.bomCode || b.code || b.id) === codeVal);
+              const r = (filteredRows || []).find(it => it.code === codeVal || it.id === codeVal || it.bomCode === codeVal || it.invNo === codeVal || it.invoiceNo === codeVal) || (bomStore || []).find(b => (b.bomCode || b.code || b.id || b.invoiceNo) === codeVal);
               if (!r || r.cancelled || r.status === 'CANCELLED' || r.status === 'Cancelled' || r.status === 'Cancelled & Stock Restored' || (typeof r.status === 'string' && r.status.toLowerCase().includes('cancel'))) {
                 return false;
               }
-              // Dispatch person cannot cancel if order is already forwarded to Accounts or beyond
-              if (activeTab === 'Dispatch Orders') {
-                const isSentToAccounts = Boolean(
-                  r.status === 'Packed & Awaiting Accounts Verification' ||
-                  r.status === 'PACKING VERIFIED - SENT TO ACCOUNTS' ||
-                  r.status === 'Packing Verified - Sent to Accounts' ||
-                  r.status === 'Accounts Verified & Passed to Invoice' ||
-                  r.status === 'ACCOUNTS VERIFIED' ||
-                  r.status === 'Invoice Confirmed' ||
-                  r.status === 'Awaiting Vehicle Loading & Dispatch' ||
-                  r.status === 'AWAITING VEHICLE LOADING' ||
-                  r.status === 'Closed' ||
-                  r.status === 'Completed' ||
-                  r.tabGroup === 'Packed' ||
-                  r.tabGroup === 'AwaitingLoading' ||
-                  r.tabGroup === 'Closed' ||
-                  r.accountsVerification?.readyForAccounts ||
-                  r.accountsVerification?.verified
-                );
-                if (isSentToAccounts) return false;
-              }
+              // Dispatch, Accounts, and Invoice can cancel BOM at all times (never hidden after moving to next stage)
               return true;
             });
             if (!hasCancellable) return null;
@@ -1369,7 +1402,13 @@ export default function ProductionTableView({
               <button
                 onClick={() => {
                   const targetCode = selectedRows[0];
-                  const targetBom = (filteredRows || []).find(r => r.code === targetCode || r.id === targetCode || r.bomCode === targetCode) || (bomStore || []).find(b => (b.bomCode || b.code || b.id) === targetCode);
+                  const r = (filteredRows || []).find(it => it.code === targetCode || it.id === targetCode || it.bomCode === targetCode || it.invNo === targetCode || it.invoiceNo === targetCode);
+                  const targetBom = (bomStore || []).find(b => 
+                    (b.bomCode && (b.bomCode === targetCode || b.bomCode === r?.bomCode || b.bomCode === r?.poNo)) ||
+                    (b.code && (b.code === targetCode || b.code === r?.poNo || b.code === r?.bomCode)) ||
+                    (b.invoiceNo && (b.invoiceNo === targetCode || b.invoiceNo === r?.invNo || b.invoiceNo === r?.invoiceNo)) ||
+                    (b.id && (b.id === targetCode || b.id === r?.id))
+                  ) || r;
                   setSelectedRows([]);
                   if (targetBom) handleCancelBomOrder(targetBom);
                 }}
@@ -1389,9 +1428,9 @@ export default function ProductionTableView({
                   flexShrink: 0,
                   boxShadow: '0 1px 2px rgba(220,38,38,0.08)'
                 }}
-                title={activeTab === 'Dispatch Orders' ? "Cancel packing verification and restore blocked stock" : "Cancel BOM and restore blocked stock back into inventory"}
+                title="Cancel BOM and restore blocked stock back into inventory"
               >
-                <XCircle size={14} style={{ color: '#DC2626' }} /> {activeTab === 'Dispatch Orders' ? 'Cancel Verification' : 'Cancel BOM'}
+                <XCircle size={14} style={{ color: '#DC2626' }} /> Cancel BOM
               </button>
             );
           })()}
