@@ -36,6 +36,27 @@ export default function SendWhatsAppStatusModal({ order, onClose }) {
   const [sendSuccess, setSendSuccess] = useState(false);
   const [copied, setCopied] = useState(false);
   const [sessionStatus, setSessionStatus] = useState({ isReady: false, status: 'CHECKING' });
+  const [trackingUrl, setTrackingUrl] = useState(() => {
+    const bCode = order.bomCode || order.code || order.id || 'ORDER-2026';
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://dev.businz.com';
+    return `${origin}/order/${encodeURIComponent(order.trackingToken || bCode)}`;
+  });
+
+  // Ensure tracking token is active and sync into live message text
+  useEffect(() => {
+    const bCode = order.bomCode || order.code || order.id;
+    if (!bCode) return;
+    fetch(`/api/track/ensure/${encodeURIComponent(bCode)}`)
+      .then(r => r.json())
+      .then(d => {
+        if (d && d.trackingUrl) {
+          setTrackingUrl(d.trackingUrl);
+          const updated = { ...order, trackingToken: d.trackingToken, trackingUrl: d.trackingUrl };
+          setMessageText(formatCustomerOrderStatusText(updated, customNote));
+        }
+      })
+      .catch(() => {});
+  }, [order]);
 
   // Check user's paired WhatsApp session status
   useEffect(() => {
@@ -284,6 +305,44 @@ export default function SendWhatsAppStatusModal({ order, onClose }) {
                     boxSizing: 'border-box'
                   }}
                 />
+              </div>
+
+              {/* Live Tracking Link Verification Bar */}
+              <div style={{
+                padding: '8px 12px',
+                borderRadius: '8px',
+                backgroundColor: '#ECFEFF',
+                border: '1px solid #A5F3FC',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                fontSize: '12px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Truck size={15} color="#0891B2" />
+                  <span style={{ color: '#0E7490', fontWeight: '700' }}>
+                    Live Customer Tracking Link:
+                  </span>
+                </div>
+                <a
+                  href={trackingUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    color: '#0891B2',
+                    fontWeight: '700',
+                    textDecoration: 'none',
+                    fontSize: '12px',
+                    padding: '2px 8px',
+                    backgroundColor: '#CFFAFE',
+                    borderRadius: '6px'
+                  }}
+                >
+                  Open Live Tracking Page <ExternalLink size={12} />
+                </a>
               </div>
 
               {/* Live Message Preview */}

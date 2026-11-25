@@ -308,8 +308,14 @@ export function formatCustomerOrderStatusText(order, customNote = '') {
     details.push(`*Status:* Material Staging & Factory Production Active`);
   }
 
-  const trackingToken = order.trackingToken || order.tracking_token;
-  const trackingUrl = trackingToken ? `${typeof window !== 'undefined' ? window.location.origin : ''}/order/${trackingToken}` : null;
+  const tokenRef = order.trackingToken || order.tracking_token || order.trackingId || bCode;
+  let trackingUrl = order.trackingUrl;
+  if (!trackingUrl || typeof trackingUrl !== 'string' || !trackingUrl.startsWith('http')) {
+    const origin = (typeof window !== 'undefined' && window.location.origin)
+      ? window.location.origin
+      : 'https://dev.businz.com';
+    trackingUrl = `${origin}/order/${encodeURIComponent(tokenRef)}`;
+  }
 
   let msg = `*${stageEmoji} ORDER STATUS UPDATE - BUSINZ*\n`;
   msg += `-----------------------------------------\n`;
@@ -318,10 +324,7 @@ export function formatCustomerOrderStatusText(order, customNote = '') {
   msg += `*Current Stage:* ${stageTitle}\n`;
   details.forEach(d => { msg += `${d}\n`; });
   msg += `-----------------------------------------\n`;
-
-  if (trackingUrl) {
-    msg += `🔗 *Live Order & Dispatch Tracking:*\n${trackingUrl}\n\n`;
-  }
+  msg += `🔗 *Live Order & Dispatch Tracking:*\n${trackingUrl}\n\n`;
 
   if (customNote) {
     msg += `*Note:* ${customNote}\n\n`;

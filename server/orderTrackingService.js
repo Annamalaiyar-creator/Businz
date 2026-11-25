@@ -580,12 +580,36 @@ export async function getTrackingByToken(rawToken, { clientIp = '', userAgent = 
   const token = rawToken.trim();
   const tokenHash = hashTrackingToken(token);
 
-  // 1. Query tracking record
-  const trackRes = await query(
+  // 1. Query tracking record by hash, token, or bom_code
+  let trackRes = await query(
     `SELECT * FROM public.order_tracking 
-     WHERE (token_hash = $1 OR tracking_token = $2) LIMIT 1`,
+     WHERE (token_hash = $1 OR tracking_token = $2 OR bom_code = $2) LIMIT 1`,
     [tokenHash, token]
   );
+
+  // 1b. If not found in order_tracking, auto-initialize from bom_orders if token matches BOM Code/ID
+  if (trackRes.rows.length === 0) {
+    try {
+      const bomCheckRes = await query(
+        `SELECT * FROM public.bom_orders 
+         WHERE code = $1 OR bom_code = $1 OR id = $1 LIMIT 1`,
+        [token]
+      );
+      if (bomCheckRes.rows.length > 0) {
+        const rawBom = bomCheckRes.rows[0];
+        const bomData = rawBom.bom_data ? { ...rawBom.bom_data, ...rawBom } : rawBom;
+        const autoTrack = await getOrCreateOrderTracking(bomData);
+        if (autoTrack && autoTrack.id) {
+          trackRes = await query(
+            `SELECT * FROM public.order_tracking WHERE id = $1 LIMIT 1`,
+            [autoTrack.id]
+          );
+        }
+      }
+    } catch (e) {
+      console.warn('[Auto-Track On Demand Notice]:', e.message);
+    }
+  }
 
   if (trackRes.rows.length === 0) {
     return { notFound: true, message: 'Invalid or unknown tracking link.' };

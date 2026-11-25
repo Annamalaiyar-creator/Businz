@@ -1104,6 +1104,46 @@ export default function ProductionTableView({
             </button>
           )}
 
+          {/* Real-Time Live Order Tracking Button for Staff */}
+          {(activeTab === 'BOM / Routing' || activeTab === 'BOM' || activeTab === 'BOM Orders' || activeTab === 'Dispatch Orders' || activeTab === 'Accounts Verification' || activeTab === 'Invoice Management') && (
+            <button
+              onClick={() => {
+                const codeVal = (selectedRows && selectedRows.length > 0) ? selectedRows[0] : null;
+                const targetRow = codeVal
+                  ? ((filteredRows || []).find(r => r.code === codeVal || r.id === codeVal || r.bomCode === codeVal) || (bomStore || []).find(b => b.bomCode === codeVal || b.code === codeVal || b.id === codeVal))
+                  : null;
+                if (targetRow) {
+                  const tokenRef = targetRow.trackingToken || targetRow.tracking_token || targetRow.bomCode || targetRow.code || targetRow.id;
+                  window.open(`/order/${encodeURIComponent(tokenRef)}`, '_blank');
+                } else if (showAlert) {
+                  showAlert('Please select an order to open live real-time tracking.');
+                }
+              }}
+              style={{
+                backgroundColor: '#FFFFFF',
+                border: '1px solid #BAE6FD',
+                color: '#0369A1',
+                borderRadius: '10px',
+                padding: '6px 14px',
+                fontSize: '12px',
+                fontWeight: '800',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
+                boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#F0F9FF'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FFFFFF'}
+              title="Open Real-Time Customer Tracking Portal"
+            >
+              <Truck size={14} color="#0284C7" /> Live Tracking
+            </button>
+          )}
+
           {/* View Payment Details Button - Excluded for Dispatch, Accounts, Invoice Management, and Delivery Challans */}
           {activeTab !== 'Dispatch Orders' && activeTab !== 'Accounts Verification' && activeTab !== 'Invoice Management' && activeTab !== 'Delivery Challans' && pageConfig?.title !== 'Delivery Challan Ledger (Rule 55 CGST)' && !String(pageConfig?.title || '').toLowerCase().includes('challan') && (
             <button

@@ -26,17 +26,78 @@ router.get('/api/track/:token', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Tracking token is required' });
     }
 
-    const trackingData = await getTrackingByToken(token);
-    if (!trackingData) {
-      return res.status(404).json({ success: false, error: 'Tracking link not found or expired' });
+    const trackingData = await getTrackingByToken(token, {
+      clientIp: req.ip || req.connection?.remoteAddress || '',
+      userAgent: req.get('user-agent') || ''
+    });
+    if (!trackingData || trackingData.notFound) {
+      return res.status(404).json({ success: false, error: trackingData?.message || 'Tracking link not found or expired' });
     }
+    if (trackingData.revoked) {
+      return res.status(403).json({ success: false, error: trackingData.message });
+    }
+    if (trackingData.expired) {
+      return res.status(410).json({ success: false, error: trackingData.message });
+    }
+
+    const orderObj = trackingData.order || trackingData;
 
     // Set client-side cache header to 10 seconds for high freshness
     res.setHeader('Cache-Control', 'public, max-age=10');
-    res.json({ success: true, tracking: trackingData });
+    res.json({
+      success: true,
+      order: orderObj,
+      tracking: orderObj
+    });
   } catch (err) {
     console.error('[BUSINZ Track API Error]:', err);
     res.status(500).json({ success: false, error: 'Failed to retrieve tracking information' });
+  }
+});
+
+// 1b. Ensure / Retrieve Tracking Token for BOM Code
+router.get('/api/track/ensure/:bomCode', async (req, res) => {
+  try {
+    const { bomCode } = req.params;
+    if (!bomCode) return res.status(400).json({ success: false, error: 'bomCode is required' });
+
+    let trackingToken = null;
+
+    // Check if tracking record already exists
+    const trackRes = await query(
+      `SELECT * FROM public.order_tracking WHERE bom_code = $1 LIMIT 1`,
+      [bomCode]
+    );
+
+    if (trackRes.rows.length > 0) {
+      trackingToken = trackRes.rows[0].tracking_token;
+    } else {
+      // Auto-initialize from bom_orders
+      const bomRes = await query(
+        `SELECT * FROM public.bom_orders WHERE code = $1 OR bom_code = $1 OR id = $1 LIMIT 1`,
+        [bomCode]
+      );
+      if (bomRes.rows.length > 0) {
+        const rawBom = bomRes.rows[0];
+        const bomData = rawBom.bom_data ? { ...rawBom.bom_data, ...rawBom } : rawBom;
+        const created = await getOrCreateOrderTracking(bomData);
+        if (created) trackingToken = created.tracking_token;
+      }
+    }
+
+    const host = req.get('host') || 'dev.businz.com';
+    const proto = req.protocol === 'https' || req.get('x-forwarded-proto') === 'https' ? 'https' : 'http';
+    const token = trackingToken || bomCode;
+    const trackingUrl = `${proto}://${host}/order/${encodeURIComponent(token)}`;
+
+    res.json({
+      success: true,
+      bomCode,
+      trackingToken: token,
+      trackingUrl
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
