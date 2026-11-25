@@ -46,7 +46,7 @@ export default function SendWhatsAppStatusModal({ order, onClose }) {
   useEffect(() => {
     const bCode = order.bomCode || order.code || order.id;
     if (!bCode) return;
-    fetch(`/api/track/ensure/${encodeURIComponent(bCode)}`)
+    fetch(`/api/track/ensure?bomCode=${encodeURIComponent(bCode)}`)
       .then(r => r.json())
       .then(d => {
         if (d && d.trackingUrl) {

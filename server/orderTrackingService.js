@@ -21,6 +21,191 @@ import { createBomDocumentSignedUrl } from './bomDocumentService.js';
 // Cache for active customer SSE listeners: Map<trackingToken, Set<res>>
 export const customerTrackingSseClients = new Map();
 
+let isSchemaInitialized = false;
+let schemaInitPromise = null;
+
+/**
+ * Idempotently ensures all BUSINZ Track tables, indexes, and default settings exist in PostgreSQL
+ */
+export async function ensureTrackingSchema() {
+  if (isSchemaInitialized) return true;
+  if (schemaInitPromise) return schemaInitPromise;
+
+  schemaInitPromise = (async () => {
+    try {
+      // 1. Company Tracking Settings Table
+      await query(`
+        CREATE TABLE IF NOT EXISTS public.company_tracking_settings (
+          id TEXT PRIMARY KEY,
+          company_name TEXT UNIQUE NOT NULL,
+          is_enabled BOOLEAN DEFAULT true NOT NULL,
+          logo_url TEXT,
+          brand_color TEXT DEFAULT '#0E7490' NOT NULL,
+          support_phone TEXT DEFAULT '+91 98765 43210',
+          support_email TEXT DEFAULT 'support@businz.com',
+          tracking_domain TEXT DEFAULT 'track.businz.com',
+          show_packing_photos BOOLEAN DEFAULT true NOT NULL,
+          show_loading_photos BOOLEAN DEFAULT true NOT NULL,
+          show_driver_phone BOOLEAN DEFAULT true NOT NULL,
+          show_pricing BOOLEAN DEFAULT false NOT NULL,
+          require_otp_for_documents BOOLEAN DEFAULT false NOT NULL,
+          auto_whatsapp_dispatch_received BOOLEAN DEFAULT true NOT NULL,
+          auto_whatsapp_packing_completed BOOLEAN DEFAULT true NOT NULL,
+          auto_whatsapp_dispatched BOOLEAN DEFAULT true NOT NULL,
+          auto_whatsapp_delivered BOOLEAN DEFAULT true NOT NULL,
+          token_expiry_days INTEGER DEFAULT 90 NOT NULL,
+          created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+          updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+        )
+      `).catch(err => console.warn('[BUSINZ Track Schema - Settings Table Warning]:', err.message));
+
+      await query(`
+        INSERT INTO public.company_tracking_settings (
+          id, company_name, is_enabled, brand_color, support_phone, support_email
+        ) VALUES (
+          'SETTING-DEFAULT', 'VRM Structures India Private Limited', true, '#0E7490', '+91 98765 43210', 'support@vrmstructures.com'
+        ) ON CONFLICT (company_name) DO NOTHING
+      `).catch(() => {});
+
+      // 2. Order Tracking Table
+      await query(`
+        CREATE TABLE IF NOT EXISTS public.order_tracking (
+          id TEXT PRIMARY KEY,
+          company_name TEXT DEFAULT 'VRM Structures India Private Limited' NOT NULL,
+          bom_code TEXT UNIQUE NOT NULL,
+          source_pi_no TEXT,
+          tracking_token TEXT UNIQUE NOT NULL,
+          token_hash TEXT NOT NULL,
+          customer_name TEXT NOT NULL,
+          customer_mobile TEXT NOT NULL,
+          customer_email TEXT,
+          status TEXT DEFAULT 'ACTIVE' NOT NULL,
+          current_stage TEXT DEFAULT 'RECEIVED_BY_DISPATCH' NOT NULL,
+          packing_percentage INTEGER DEFAULT 0 NOT NULL,
+          access_count INTEGER DEFAULT 0 NOT NULL,
+          last_accessed_at TIMESTAMPTZ,
+          last_ip TEXT,
+          last_user_agent TEXT,
+          expires_at TIMESTAMPTZ NOT NULL,
+          created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+          updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+        )
+      `).catch(err => console.warn('[BUSINZ Track Schema - Tracking Table Warning]:', err.message));
+
+      await query(`CREATE INDEX IF NOT EXISTS idx_order_tracking_bom_code ON public.order_tracking (bom_code)`).catch(() => {});
+      await query(`CREATE INDEX IF NOT EXISTS idx_order_tracking_token_hash ON public.order_tracking (token_hash)`).catch(() => {});
+      await query(`CREATE INDEX IF NOT EXISTS idx_order_tracking_source_pi ON public.order_tracking (source_pi_no)`).catch(() => {});
+
+      // 3. Order Tracking Events Table
+      await query(`
+        CREATE TABLE IF NOT EXISTS public.order_tracking_events (
+          id BIGSERIAL PRIMARY KEY,
+          tracking_id TEXT NOT NULL REFERENCES public.order_tracking(id) ON DELETE CASCADE,
+          bom_code TEXT NOT NULL,
+          stage TEXT NOT NULL,
+          title TEXT NOT NULL,
+          description TEXT,
+          actor_role TEXT,
+          metadata JSONB DEFAULT '{}'::jsonb NOT NULL,
+          created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+        )
+      `).catch(err => console.warn('[BUSINZ Track Schema - Events Table Warning]:', err.message));
+
+      await query(`CREATE INDEX IF NOT EXISTS idx_tracking_events_tracking_id ON public.order_tracking_events (tracking_id)`).catch(() => {});
+
+      // 4. Order Tracking Shipments Table
+      await query(`
+        CREATE TABLE IF NOT EXISTS public.order_tracking_shipments (
+          id TEXT PRIMARY KEY,
+          tracking_id TEXT NOT NULL REFERENCES public.order_tracking(id) ON DELETE CASCADE,
+          bom_code TEXT NOT NULL,
+          shipment_number INTEGER DEFAULT 1 NOT NULL,
+          shipment_reference TEXT NOT NULL,
+          transporter_name TEXT,
+          transport_mode TEXT DEFAULT 'ROAD',
+          lr_no TEXT,
+          lr_date DATE,
+          lr_copy_url TEXT,
+          vehicle_no TEXT,
+          driver_name TEXT,
+          driver_phone TEXT,
+          packages_count INTEGER,
+          bundles_count INTEGER,
+          destination TEXT,
+          status TEXT DEFAULT 'DISPATCHED' NOT NULL,
+          dispatched_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+          delivered_at TIMESTAMPTZ,
+          items JSONB DEFAULT '[]'::jsonb NOT NULL,
+          photos JSONB DEFAULT '[]'::jsonb NOT NULL,
+          created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+          updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+        )
+      `).catch(err => console.warn('[BUSINZ Track Schema - Shipments Table Warning]:', err.message));
+
+      // 5. Order Tracking Issues Table
+      await query(`
+        CREATE TABLE IF NOT EXISTS public.order_tracking_issues (
+          id TEXT PRIMARY KEY,
+          tracking_id TEXT NOT NULL REFERENCES public.order_tracking(id) ON DELETE CASCADE,
+          bom_code TEXT NOT NULL,
+          issue_type TEXT NOT NULL,
+          customer_name TEXT NOT NULL,
+          customer_phone TEXT NOT NULL,
+          affected_items JSONB DEFAULT '[]'::jsonb NOT NULL,
+          remarks TEXT,
+          photos JSONB DEFAULT '[]'::jsonb NOT NULL,
+          status TEXT DEFAULT 'OPEN' NOT NULL,
+          resolution_notes TEXT,
+          resolved_by TEXT,
+          resolved_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+          updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+        )
+      `).catch(err => console.warn('[BUSINZ Track Schema - Issues Table Warning]:', err.message));
+
+      // 6. Tracking Notification Queue Table
+      await query(`
+        CREATE TABLE IF NOT EXISTS public.tracking_notification_queue (
+          id TEXT PRIMARY KEY,
+          tracking_id TEXT REFERENCES public.order_tracking(id) ON DELETE SET NULL,
+          bom_code TEXT NOT NULL,
+          customer_phone TEXT NOT NULL,
+          customer_name TEXT NOT NULL,
+          company_name TEXT NOT NULL,
+          trigger_event TEXT NOT NULL,
+          idempotency_key TEXT UNIQUE NOT NULL,
+          channel TEXT DEFAULT 'META_CLOUD_API' NOT NULL,
+          template_name TEXT NOT NULL,
+          template_variables JSONB DEFAULT '[]'::jsonb NOT NULL,
+          tracking_url TEXT,
+          status TEXT DEFAULT 'PENDING' NOT NULL,
+          retry_count INTEGER DEFAULT 0 NOT NULL,
+          max_retries INTEGER DEFAULT 3 NOT NULL,
+          error_message TEXT,
+          meta_message_id TEXT,
+          sent_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+          updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+        )
+      `).catch(err => console.warn('[BUSINZ Track Schema - Queue Table Warning]:', err.message));
+
+      isSchemaInitialized = true;
+      console.log('✅ [BUSINZ Track] Schema verified & ready.');
+      return true;
+    } catch (err) {
+      console.warn('[BUSINZ Track Schema Init Error]:', err.message);
+      return false;
+    } finally {
+      schemaInitPromise = null;
+    }
+  })();
+
+  return schemaInitPromise;
+}
+
+// Auto-run schema initialization non-blocking on startup
+ensureTrackingSchema().catch(err => console.warn('[BUSINZ Track Boot Schema Notice]:', err.message));
+
 /**
  * Generate cryptographically secure tracking token (64 hex characters)
  */
@@ -308,11 +493,12 @@ export function calculatePackingProgress(bom) {
  * Customer Document Centre Resolver
  * Sanitizes internal commercial data (purchase cost, supplier, internal remarks)
  */
-export async function resolveCustomerDocuments(bom, tracking) {
+export async function resolveCustomerDocuments(bom, tracking = {}) {
   const documents = [];
   const bomCode = bom.bom_code || bom.bomCode || bom.code || '';
   const piNo = bom.source_pi_no || bom.sourcePiNo || '';
   const invNo = bom.invoice_no || bom.invoiceNo || '';
+  const docToken = tracking?.tracking_token || bomCode;
 
   // 1. Proforma Invoice
   const signedPi = bom.signed_pi_doc || bom.signedPiDoc;
@@ -323,7 +509,7 @@ export async function resolveCustomerDocuments(bom, tracking) {
     status: piNo ? 'AVAILABLE' : 'NOT_YET_GENERATED',
     available: Boolean(piNo),
     date: bom.date || bom.created_at,
-    url: signedPi ? `/api/track/${tracking.tracking_token}/documents/proforma-invoice` : null
+    url: signedPi ? `/api/track/${encodeURIComponent(docToken)}/documents/proforma-invoice` : null
   });
 
   // 2. Customer-Facing Bill of Materials (BOM)
@@ -334,7 +520,7 @@ export async function resolveCustomerDocuments(bom, tracking) {
     status: 'AVAILABLE',
     available: true,
     date: bom.date || bom.created_at,
-    url: `/api/track/${tracking.tracking_token}/documents/bom`
+    url: `/api/track/${encodeURIComponent(docToken)}/documents/bom`
   });
 
   // 3. Packing List
@@ -351,7 +537,7 @@ export async function resolveCustomerDocuments(bom, tracking) {
     status: isPackingReady ? 'AVAILABLE' : 'AWAITING_UPLOAD',
     available: isPackingReady,
     date: bom.accounts_verification?._extra_data?.packingCompletedAt || null,
-    url: isPackingReady ? `/api/track/${tracking.tracking_token}/documents/packing-list` : null
+    url: isPackingReady ? `/api/track/${encodeURIComponent(docToken)}/documents/packing-list` : null
   });
 
   // 4. Tax Invoice
@@ -363,7 +549,7 @@ export async function resolveCustomerDocuments(bom, tracking) {
     status: isInvoiceReady ? 'AVAILABLE' : 'NOT_YET_GENERATED',
     available: isInvoiceReady,
     date: bom.accounts_verification?._extra_data?.invoiceConfirmedAt || null,
-    url: isInvoiceReady ? `/api/track/${tracking.tracking_token}/documents/tax-invoice` : null
+    url: isInvoiceReady ? `/api/track/${encodeURIComponent(docToken)}/documents/tax-invoice` : null
   });
 
   // 5. Lorry Receipt (LR Copy) / Transporter Consignment Note
@@ -377,7 +563,7 @@ export async function resolveCustomerDocuments(bom, tracking) {
     status: isLrAvailable ? 'AVAILABLE' : 'AWAITING_UPLOAD',
     available: isLrAvailable,
     date: bom.dispatchedAt || null,
-    url: lrDoc ? `/api/track/${tracking.tracking_token}/documents/lr-copy` : null
+    url: lrDoc ? `/api/track/${encodeURIComponent(docToken)}/documents/lr-copy` : null
   });
 
   // 6. Delivery Challan (if applicable)
@@ -389,7 +575,7 @@ export async function resolveCustomerDocuments(bom, tracking) {
     status: dcNo ? 'AVAILABLE' : 'NOT_APPLICABLE',
     available: Boolean(dcNo),
     date: bom.dispatchedAt || null,
-    url: dcNo ? `/api/track/${tracking.tracking_token}/documents/delivery-challan` : null
+    url: dcNo ? `/api/track/${encodeURIComponent(docToken)}/documents/delivery-challan` : null
   });
 
   return documents;
@@ -453,6 +639,8 @@ export async function getOrCreateOrderTracking(bom, options = {}) {
   const bomCode = String(bom.bom_code || bom.bomCode || bom.code || bom.id || '').trim();
   if (!bomCode) throw new Error('Valid BOM Code is required for order tracking');
 
+  await ensureTrackingSchema().catch(() => {});
+
   const sourcePiNo = String(bom.source_pi_no || bom.sourcePiNo || '').trim() || null;
   const customerName = String(bom.customer_name || bom.customerName || bom.company_name || bom.companyName || 'Valued Customer').trim();
   const customerMobile = String(bom.mobile || bom.phone || '').replace(/[^0-9]/g, '');
@@ -460,41 +648,50 @@ export async function getOrCreateOrderTracking(bom, options = {}) {
   const companyName = String(bom.company_name || 'VRM Structures India Private Limited').trim();
 
   // 1. Check if tracking already exists for this BOM
-  const existingRes = await query(
-    `SELECT * FROM public.order_tracking WHERE bom_code = $1 LIMIT 1`,
-    [bomCode]
-  );
+  let existing = null;
+  try {
+    const existingRes = await query(
+      `SELECT * FROM public.order_tracking WHERE bom_code = $1 LIMIT 1`,
+      [bomCode]
+    );
+    if (existingRes.rows.length > 0) {
+      existing = existingRes.rows[0];
+    }
+  } catch (err) {
+    console.warn('[getOrCreateOrderTracking check warning]:', err.message);
+  }
 
-  if (existingRes.rows.length > 0) {
-    const existing = existingRes.rows[0];
+  if (existing) {
     const stageInfo = deriveCustomerOrderStage(bom);
     const packingProg = calculatePackingProgress(bom);
 
-    await query(
-      `UPDATE public.order_tracking 
-       SET current_stage = $1, packing_percentage = $2, customer_mobile = COALESCE(NULLIF($3, ''), customer_mobile), updated_at = NOW()
-       WHERE id = $4`,
-      [stageInfo.stage, packingProg.percentage, customerMobile, existing.id]
-    );
-
-    // If stage changed, record stage event
-    if (existing.current_stage !== stageInfo.stage) {
+    try {
       await query(
-        `INSERT INTO public.order_tracking_events (
-          tracking_id, bom_code, stage, title, description, actor_role, metadata
-        ) VALUES (
-          $1, $2, $3, $4, $5, 'System', $6
-        )`,
-        [
-          existing.id,
-          bomCode,
-          stageInfo.stage,
-          stageInfo.label,
-          stageInfo.description,
-          JSON.stringify({ packingPercentage: packingProg.percentage })
-        ]
+        `UPDATE public.order_tracking 
+         SET current_stage = $1, packing_percentage = $2, customer_mobile = COALESCE(NULLIF($3, ''), customer_mobile), updated_at = NOW()
+         WHERE id = $4`,
+        [stageInfo.stage, packingProg.percentage, customerMobile, existing.id]
       );
-    }
+
+      // If stage changed, record stage event
+      if (existing.current_stage !== stageInfo.stage) {
+        await query(
+          `INSERT INTO public.order_tracking_events (
+            tracking_id, bom_code, stage, title, description, actor_role, metadata
+          ) VALUES (
+            $1, $2, $3, $4, $5, 'System', $6
+          )`,
+          [
+            existing.id,
+            bomCode,
+            stageInfo.stage,
+            stageInfo.label,
+            stageInfo.description,
+            JSON.stringify({ packingPercentage: packingProg.percentage })
+          ]
+        ).catch(() => {});
+      }
+    } catch (_) {}
 
     return {
       ...existing,
@@ -515,57 +712,183 @@ export async function getOrCreateOrderTracking(bom, options = {}) {
   const stageInfo = deriveCustomerOrderStage(bom);
   const packingProg = calculatePackingProgress(bom);
 
-  const insertRes = await query(
-    `INSERT INTO public.order_tracking (
-      id, company_name, bom_code, source_pi_no, tracking_token, token_hash,
-      customer_name, customer_mobile, customer_email, status, current_stage,
-      packing_percentage, expires_at, created_at, updated_at
-    ) VALUES (
-      $1, $2, $3, $4, $5, $6, $7, $8, $9, 'ACTIVE', $10, $11, $12, NOW(), NOW()
-    ) RETURNING *`,
-    [
-      trackingId, companyName, bomCode, sourcePiNo, trackingToken, tokenHash,
-      customerName, customerMobile, customerEmail, stageInfo.stage,
-      packingProg.percentage, expiresAt
-    ]
-  );
+  let newRecord = null;
+  try {
+    const insertRes = await query(
+      `INSERT INTO public.order_tracking (
+        id, company_name, bom_code, source_pi_no, tracking_token, token_hash,
+        customer_name, customer_mobile, customer_email, status, current_stage,
+        packing_percentage, expires_at, created_at, updated_at
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, 'ACTIVE', $10, $11, $12, NOW(), NOW()
+      ) 
+      ON CONFLICT (bom_code) DO UPDATE 
+        SET current_stage = EXCLUDED.current_stage, packing_percentage = EXCLUDED.packing_percentage, updated_at = NOW()
+      RETURNING *`,
+      [
+        trackingId, companyName, bomCode, sourcePiNo, trackingToken, tokenHash,
+        customerName, customerMobile, customerEmail, stageInfo.stage,
+        packingProg.percentage, expiresAt
+      ]
+    );
+    newRecord = insertRes.rows[0];
+  } catch (err) {
+    console.warn('[getOrCreateOrderTracking insert notice]:', err.message);
+  }
 
-  const newRecord = insertRes.rows[0];
+  if (!newRecord) {
+    newRecord = {
+      id: trackingId,
+      company_name: companyName,
+      bom_code: bomCode,
+      source_pi_no: sourcePiNo,
+      tracking_token: trackingToken,
+      token_hash: tokenHash,
+      customer_name: customerName,
+      customer_mobile: customerMobile,
+      customer_email: customerEmail,
+      status: 'ACTIVE',
+      current_stage: stageInfo.stage,
+      packing_percentage: packingProg.percentage,
+      expires_at: expiresAt,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+  }
 
   // 3. Record initial tracking creation event
-  await query(
-    `INSERT INTO public.order_tracking_events (
-      tracking_id, bom_code, stage, title, description, actor_role, metadata
-    ) VALUES (
-      $1, $2, $3, $4, $5, 'System', $6
-    )`,
-    [
-      trackingId,
-      bomCode,
-      stageInfo.stage,
-      'Order Tracking Initialized',
-      `Live tracking reference generated for ${customerName}.`,
-      JSON.stringify({ bomCode, sourcePiNo, customerMobile })
-    ]
-  );
+  try {
+    await query(
+      `INSERT INTO public.order_tracking_events (
+        tracking_id, bom_code, stage, title, description, actor_role, metadata
+      ) VALUES (
+        $1, $2, $3, $4, $5, 'System', $6
+      )`,
+      [
+        newRecord.id || trackingId,
+        bomCode,
+        stageInfo.stage,
+        'Order Tracking Initialized',
+        `Live tracking reference generated for ${customerName}.`,
+        JSON.stringify({ bomCode, sourcePiNo, customerMobile })
+      ]
+    ).catch(() => {});
+  } catch (_) {}
 
   // 4. Automatically queue initial WhatsApp notification if customer mobile is present
   if (customerMobile && customerMobile.length >= 10) {
-    await queueTrackingNotification({
-      trackingId,
+    queueTrackingNotification({
+      trackingId: newRecord.id || trackingId,
       bomCode,
       customerPhone: customerMobile,
       customerName,
       companyName,
       triggerEvent: 'DISPATCH_RECEIVED',
       templateName: 'order_tracking_started',
-      trackingUrl: `https://${process.env.TRACKING_DOMAIN || 'track.businz.com'}/order/${trackingToken}`
-    });
+      trackingUrl: `https://${process.env.TRACKING_DOMAIN || 'track.businz.com'}/order/${newRecord.tracking_token || trackingToken}`
+    }).catch(() => {});
   }
 
   return {
     ...newRecord,
-    tracking_url: `https://${process.env.TRACKING_DOMAIN || 'track.businz.com'}/order/${trackingToken}`
+    tracking_url: `https://${process.env.TRACKING_DOMAIN || 'track.businz.com'}/order/${newRecord.tracking_token || trackingToken}`
+  };
+}
+
+/**
+ * Builds standard, complete, and sanitized customer tracking payload
+ */
+export async function buildCustomerTrackingResponse(bom, tracking = null, companySettings = null) {
+  const settings = companySettings || {
+    company_name: bom?.company_name || 'VRM Structures India Private Limited',
+    brand_color: '#0E7490',
+    support_phone: '+91 98765 43210',
+    support_email: 'support@businz.com',
+    show_packing_photos: true,
+    show_loading_photos: true,
+    show_driver_phone: true
+  };
+
+  const bomCode = String(bom?.bom_code || bom?.bomCode || bom?.code || bom?.id || tracking?.bom_code || '').trim();
+  let currentStage = deriveCustomerOrderStage(bom);
+  if (tracking?.current_stage === 'DELIVERED' && currentStage.stage !== 'DELIVERED') {
+    currentStage = {
+      stage: 'DELIVERED',
+      label: 'Order Delivered',
+      description: 'Products have been safely delivered to your destination.',
+      stepIndex: 10,
+      isCompleted: true
+    };
+  }
+
+  let timeline = [];
+  if (tracking?.id) {
+    const eventsRes = await query(
+      `SELECT * FROM public.order_tracking_events WHERE tracking_id = $1 ORDER BY created_at ASC`,
+      [tracking.id]
+    ).catch(() => ({ rows: [] }));
+    timeline = buildTimeline(currentStage, eventsRes.rows || [], bom);
+  } else {
+    timeline = buildTimeline(currentStage, [], bom);
+  }
+
+  let packingProgress = calculatePackingProgress(bom || {});
+  if (packingProgress.totalLines === 0 && tracking?.packing_percentage > 0) {
+    packingProgress.percentage = tracking.packing_percentage;
+    packingProgress.summaryText = `${tracking.packing_percentage}% Packing Completed`;
+  }
+
+  const documents = await resolveCustomerDocuments(bom || {}, tracking || {});
+
+  let shipments = [];
+  if (tracking?.id) {
+    const shipmentsRes = await query(
+      `SELECT * FROM public.order_tracking_shipments WHERE tracking_id = $1 ORDER BY shipment_number ASC`,
+      [tracking.id]
+    ).catch(() => ({ rows: [] }));
+    shipments = shipmentsRes.rows || [];
+  }
+
+  const vehicleLoading = bom?.vehicleLoading || bom?.accounts_verification?._extra_data?.vehicleLoading || {};
+  const transport = {
+    transporterName: bom?.transporter_name || vehicleLoading.transporterName || 'Pending Carrier Assignment',
+    transportMode: bom?.transport_mode || vehicleLoading.transportMode || 'Road Transport',
+    lrNumber: bom?.lr_no || vehicleLoading.lrNumber || vehicleLoading.lrNo || 'Awaiting Carrier Dispatch',
+    vehicleNumber: bom?.vehicle_no || vehicleLoading.vehicleNumber || 'Awaiting Loading',
+    driverName: vehicleLoading.driverName || 'Designated Driver',
+    driverPhone: settings.show_driver_phone ? (vehicleLoading.driverPhone || null) : null,
+    loadingDate: bom?.dispatchedAt || vehicleLoading.loadingDate || null,
+    packagesCount: vehicleLoading.packagesCount || null,
+    bundlesCount: vehicleLoading.bundlesCount || null,
+    loadingPhotos: settings.show_loading_photos ? (vehicleLoading.photos || []) : []
+  };
+
+  return {
+    success: true,
+    order: {
+      trackingId: tracking?.id || `TRK-${bomCode}`,
+      trackingToken: tracking?.tracking_token || bomCode,
+      bomCode,
+      piNumber: bom?.source_pi_no || bom?.sourcePiNo || tracking?.source_pi_no || 'N/A',
+      customerName: bom?.customer_name || bom?.customerName || bom?.company_name || bom?.companyName || tracking?.customer_name || 'Valued Customer',
+      companyName: settings.company_name,
+      createdAt: tracking?.created_at || bom?.created_at || bom?.createdAt || new Date().toISOString(),
+      lastUpdatedAt: tracking?.updated_at || bom?.updated_at || bom?.updatedAt || new Date().toISOString(),
+      status: tracking?.status || 'ACTIVE',
+      currentStage,
+      packingProgress,
+      timeline,
+      documents,
+      transport,
+      shipments,
+      companyBranding: {
+        companyName: settings.company_name,
+        brandColor: settings.brand_color,
+        logoUrl: settings.logo_url || null,
+        supportPhone: settings.support_phone,
+        supportEmail: settings.support_email
+      }
+    }
   };
 }
 
@@ -574,53 +897,79 @@ export async function getOrCreateOrderTracking(bom, options = {}) {
  */
 export async function getTrackingByToken(rawToken, { clientIp = '', userAgent = '' } = {}) {
   if (!rawToken || typeof rawToken !== 'string') {
-    throw new Error('Valid tracking token is required.');
+    return { notFound: true, message: 'Valid tracking token is required.' };
   }
+
+  // Ensure database schema is initialized
+  await ensureTrackingSchema().catch(() => {});
 
   const cleanRaw = String(rawToken || '').trim();
   let decodedToken = cleanRaw;
   try {
     decodedToken = decodeURIComponent(cleanRaw).trim();
   } catch (_) {}
+
+  // Generate robust variants to match slashes, hyphens, and casing
+  const variants = Array.from(new Set([
+    cleanRaw,
+    decodedToken,
+    cleanRaw.replace(/\//g, '-'),
+    decodedToken.replace(/\//g, '-'),
+    cleanRaw.replace(/-/g, '/'),
+    decodedToken.replace(/-/g, '/'),
+    cleanRaw.replace(/^VRMS/i, 'VRM'),
+    cleanRaw.replace(/^VRM/i, 'VRMS'),
+    decodedToken.replace(/^VRMS/i, 'VRM'),
+    decodedToken.replace(/^VRM/i, 'VRMS')
+  ])).filter(Boolean);
+
   const tokenHash = hashTrackingToken(decodedToken);
   const rawHash = hashTrackingToken(cleanRaw);
 
-  // 1. Query tracking record by hash, token, or bom_code
-  let trackRes = await query(
-    `SELECT * FROM public.order_tracking 
-     WHERE (token_hash = $1 OR token_hash = $2 OR tracking_token = $3 OR tracking_token = $4 
-            OR bom_code = $3 OR bom_code = $4 OR LOWER(bom_code) = LOWER($3) OR LOWER(bom_code) = LOWER($4)) LIMIT 1`,
-    [tokenHash, rawHash, cleanRaw, decodedToken]
-  );
+  // 1. Query order_tracking table
+  let trackRes = { rows: [] };
+  try {
+    trackRes = await query(
+      `SELECT * FROM public.order_tracking 
+       WHERE token_hash = $1 OR token_hash = $2 
+          OR tracking_token = ANY($3::text[]) 
+          OR bom_code = ANY($3::text[]) 
+          OR LOWER(bom_code) = ANY($4::text[]) LIMIT 1`,
+      [tokenHash, rawHash, variants, variants.map(v => v.toLowerCase())]
+    );
+  } catch (err) {
+    console.warn('[getTrackingByToken DB Query Notice]:', err.message);
+  }
 
-  // 1b. If not found in order_tracking, auto-initialize from bom_orders if token matches BOM Code/ID
-  if (trackRes.rows.length === 0) {
+  let tracking = trackRes.rows[0] || null;
+
+  // 1b. If not found in order_tracking, search authoritative BOM in PostgreSQL
+  let bom = null;
+  if (!tracking) {
     try {
-      const bomCheckRes = await query(
+      const bomRes = await query(
         `SELECT * FROM public.bom_orders 
-         WHERE bom_code = $1 OR bom_code = $2 OR id = $1 OR id = $2 
-            OR LOWER(bom_code) = LOWER($1) OR LOWER(bom_code) = LOWER($2) 
-            OR LOWER(id) = LOWER($1) OR LOWER(id) = LOWER($2) LIMIT 1`,
-        [cleanRaw, decodedToken]
+         WHERE bom_code = ANY($1::text[]) 
+            OR code = ANY($1::text[]) 
+            OR id = ANY($1::text[])
+            OR LOWER(bom_code) = ANY($2::text[])
+            OR LOWER(code) = ANY($2::text[])
+            OR LOWER(id) = ANY($2::text[])
+            OR source_pi_no = ANY($1::text[])
+         LIMIT 1`,
+        [variants, variants.map(v => v.toLowerCase())]
       );
-      if (bomCheckRes.rows.length > 0) {
-        const rawBom = bomCheckRes.rows[0];
-        const bomData = rawBom.bom_data ? { ...rawBom.bom_data, ...rawBom } : rawBom;
-        const autoTrack = await getOrCreateOrderTracking(bomData);
-        if (autoTrack && autoTrack.id) {
-          trackRes = await query(
-            `SELECT * FROM public.order_tracking WHERE id = $1 LIMIT 1`,
-            [autoTrack.id]
-          );
-        }
+      if (bomRes.rows.length > 0) {
+        const rawBom = bomRes.rows[0];
+        bom = rawBom.bom_data ? { ...rawBom.bom_data, ...rawBom } : rawBom;
       }
     } catch (e) {
-      console.warn('[Auto-Track On Demand Notice]:', e.message);
+      console.warn('[getTrackingByToken bom_orders Notice]:', e.message);
     }
   }
 
-  // 1c. If still not in DB, check JSON disk store / memory fallback
-  if (trackRes.rows.length === 0) {
+  // 1c. If still not in DB, search JSON disk store / memory fallback
+  if (!tracking && !bom) {
     try {
       const fs = await import('fs');
       const path = await import('path');
@@ -631,158 +980,97 @@ export async function getTrackingByToken(rawToken, { clientIp = '', userAgent = 
         if (Array.isArray(boms)) {
           const matched = boms.find(b => {
             if (!b) return false;
-            const bId = String(b.bomCode || b.code || b.id || '').toUpperCase();
-            return bId === cleanRaw.toUpperCase() || bId === decodedToken.toUpperCase();
+            const bCode = String(b.bomCode || b.code || b.id || '').toUpperCase();
+            const bPi = String(b.sourcePiNo || b.source_pi_no || '').toUpperCase();
+            return variants.some(v => {
+              const u = v.toUpperCase();
+              return bCode === u || bPi === u || bCode.includes(u) || u.includes(bCode);
+            });
           });
           if (matched) {
-            const autoTrack = await getOrCreateOrderTracking(matched);
-            if (autoTrack && autoTrack.id) {
-              trackRes = { rows: [autoTrack] };
-            }
+            bom = matched;
           }
         }
       }
     } catch (e) {
-      console.warn('[Fallback JSON BOM Search Notice]:', e.message);
+      console.warn('[getTrackingByToken JSON Search Notice]:', e.message);
     }
   }
 
-  if (trackRes.rows.length === 0) {
+  // If found BOM, ensure tracking record exists or generate on-the-fly
+  if (!tracking && bom) {
+    try {
+      const autoTrack = await getOrCreateOrderTracking(bom);
+      if (autoTrack) {
+        tracking = autoTrack;
+      }
+    } catch (e) {
+      console.warn('[Auto-create tracking record notice]:', e.message);
+    }
+  }
+
+  // If neither tracking nor bom is found
+  if (!tracking && !bom) {
     return { notFound: true, message: 'Invalid or unknown tracking link.' };
   }
 
-  const tracking = trackRes.rows[0];
-
   // 2. Check if revoked or expired
-  if (tracking.status === 'REVOKED') {
+  if (tracking?.status === 'REVOKED') {
     return { revoked: true, message: 'This tracking link has been deactivated for security reasons.' };
   }
-
   const now = new Date();
-  if (tracking.expires_at && new Date(tracking.expires_at) < now) {
+  if (tracking?.expires_at && new Date(tracking.expires_at) < now) {
     return { expired: true, message: 'This tracking link has expired.' };
   }
 
   // 3. Increment access count & update access stats
-  try {
-    await query(
-      `UPDATE public.order_tracking 
-       SET access_count = access_count + 1, last_accessed_at = NOW(), last_ip = $1, last_user_agent = $2
-       WHERE id = $3`,
-      [clientIp, userAgent.substring(0, 255), tracking.id]
-    );
-  } catch (_) {}
+  if (tracking?.id) {
+    try {
+      await query(
+        `UPDATE public.order_tracking 
+         SET access_count = access_count + 1, last_accessed_at = NOW(), last_ip = $1, last_user_agent = $2
+         WHERE id = $3`,
+        [clientIp, (userAgent || '').substring(0, 255), tracking.id]
+      ).catch(() => {});
+    } catch (_) {}
+  }
 
-  // 4. Retrieve authoritative BOM data from PostgreSQL
-  const bomRes = await query(
-    `SELECT * FROM public.bom_orders 
-     WHERE code = $1 OR bom_code = $1 OR id = $1 LIMIT 1`,
-    [tracking.bom_code]
-  );
+  // 4. Retrieve authoritative BOM data from PostgreSQL if not yet loaded
+  if (!bom && tracking?.bom_code) {
+    try {
+      const bomRes = await query(
+        `SELECT * FROM public.bom_orders 
+         WHERE code = $1 OR bom_code = $1 OR id = $1 LIMIT 1`,
+        [tracking.bom_code]
+      );
+      if (bomRes.rows.length > 0) {
+        const raw = bomRes.rows[0];
+        bom = raw.bom_data ? { ...raw.bom_data, ...raw } : raw;
+      }
+    } catch (_) {}
+  }
 
-  let bom = bomRes.rows[0];
   if (!bom) {
-    // Fallback search in memory
     bom = {
-      bom_code: tracking.bom_code,
-      customer_name: tracking.customer_name,
-      mobile: tracking.customer_mobile,
+      bom_code: tracking?.bom_code || cleanRaw,
+      customer_name: tracking?.customer_name || 'Valued Customer',
+      mobile: tracking?.customer_mobile || '',
       items: [],
-      status: 'In Progress'
+      status: tracking?.current_stage || 'In Progress'
     };
   }
 
   // 5. Get company tracking settings
-  const settingsRes = await query(
-    `SELECT * FROM public.company_tracking_settings LIMIT 1`
-  );
-  const companySettings = settingsRes.rows[0] || {
-    company_name: 'VRM Structures India Private Limited',
-    brand_color: '#0E7490',
-    support_phone: '+91 98765 43210',
-    support_email: 'support@businz.com',
-    show_packing_photos: true,
-    show_loading_photos: true,
-    show_driver_phone: true
-  };
+  let companySettings = null;
+  try {
+    const settingsRes = await query(
+      `SELECT * FROM public.company_tracking_settings LIMIT 1`
+    );
+    companySettings = settingsRes.rows[0];
+  } catch (_) {}
 
-  // 6. Derive Stage & Timeline
-  let currentStage = deriveCustomerOrderStage(bom);
-  if (tracking.current_stage === 'DELIVERED' && currentStage.stage !== 'DELIVERED') {
-    currentStage = {
-      stage: 'DELIVERED',
-      label: 'Order Delivered',
-      description: 'Products have been safely delivered to your destination.',
-      stepIndex: 10,
-      isCompleted: true
-    };
-  }
-
-  const eventsRes = await query(
-    `SELECT * FROM public.order_tracking_events 
-     WHERE tracking_id = $1 ORDER BY created_at ASC`,
-    [tracking.id]
-  );
-  const timeline = buildTimeline(currentStage, eventsRes.rows, bom);
-
-  // 7. Calculate Packing Progress
-  let packingProgress = calculatePackingProgress(bom);
-  if (packingProgress.totalLines === 0 && tracking.packing_percentage > 0) {
-    packingProgress.percentage = tracking.packing_percentage;
-    packingProgress.summaryText = `${tracking.packing_percentage}% Packing Completed`;
-  }
-
-  // 8. Resolve Documents (Sanitized)
-  const documents = await resolveCustomerDocuments(bom, tracking);
-
-  // 9. Multi-shipment & Transport details
-  const shipmentsRes = await query(
-    `SELECT * FROM public.order_tracking_shipments 
-     WHERE tracking_id = $1 ORDER BY shipment_number ASC`,
-    [tracking.id]
-  );
-
-  const vehicleLoading = bom.vehicleLoading || bom.accounts_verification?._extra_data?.vehicleLoading || {};
-  const transport = {
-    transporterName: bom.transporter_name || vehicleLoading.transporterName || 'Pending Carrier Assignment',
-    transportMode: bom.transport_mode || vehicleLoading.transportMode || 'Road Transport',
-    lrNumber: bom.lr_no || vehicleLoading.lrNumber || vehicleLoading.lrNo || 'Awaiting Carrier Dispatch',
-    vehicleNumber: bom.vehicle_no || vehicleLoading.vehicleNumber || 'Awaiting Loading',
-    driverName: vehicleLoading.driverName || 'Designated Driver',
-    driverPhone: companySettings.show_driver_phone ? (vehicleLoading.driverPhone || null) : null,
-    loadingDate: bom.dispatchedAt || vehicleLoading.loadingDate || null,
-    packagesCount: vehicleLoading.packagesCount || null,
-    bundlesCount: vehicleLoading.bundlesCount || null,
-    loadingPhotos: companySettings.show_loading_photos ? (vehicleLoading.photos || []) : []
-  };
-
-  return {
-    success: true,
-    order: {
-      trackingId: tracking.id,
-      trackingToken: tracking.tracking_token,
-      bomCode: tracking.bom_code,
-      piNumber: tracking.source_pi_no || 'N/A',
-      customerName: tracking.customer_name,
-      companyName: tracking.company_name,
-      createdAt: tracking.created_at,
-      lastUpdatedAt: tracking.updated_at,
-      status: tracking.status,
-      currentStage,
-      packingProgress,
-      timeline,
-      documents,
-      transport,
-      shipments: shipmentsRes.rows || [],
-      companyBranding: {
-        companyName: companySettings.company_name,
-        brandColor: companySettings.brand_color,
-        logoUrl: companySettings.logo_url || null,
-        supportPhone: companySettings.support_phone,
-        supportEmail: companySettings.support_email
-      }
-    }
-  };
+  // 6. Build unified response
+  return await buildCustomerTrackingResponse(bom, tracking, companySettings);
 }
 
 /**

@@ -2,6 +2,7 @@ import express from 'express';
 import { query } from '../db.js';
 import { isOptimizationTestMode } from '../optimizationTestGuard.js';
 import {
+  ensureTrackingSchema,
   getOrCreateOrderTracking,
   getTrackingByToken,
   submitCustomerIssue,
@@ -18,11 +19,16 @@ import {
 
 const router = express.Router();
 
+// Auto-ensure tracking schema is ready
+ensureTrackingSchema().catch(err => console.warn('[BUSINZ Track Schema Router Notice]:', err.message));
+
 // Helper to extract raw token from query or URL
 function extractTokenFromReq(req) {
   if (req.query.token) return decodeURIComponent(req.query.token).trim();
   if (req.query.track_token) return decodeURIComponent(req.query.track_token).trim();
+  if (req.query.bomCode) return decodeURIComponent(req.query.bomCode).trim();
   if (req.params.token) return decodeURIComponent(req.params.token).trim();
+  if (req.params.bomCode) return decodeURIComponent(req.params.bomCode).trim();
   if (req.params[0]) return decodeURIComponent(req.params[0]).trim();
   const urlPath = req.url.split('?')[0] || '';
   const match = urlPath.match(/^\/api\/track\/(.+)$/);
@@ -65,48 +71,111 @@ router.get(['/api/track', '/api/track/:token'], async (req, res) => {
     });
   } catch (err) {
     console.error('[BUSINZ Track API Error]:', err);
-    res.status(500).json({ success: false, error: 'Failed to retrieve tracking information' });
+    res.status(500).json({ success: false, error: err.message || 'Failed to retrieve tracking information' });
   }
 });
 
 // 1b. Ensure / Retrieve Tracking Token for BOM Code
-router.get('/api/track/ensure/:bomCode', async (req, res) => {
+router.get(['/api/track/ensure', '/api/track/ensure/:bomCode'], async (req, res) => {
   try {
-    const { bomCode } = req.params;
-    if (!bomCode) return res.status(400).json({ success: false, error: 'bomCode is required' });
+    const rawBomCode = req.query.bomCode || req.params.bomCode || extractTokenFromReq(req);
+    if (!rawBomCode) return res.status(400).json({ success: false, error: 'bomCode is required' });
+
+    await ensureTrackingSchema().catch(() => {});
+
+    const cleanRaw = String(rawBomCode || '').trim();
+    let decodedBom = cleanRaw;
+    try {
+      decodedBom = decodeURIComponent(cleanRaw).trim();
+    } catch (_) {}
+
+    const variants = Array.from(new Set([
+      cleanRaw,
+      decodedBom,
+      cleanRaw.replace(/\//g, '-'),
+      decodedBom.replace(/\//g, '-'),
+      cleanRaw.replace(/-/g, '/'),
+      decodedBom.replace(/-/g, '/'),
+      cleanRaw.replace(/^VRMS/i, 'VRM'),
+      cleanRaw.replace(/^VRM/i, 'VRMS'),
+      decodedBom.replace(/^VRMS/i, 'VRM'),
+      decodedBom.replace(/^VRM/i, 'VRMS')
+    ])).filter(Boolean);
 
     let trackingToken = null;
 
     // Check if tracking record already exists
-    const trackRes = await query(
-      `SELECT * FROM public.order_tracking WHERE bom_code = $1 LIMIT 1`,
-      [bomCode]
-    );
-
-    if (trackRes.rows.length > 0) {
-      trackingToken = trackRes.rows[0].tracking_token;
-    } else {
-      // Auto-initialize from bom_orders
-      const bomRes = await query(
-        `SELECT * FROM public.bom_orders WHERE code = $1 OR bom_code = $1 OR id = $1 LIMIT 1`,
-        [bomCode]
+    try {
+      const trackRes = await query(
+        `SELECT * FROM public.order_tracking 
+         WHERE bom_code = ANY($1::text[]) 
+            OR LOWER(bom_code) = ANY($2::text[]) 
+            OR tracking_token = ANY($1::text[]) LIMIT 1`,
+        [variants, variants.map(v => v.toLowerCase())]
       );
-      if (bomRes.rows.length > 0) {
-        const rawBom = bomRes.rows[0];
-        const bomData = rawBom.bom_data ? { ...rawBom.bom_data, ...rawBom } : rawBom;
-        const created = await getOrCreateOrderTracking(bomData);
-        if (created) trackingToken = created.tracking_token;
+
+      if (trackRes.rows.length > 0) {
+        trackingToken = trackRes.rows[0].tracking_token;
       }
+    } catch (err) {
+      console.warn('[track/ensure order_tracking query notice]:', err.message);
+    }
+
+    if (!trackingToken) {
+      // Auto-initialize from bom_orders or local store
+      try {
+        const bomRes = await query(
+          `SELECT * FROM public.bom_orders 
+           WHERE bom_code = ANY($1::text[]) 
+              OR code = ANY($1::text[]) 
+              OR id = ANY($1::text[]) 
+              OR LOWER(bom_code) = ANY($2::text[])
+              OR LOWER(code) = ANY($2::text[])
+              OR LOWER(id) = ANY($2::text[]) LIMIT 1`,
+          [variants, variants.map(v => v.toLowerCase())]
+        );
+        if (bomRes.rows.length > 0) {
+          const rawBom = bomRes.rows[0];
+          const bomData = rawBom.bom_data ? { ...rawBom.bom_data, ...rawBom } : rawBom;
+          const created = await getOrCreateOrderTracking(bomData);
+          if (created) trackingToken = created.tracking_token;
+        }
+      } catch (e) {
+        console.warn('[track/ensure bom_orders query notice]:', e.message);
+      }
+    }
+
+    if (!trackingToken) {
+      // JSON store fallback
+      try {
+        const fs = await import('fs');
+        const path = await import('path');
+        const storeFile = path.resolve(process.cwd(), 'server', 'bom_store.json');
+        if (fs.existsSync(storeFile)) {
+          const boms = JSON.parse(fs.readFileSync(storeFile, 'utf8'));
+          if (Array.isArray(boms)) {
+            const matched = boms.find(b => {
+              if (!b) return false;
+              const bCode = String(b.bomCode || b.code || b.id || '').toUpperCase();
+              return variants.some(v => v.toUpperCase() === bCode);
+            });
+            if (matched) {
+              const created = await getOrCreateOrderTracking(matched);
+              if (created) trackingToken = created.tracking_token;
+            }
+          }
+        }
+      } catch (_) {}
     }
 
     const host = req.get('host') || 'dev.businz.com';
     const proto = req.protocol === 'https' || req.get('x-forwarded-proto') === 'https' ? 'https' : 'http';
-    const token = trackingToken || bomCode;
-    const trackingUrl = `${proto}://${host}/order/${encodeURIComponent(token)}`;
+    const token = trackingToken || decodedBom;
+    const trackingUrl = `${proto}://${host}/order/?token=${encodeURIComponent(token)}`;
 
     res.json({
       success: true,
-      bomCode,
+      bomCode: decodedBom,
       trackingToken: token,
       trackingUrl
     });
