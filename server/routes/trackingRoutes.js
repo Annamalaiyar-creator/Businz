@@ -6,6 +6,7 @@ import {
   getOrCreateOrderTracking,
   getTrackingByToken,
   resolveTrackingDocumentPayload,
+  buildTrackingBundleZip,
   submitCustomerIssue,
   confirmCustomerDelivery,
   regenerateTrackingToken,
@@ -310,6 +311,25 @@ router.get('/api/track/:token/documents/:docType', async (req, res) => {
   } catch (err) {
     console.error('[BUSINZ Track Document Error]:', err);
     return res.status(500).send('Unable to load document.');
+  }
+});
+
+// 6. Download All Dispatch / Packing Images (+ LR Copy when applicable) as ZIP Folder
+router.get('/api/track/:token/download-bundle', async (req, res) => {
+  try {
+    const token = decodeURIComponent(req.params.token || '');
+    const result = await buildTrackingBundleZip(token);
+
+    if (result?.notFound) return res.status(404).send('Order not found.');
+    if (result?.forbidden) return res.status(403).send('Tracking link revoked.');
+    if (result?.empty || !result?.buffer) return res.status(404).send('No packing images or LR copy available to download yet.');
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
+    return res.send(result.buffer);
+  } catch (err) {
+    console.error('[BUSINZ Track Bundle ZIP Error]:', err);
+    return res.status(500).send('Failed to prepare download bundle.');
   }
 });
 

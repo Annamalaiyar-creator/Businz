@@ -15,6 +15,7 @@ import {
   ChevronDown,
   ChevronUp,
   ShieldCheck,
+  Camera,
   X
 } from 'lucide-react';
 
@@ -65,6 +66,8 @@ export default function CustomerOrderTrackingPortal({ token: propToken }) {
   const [isLiveConnected, setIsLiveConnected] = useState(false);
   const [copiedText, setCopiedText] = useState('');
   const [showAllStages, setShowAllStages] = useState(false);
+  const [lightboxPhoto, setLightboxPhoto] = useState(null);
+  const [dispatchPopupDismissed, setDispatchPopupDismissed] = useState(false);
 
   // Modals
   const [showIssueModal, setShowIssueModal] = useState(false);
@@ -292,15 +295,23 @@ export default function CustomerOrderTrackingPortal({ token: propToken }) {
     lastUpdatedAt,
     currentStage,
     packingProgress,
+    packingPhotos = [],
     timeline = [],
     documents = [],
     transport,
     companyBranding
   } = orderData;
 
+  const loadingPhotos = transport?.loadingPhotos || [];
+  const allDispatchPhotos = [...packingPhotos, ...loadingPhotos];
+
   const brandColor = companyBranding?.brandColor || '#0E7490';
   const isDelivered = currentStage?.stage === 'DELIVERED';
   const isDispatched = currentStage?.stage === 'DISPATCHED' || isDelivered;
+  const isPorterMode = transport?.requiresLrCopy === false;
+  const hasLrCopy = Boolean(transport?.hasLrCopy || documents.find(d => d.type === 'LR_COPY' && d.url));
+  const isCompletionReady = isDispatched && (isPorterMode || hasLrCopy);
+  const showDispatchPopup = isCompletionReady && !dispatchPopupDismissed && !showDeliveryModal && !showIssueModal;
   const activeStepIdx = mapStageToFiveStepIndex(currentStage?.stage);
   const progressWidthPct = Math.round((activeStepIdx / (FIVE_STEPS.length - 1)) * 100);
   const visibleTimeline = showAllStages
@@ -324,9 +335,9 @@ export default function CustomerOrderTrackingPortal({ token: propToken }) {
         zIndex: 40
       }}>
         <div style={{
-          maxWidth: '980px',
+          maxWidth: '1360px',
           margin: '0 auto',
-          padding: '14px 20px',
+          padding: '14px 28px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -387,7 +398,7 @@ export default function CustomerOrderTrackingPortal({ token: propToken }) {
         </div>
       </header>
 
-      <main style={{ maxWidth: '980px', margin: '0 auto', padding: '22px 16px' }}>
+      <main style={{ maxWidth: '1360px', margin: '0 auto', padding: '22px 28px' }}>
         {/* 2. Hero Card + Modern E-Commerce 5-Step Progress Bar */}
         <section style={{
           backgroundColor: '#FFFFFF',
@@ -603,7 +614,7 @@ export default function CustomerOrderTrackingPortal({ token: propToken }) {
         }}>
           {[
             { id: 'overview', label: 'Tracking & Shipment', icon: Truck },
-            { id: 'products', label: `Items (${packingProgress?.totalLines || 0})`, icon: Package },
+            { id: 'photos', label: `Packing Images (${allDispatchPhotos.length})`, icon: Camera },
             { id: 'documents', label: `Documents (${documents?.length || 0})`, icon: FileText }
           ].map(tab => {
             const Icon = tab.icon;
@@ -913,58 +924,74 @@ export default function CustomerOrderTrackingPortal({ token: propToken }) {
           </div>
         )}
 
-        {/* 5. PRODUCTS TAB */}
-        {activeTab === 'products' && (
+        {/* 5. PACKING IMAGES TAB */}
+        {activeTab === 'photos' && (
           <div style={{ backgroundColor: '#FFFFFF', borderRadius: '16px', border: '1px solid #E2E8F0', padding: '22px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '18px' }}>
               <div>
-                <h3 style={{ fontSize: '17px', fontWeight: 800, margin: 0 }}>Itemized Packing Progress</h3>
-                <div style={{ fontSize: '13px', color: '#64748B', marginTop: '2px' }}>{packingProgress?.summaryText || '0% Packing Completed'}</div>
+                <h3 style={{ fontSize: '17px', fontWeight: 800, margin: 0 }}>Dispatch &amp; Packing Images</h3>
+                <div style={{ fontSize: '13px', color: '#64748B', marginTop: '2px' }}>
+                  Verified photos uploaded by our dispatch team during packing and vehicle loading
+                </div>
               </div>
               <span style={{
-                fontSize: '13px',
+                fontSize: '12.5px',
                 fontWeight: 700,
                 padding: '5px 12px',
                 borderRadius: '9999px',
-                backgroundColor: packingProgress?.percentage === 100 ? '#ECFDF5' : '#ECFEFF',
-                color: packingProgress?.percentage === 100 ? '#059669' : brandColor
+                backgroundColor: '#ECFEFF',
+                color: brandColor
               }}>
-                {packingProgress?.percentage || 0}% Packed
+                {allDispatchPhotos.length} {allDispatchPhotos.length === 1 ? 'Photo' : 'Photos'}
               </span>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {(packingProgress?.products || []).map((prod, idx) => {
-                const fullyPacked = prod.isFullyPacked;
-                const partial = prod.status === 'PARTIALLY_PACKED';
-                const pct = prod.orderedQty > 0 ? Math.min(100, Math.round((prod.packedQty / prod.orderedQty) * 100)) : 0;
-                return (
-                  <div key={prod.code || idx} style={{ border: '1px solid #E2E8F0', borderRadius: '12px', padding: '14px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px', flexWrap: 'wrap' }}>
-                      <div>
-                        <div style={{ fontSize: '14px', fontWeight: 700, color: '#0F172A' }}>{prod.name}</div>
-                        <div style={{ fontSize: '12px', color: '#64748B', marginTop: '2px' }}>
-                          Code: <strong>{prod.code}</strong> • Ordered: <strong>{prod.orderedQty} {prod.uom}</strong> • Packed: <strong>{prod.packedQty} {prod.uom}</strong>
-                        </div>
-                      </div>
-                      <span style={{
-                        fontSize: '11px',
-                        fontWeight: 700,
-                        padding: '4px 10px',
-                        borderRadius: '9999px',
-                        backgroundColor: fullyPacked ? '#ECFDF5' : (partial ? '#FEF3C7' : '#F1F5F9'),
-                        color: fullyPacked ? '#059669' : (partial ? '#B45309' : '#64748B')
-                      }}>
-                        {fullyPacked ? 'Packed' : (partial ? 'Partial' : 'Pending')}
+            {allDispatchPhotos.length === 0 ? (
+              <div style={{
+                padding: '48px 20px',
+                textAlign: 'center',
+                backgroundColor: '#F8FAFC',
+                borderRadius: '14px',
+                border: '1px dashed #CBD5E1',
+                color: '#64748B'
+              }}>
+                <Camera size={32} style={{ margin: '0 auto 10px', opacity: 0.6 }} />
+                <div style={{ fontSize: '14px', fontWeight: 700, color: '#334155' }}>No Packing Photos Uploaded Yet</div>
+                <div style={{ fontSize: '12.5px', marginTop: '4px' }}>Photos will appear here automatically once the dispatch team completes packing.</div>
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '16px' }}>
+                {allDispatchPhotos.map((photo, idx) => (
+                  <div
+                    key={photo.id || idx}
+                    onClick={() => setLightboxPhoto(photo)}
+                    style={{
+                      border: '1px solid #E2E8F0',
+                      borderRadius: '14px',
+                      overflow: 'hidden',
+                      backgroundColor: '#F8FAFC',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <div style={{ aspectRatio: '4 / 3', backgroundColor: '#E2E8F0', overflow: 'hidden' }}>
+                      <img
+                        src={photo.url}
+                        alt={photo.name || `Packing Photo ${idx + 1}`}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                      />
+                    </div>
+                    <div style={{ padding: '10px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 700, color: '#0F172A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {photo.name || `Photo ${idx + 1}`}
+                      </span>
+                      <span style={{ fontSize: '10.5px', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px', backgroundColor: '#ECFEFF', color: brandColor, flexShrink: 0 }}>
+                        {photo.category || 'Packing'}
                       </span>
                     </div>
-                    <div style={{ width: '100%', height: '5px', backgroundColor: '#F1F5F9', borderRadius: '9999px', marginTop: '10px', overflow: 'hidden' }}>
-                      <div style={{ width: `${pct}%`, height: '100%', backgroundColor: fullyPacked ? '#10B981' : brandColor }} />
-                    </div>
                   </div>
-                );
-              })}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -1154,6 +1181,165 @@ export default function CustomerOrderTrackingPortal({ token: propToken }) {
                 </div>
               </form>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Dispatch Completed Popup (Porter: Dispatched + Download Images + Feedback | Transport: Waits for LR Copy + Download LR & Images + Feedback) */}
+      {showDispatchPopup && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.58)',
+          backdropFilter: 'blur(3px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '20px',
+          zIndex: 95
+        }}>
+          <div style={{
+            maxWidth: '480px',
+            width: '100%',
+            backgroundColor: '#FFFFFF',
+            borderRadius: '22px',
+            padding: '28px',
+            boxShadow: '0 24px 48px -12px rgba(15, 23, 42, 0.22)',
+            position: 'relative',
+            textAlign: 'center'
+          }}>
+            <button
+              onClick={() => setDispatchPopupDismissed(true)}
+              style={{
+                position: 'absolute',
+                top: '16px',
+                right: '16px',
+                background: '#F1F5F9',
+                border: 'none',
+                borderRadius: '8px',
+                padding: '6px',
+                cursor: 'pointer',
+                color: '#64748B'
+              }}
+            >
+              <X size={18} />
+            </button>
+
+            <div style={{
+              width: '56px',
+              height: '56px',
+              borderRadius: '16px',
+              backgroundColor: '#ECFDF5',
+              color: '#059669',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 16px'
+            }}>
+              <Truck size={28} />
+            </div>
+
+            <h3 style={{ fontSize: '19px', fontWeight: 800, color: '#0F172A', margin: '0 0 8px' }}>
+              {isPorterMode ? 'Order Dispatched from VRM!' : 'Order Completed & LR Copy Attached!'}
+            </h3>
+            <p style={{ fontSize: '13.5px', color: '#475569', lineHeight: 1.55, margin: '0 0 22px' }}>
+              {isPorterMode
+                ? 'Your order has been dispatched from VRM Structures and is now on its way to you. You can download all packing images below and share your feedback anytime using this link.'
+                : 'Your order dispatch is completed and your Lorry Receipt (LR Copy) is attached. Download your LR Copy and packing images together below, and send us your feedback once received.'}
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <a
+                href={`/api/track/${encodeURIComponent(token)}/download-bundle`}
+                download
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  padding: '12px 16px',
+                  borderRadius: '11px',
+                  backgroundColor: brandColor,
+                  color: '#FFFFFF',
+                  fontSize: '13.5px',
+                  fontWeight: 700,
+                  textDecoration: 'none'
+                }}
+              >
+                <Download size={17} />
+                <span>{isPorterMode ? 'Download Packing Images' : 'Download LR & Packing Images'}</span>
+              </a>
+
+              {!isDelivered && (
+                <button
+                  onClick={() => {
+                    setDispatchPopupDismissed(true);
+                    setShowDeliveryModal(true);
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    padding: '12px 16px',
+                    borderRadius: '11px',
+                    backgroundColor: '#ECFDF5',
+                    color: '#059669',
+                    border: '1px solid #A7F3D0',
+                    fontSize: '13.5px',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  <Star size={17} />
+                  <span>Send Your Feedback</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Lightbox Modal for Packing Image */}
+      {lightboxPhoto && (
+        <div
+          onClick={() => setLightboxPhoto(null)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.85)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '24px',
+            zIndex: 120
+          }}
+        >
+          <div onClick={(e) => e.stopPropagation()} style={{ position: 'relative', maxWidth: '900px', width: '100%', textAlign: 'center' }}>
+            <button
+              onClick={() => setLightboxPhoto(null)}
+              style={{
+                position: 'absolute',
+                top: '-36px',
+                right: 0,
+                background: 'rgba(255,255,255,0.15)',
+                border: 'none',
+                borderRadius: '8px',
+                padding: '6px',
+                color: '#FFFFFF',
+                cursor: 'pointer'
+              }}
+            >
+              <X size={20} />
+            </button>
+            <img
+              src={lightboxPhoto.url}
+              alt={lightboxPhoto.name || 'Packing Photo'}
+              style={{ maxWidth: '100%', maxHeight: '80vh', borderRadius: '12px', objectFit: 'contain' }}
+            />
+            <div style={{ color: '#E2E8F0', fontSize: '13px', fontWeight: 600, marginTop: '10px' }}>
+              {lightboxPhoto.name}
+            </div>
           </div>
         </div>
       )}

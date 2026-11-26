@@ -496,36 +496,15 @@ export function calculatePackingProgress(bom) {
 export async function resolveCustomerDocuments(bom, tracking = {}) {
   const documents = [];
   const bomCode = bom.bom_code || bom.bomCode || bom.code || '';
-  const piNo = bom.source_pi_no || bom.sourcePiNo || '';
   const invNo = bom.invoice_no || bom.invoiceNo || '';
   const docToken = tracking?.tracking_token || bomCode;
 
-  // 1. Proforma Invoice
-  const signedPi = bom.signed_pi_doc || bom.signedPiDoc;
-  documents.push({
-    type: 'PROFORMA_INVOICE',
-    title: 'Proforma Invoice',
-    docNumber: piNo || 'N/A',
-    status: piNo ? 'AVAILABLE' : 'NOT_YET_GENERATED',
-    available: Boolean(piNo),
-    date: bom.date || bom.created_at,
-    url: signedPi ? `/api/track/${encodeURIComponent(docToken)}/documents/proforma-invoice` : null
-  });
-
-  // 2. Customer-Facing Bill of Materials (BOM)
-  documents.push({
-    type: 'BOM',
-    title: 'Customer Bill of Materials',
-    docNumber: bomCode,
-    status: 'AVAILABLE',
-    available: true,
-    date: bom.date || bom.created_at,
-    url: `/api/track/${encodeURIComponent(docToken)}/documents/bom`
-  });
-
-  // 3. Packing List
+  // 1. Itemized Packing List (shows full / partial packed quantities)
   const isPackingReady = Boolean(
     bom.packingStatus === 'PACKING_VERIFIED' ||
+    bom.packingStatus === 'PARTIALLY_PACKED' ||
+    (Array.isArray(bom.dispatch_packing) && bom.dispatch_packing.length > 0) ||
+    (Array.isArray(bom.dispatchPacking) && bom.dispatchPacking.length > 0) ||
     bom.accounts_verification?._extra_data?.packingCompletedAt ||
     bom.status?.includes('Packed') ||
     bom.status?.includes('Dispatched')
@@ -540,7 +519,7 @@ export async function resolveCustomerDocuments(bom, tracking = {}) {
     url: isPackingReady ? `/api/track/${encodeURIComponent(docToken)}/documents/packing-list` : null
   });
 
-  // 4. Tax Invoice
+  // 2. Tax Invoice
   const isInvoiceReady = Boolean(invNo && (bom.invoice_confirmed || bom.invoiceConfirmed || bom.status?.includes('Dispatched')));
   documents.push({
     type: 'TAX_INVOICE',
@@ -552,9 +531,9 @@ export async function resolveCustomerDocuments(bom, tracking = {}) {
     url: isInvoiceReady ? `/api/track/${encodeURIComponent(docToken)}/documents/tax-invoice` : null
   });
 
-  // 5. Lorry Receipt (LR Copy) / Transporter Consignment Note
+  // 3. Lorry Receipt (LR Copy) / Transporter Consignment Note
   const lrDoc = bom.lrCopyDoc || bom.accounts_verification?._extra_data?.lrCopyDoc || bom.accounts_verification?._extra_data?.vehicleLoading?.lrCopyDoc;
-  const lrNo = bom.lr_no || bom.lrNo || bom.vehicleLoading?.lrNo;
+  const lrNo = bom.lr_no || bom.lrNo || bom.vehicleLoading?.lrNo || bom.accounts_verification?._extra_data?.vehicleLoading?.lrNo;
   const isLrAvailable = Boolean(lrDoc || lrNo);
   documents.push({
     type: 'LR_COPY',
@@ -566,17 +545,26 @@ export async function resolveCustomerDocuments(bom, tracking = {}) {
     url: lrDoc ? `/api/track/${encodeURIComponent(docToken)}/documents/lr-copy` : null
   });
 
-  // 6. Delivery Challan (if applicable)
-  const dcNo = bom.deliveryChallanNo || bom.dcNo;
-  documents.push({
-    type: 'DELIVERY_CHALLAN',
-    title: 'Delivery Challan',
-    docNumber: dcNo || 'Standard Commercial Invoice Mode',
-    status: dcNo ? 'AVAILABLE' : 'NOT_APPLICABLE',
-    available: Boolean(dcNo),
-    date: bom.dispatchedAt || null,
-    url: dcNo ? `/api/track/${encodeURIComponent(docToken)}/documents/delivery-challan` : null
-  });
+  // 4. Delivery Challan — ONLY shown when DC is actually issued/updated by Billing/Invoice team
+  const dcNo = String(
+    bom.deliveryChallanNo ||
+    bom.dcNo ||
+    bom.delivery_challan_no ||
+    bom.accounts_verification?._extra_data?.deliveryChallanNo ||
+    bom.accounts_verification?._extra_data?.dcNo ||
+    ''
+  ).trim();
+  if (dcNo) {
+    documents.push({
+      type: 'DELIVERY_CHALLAN',
+      title: 'Delivery Challan (DC)',
+      docNumber: dcNo,
+      status: 'AVAILABLE',
+      available: true,
+      date: bom.dispatchedAt || bom.accounts_verification?._extra_data?.dcIssuedAt || null,
+      url: `/api/track/${encodeURIComponent(docToken)}/documents/delivery-challan`
+    });
+  }
 
   return documents;
 }
@@ -849,18 +837,70 @@ export async function buildCustomerTrackingResponse(bom, tracking = null, compan
     shipments = shipmentsRes.rows || [];
   }
 
+  const normalizePhotoList = (rawList, category) => {
+    if (!Array.isArray(rawList)) return [];
+    return rawList.map((item, idx) => {
+      if (!item) return null;
+      if (typeof item === 'string') {
+        return { id: `${category}-${idx}`, url: item, name: `${category} Photo ${idx + 1}`, category };
+      }
+      let resolvedUrl = item.url || item.dataUrl || '';
+      if (!resolvedUrl && item.storagePath) {
+        const cleanSp = String(item.storagePath).replace(/^\/+/, '').replace(/^bom-documents\//, '');
+        resolvedUrl = `/api/uploads/bom-documents/${cleanSp}`;
+      }
+      if (!resolvedUrl) return null;
+      return {
+        id: item.id || `${category}-${idx}`,
+        url: resolvedUrl,
+        name: item.name || item.originalName || `${category} Photo ${idx + 1}`,
+        uploadedAt: item.uploadedAt || null,
+        category
+      };
+    }).filter(Boolean);
+  };
+
+  const rawPackingPhotos =
+    bom?.dispatchPackingMedia?.photos ||
+    bom?.dispatch_packing_media?.photos ||
+    bom?.accounts_verification?._extra_data?.dispatchPackingMedia?.photos ||
+    [];
+  const packingPhotos = settings.show_packing_photos !== false
+    ? normalizePhotoList(rawPackingPhotos, 'Packing')
+    : [];
+
   const vehicleLoading = bom?.vehicleLoading || bom?.accounts_verification?._extra_data?.vehicleLoading || {};
+  const loadingPhotos = settings.show_loading_photos !== false
+    ? normalizePhotoList(vehicleLoading.photos || [], 'Vehicle Loading')
+    : [];
+
+  const rawMode = String(bom?.transport_mode || bom?.transportMode || bom?.deliveryMode || vehicleLoading.deliveryMode || vehicleLoading.transportMode || '').trim().toLowerCase();
+  const rawTransporter = String(bom?.transporter_name || vehicleLoading.transporterName || vehicleLoading.transporter || '').trim().toLowerCase();
+  const isNoLrMode =
+    rawMode.includes('porter') ||
+    rawMode.includes('portal') ||
+    rawMode.includes('self') ||
+    rawMode.includes('direct') ||
+    rawMode.includes('pickup') ||
+    rawMode.includes('own') ||
+    rawTransporter.includes('porter') ||
+    rawTransporter.includes('self') ||
+    rawTransporter.includes('direct');
+  const lrDoc = bom?.lrCopyDoc || bom?.accounts_verification?._extra_data?.lrCopyDoc || vehicleLoading.lrCopyDoc || null;
+
   const transport = {
     transporterName: bom?.transporter_name || vehicleLoading.transporterName || 'Pending Carrier Assignment',
     transportMode: bom?.transport_mode || vehicleLoading.transportMode || 'Road Transport',
     lrNumber: bom?.lr_no || vehicleLoading.lrNumber || vehicleLoading.lrNo || 'Awaiting Carrier Dispatch',
-    vehicleNumber: bom?.vehicle_no || vehicleLoading.vehicleNumber || 'Awaiting Loading',
+    vehicleNumber: bom?.vehicle_no || vehicleLoading.vehicleNumber || vehicleLoading.vehicleNo || 'Awaiting Loading',
     driverName: vehicleLoading.driverName || 'Designated Driver',
     driverPhone: settings.show_driver_phone ? (vehicleLoading.driverPhone || null) : null,
     loadingDate: bom?.dispatchedAt || vehicleLoading.loadingDate || null,
     packagesCount: vehicleLoading.packagesCount || null,
     bundlesCount: vehicleLoading.bundlesCount || null,
-    loadingPhotos: settings.show_loading_photos ? (vehicleLoading.photos || []) : []
+    requiresLrCopy: !isNoLrMode,
+    hasLrCopy: Boolean(lrDoc),
+    loadingPhotos
   };
 
   return {
@@ -877,6 +917,7 @@ export async function buildCustomerTrackingResponse(bom, tracking = null, compan
       status: tracking?.status || 'ACTIVE',
       currentStage,
       packingProgress,
+      packingPhotos,
       timeline,
       documents,
       transport,
@@ -1739,16 +1780,22 @@ export async function resolveTrackingDocumentPayload(rawToken, docType) {
   const transporter = safeBom.transporter_name || vehicleLoading.transporterName || 'Pending';
 
   const tableRowsHtml = rows.length > 0
-    ? rows.map((p, idx) => `
+    ? rows.map((p, idx) => {
+      const statusLabel = p.isFullyPacked
+        ? '<span style="color:#059669;font-weight:700">Fully Packed</span>'
+        : p.packedQty > 0
+          ? `<span style="color:#B45309;font-weight:700">Partially Packed (${escapeHtml(p.packedQty)} of ${escapeHtml(p.orderedQty)})</span>`
+          : '<span style="color:#64748B">Pending</span>';
+      return `
       <tr>
         <td>${idx + 1}</td>
         <td><strong>${escapeHtml(p.code)}</strong></td>
         <td>${escapeHtml(p.name)}</td>
         <td style="text-align:right">${escapeHtml(p.orderedQty)} ${escapeHtml(p.uom)}</td>
-        ${cleanType === 'packing-list' ? `<td style="text-align:right">${escapeHtml(p.packedQty)} ${escapeHtml(p.uom)}</td><td>${escapeHtml(p.status.replace(/_/g, ' '))}</td>` : ''}
-      </tr>
-    `).join('')
-    : `<tr><td colspan="${cleanType === 'packing-list' ? 6 : 4}" style="text-align:center;color:#64748B;padding:24px;">No line items available.</td></tr>`;
+        ${cleanType === 'packing-list' ? `<td style="text-align:right"><strong>${escapeHtml(p.packedQty)}</strong> / ${escapeHtml(p.orderedQty)} ${escapeHtml(p.uom)}</td><td style="text-align:right">${escapeHtml(p.pendingQty)} ${escapeHtml(p.uom)}</td><td>${statusLabel}</td>` : ''}
+      </tr>`;
+    }).join('')
+    : `<tr><td colspan="${cleanType === 'packing-list' ? 7 : 4}" style="text-align:center;color:#64748B;padding:24px;">No line items available.</td></tr>`;
 
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -1801,7 +1848,7 @@ export async function resolveTrackingDocumentPayload(rawToken, docType) {
           <th style="width:140px">Code</th>
           <th>Item Description</th>
           <th style="text-align:right;width:120px">Ordered Qty</th>
-          ${cleanType === 'packing-list' ? '<th style="text-align:right;width:120px">Packed Qty</th><th style="width:140px">Status</th>' : ''}
+          ${cleanType === 'packing-list' ? '<th style="text-align:right;width:140px">Packed Qty</th><th style="text-align:right;width:110px">Pending Qty</th><th style="width:170px">Packing Status</th>' : ''}
         </tr>
       </thead>
       <tbody>${tableRowsHtml}</tbody>
@@ -1811,4 +1858,224 @@ export async function resolveTrackingDocumentPayload(rawToken, docType) {
 </html>`;
 
   return { type: 'html', html };
+}
+
+// Pure-JS Store ZIP builder (zero external dependencies, works on all Node versions)
+function crc32Buffer(buf) {
+  let crc = 0xFFFFFFFF;
+  for (let i = 0; i < buf.length; i++) {
+    crc ^= buf[i];
+    for (let j = 0; j < 8; j++) {
+      crc = (crc >>> 1) ^ (crc & 1 ? 0xEDB88320 : 0);
+    }
+  }
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+
+function buildZipBuffer(entries) {
+  const localParts = [];
+  const centralParts = [];
+  let offset = 0;
+
+  for (const entry of entries) {
+    const nameBuf = Buffer.from(entry.name, 'utf8');
+    const data = Buffer.isBuffer(entry.data) ? entry.data : Buffer.from(entry.data || '');
+    const crc = crc32Buffer(data);
+
+    const localHeader = Buffer.alloc(30);
+    localHeader.writeUInt32LE(0x04034b50, 0);
+    localHeader.writeUInt16LE(20, 4);
+    localHeader.writeUInt16LE(0, 6);
+    localHeader.writeUInt16LE(0, 8); // Store (no compression)
+    localHeader.writeUInt16LE(0, 10);
+    localHeader.writeUInt16LE(0, 12);
+    localHeader.writeUInt32LE(crc, 14);
+    localHeader.writeUInt32LE(data.length, 18);
+    localHeader.writeUInt32LE(data.length, 22);
+    localHeader.writeUInt16LE(nameBuf.length, 26);
+    localHeader.writeUInt16LE(0, 28);
+
+    localParts.push(localHeader, nameBuf, data);
+
+    const centralHeader = Buffer.alloc(46);
+    centralHeader.writeUInt32LE(0x02014b50, 0);
+    centralHeader.writeUInt16LE(20, 4);
+    centralHeader.writeUInt16LE(20, 6);
+    centralHeader.writeUInt16LE(0, 8);
+    centralHeader.writeUInt16LE(0, 10);
+    centralHeader.writeUInt16LE(0, 12);
+    centralHeader.writeUInt16LE(0, 14);
+    centralHeader.writeUInt32LE(crc, 16);
+    centralHeader.writeUInt32LE(data.length, 20);
+    centralHeader.writeUInt32LE(data.length, 24);
+    centralHeader.writeUInt16LE(nameBuf.length, 28);
+    centralHeader.writeUInt16LE(0, 30);
+    centralHeader.writeUInt16LE(0, 32);
+    centralHeader.writeUInt16LE(0, 34);
+    centralHeader.writeUInt16LE(0, 36);
+    centralHeader.writeUInt32LE(0, 38);
+    centralHeader.writeUInt32LE(offset, 42);
+
+    centralParts.push(centralHeader, nameBuf);
+    offset += localHeader.length + nameBuf.length + data.length;
+  }
+
+  const centralSize = centralParts.reduce((s, b) => s + b.length, 0);
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0);
+  eocd.writeUInt16LE(0, 4);
+  eocd.writeUInt16LE(0, 6);
+  eocd.writeUInt16LE(entries.length, 8);
+  eocd.writeUInt16LE(entries.length, 10);
+  eocd.writeUInt32LE(centralSize, 12);
+  eocd.writeUInt32LE(offset, 16);
+  eocd.writeUInt16LE(0, 20);
+
+  return Buffer.concat([...localParts, ...centralParts, eocd]);
+}
+
+/**
+ * Packages all packing/loading images (and LR Copy when applicable) into a single ZIP folder
+ */
+export async function buildTrackingBundleZip(rawToken) {
+  const cleanToken = String(rawToken || '').trim();
+  if (!cleanToken) return { notFound: true };
+
+  let tracking = null;
+  let bom = null;
+  try {
+    const tRes = await query(
+      `SELECT * FROM public.order_tracking WHERE tracking_token = $1 OR bom_code = $1 LIMIT 1`,
+      [cleanToken]
+    );
+    if (tRes.rows.length > 0) tracking = tRes.rows[0];
+  } catch (_) {}
+
+  const targetBomCode = tracking?.bom_code || cleanToken;
+  try {
+    const bRes = await query(
+      `SELECT * FROM public.bom_orders WHERE code = $1 OR bom_code = $1 OR id = $1 LIMIT 1`,
+      [targetBomCode]
+    );
+    if (bRes.rows.length > 0) {
+      const raw = bRes.rows[0];
+      bom = raw.bom_data ? { ...raw.bom_data, ...raw } : raw;
+    }
+  } catch (_) {}
+
+  if (!tracking && !bom) return { notFound: true };
+  if (tracking?.status === 'REVOKED') return { forbidden: true };
+
+  const fs = await import('fs');
+  const path = await import('path');
+  const bomDocsDir = path.resolve(process.cwd(), 'server', 'uploads', 'bom-documents');
+
+  const resolveFileToBuffer = async (ref, fallbackBaseName) => {
+    if (!ref) return null;
+    let parsed = ref;
+    if (typeof ref === 'string' && ref.trim().startsWith('{')) {
+      try { parsed = JSON.parse(ref); } catch (_) {}
+    }
+
+    const rawUrl = typeof parsed === 'string' ? parsed : (parsed.dataUrl || parsed.url || '');
+    const storagePath = typeof parsed === 'object' ? (parsed.storagePath || '') : '';
+    const origName = typeof parsed === 'object' ? (parsed.originalName || parsed.name || '') : '';
+
+    if (rawUrl.startsWith('data:')) {
+      const match = rawUrl.match(/^data:([^;]+);base64,(.+)$/);
+      if (match) {
+        const ext = (match[1].split('/')[1] || 'jpg').replace('jpeg', 'jpg');
+        return { name: origName || `${fallbackBaseName}.${ext}`, data: Buffer.from(match[2], 'base64') };
+      }
+    }
+
+    const candidateRel = storagePath
+      ? String(storagePath).replace(/^\/+/, '').replace(/^bom-documents\//, '')
+      : rawUrl.includes('/bom-documents/')
+        ? rawUrl.split('/bom-documents/')[1].split('?')[0]
+        : '';
+
+    if (candidateRel) {
+      const safeRel = decodeURIComponent(candidateRel).replace(/\.\./g, '');
+      const diskPath = path.join(bomDocsDir, safeRel);
+      if (fs.existsSync(diskPath)) {
+        return {
+          name: origName || path.basename(diskPath) || `${fallbackBaseName}.jpg`,
+          data: fs.readFileSync(diskPath)
+        };
+      }
+      try {
+        const signed = await createBomDocumentSignedUrl(safeRel);
+        if (signed && signed.startsWith('http')) {
+          const resp = await fetch(signed);
+          if (resp.ok) {
+            const arr = await resp.arrayBuffer();
+            return { name: origName || path.basename(safeRel) || `${fallbackBaseName}.jpg`, data: Buffer.from(arr) };
+          }
+        }
+      } catch (_) {}
+    }
+
+    if (rawUrl.startsWith('http')) {
+      try {
+        const resp = await fetch(rawUrl);
+        if (resp.ok) {
+          const arr = await resp.arrayBuffer();
+          return { name: origName || `${fallbackBaseName}.jpg`, data: Buffer.from(arr) };
+        }
+      } catch (_) {}
+    }
+    return null;
+  };
+
+  const safeBom = bom || {};
+  const vehicleLoading = safeBom.vehicleLoading || safeBom.accounts_verification?._extra_data?.vehicleLoading || {};
+  const packingPhotos =
+    safeBom.dispatchPackingMedia?.photos ||
+    safeBom.dispatch_packing_media?.photos ||
+    safeBom.accounts_verification?._extra_data?.dispatchPackingMedia?.photos ||
+    [];
+  const loadingPhotos = Array.isArray(vehicleLoading.photos) ? vehicleLoading.photos : [];
+
+  const entries = [];
+  const usedNames = new Set();
+  const pushUnique = (folder, fileObj) => {
+    if (!fileObj || !fileObj.data) return;
+    let cleanName = String(fileObj.name || 'file.jpg').replace(/[^a-zA-Z0-9._-]/g, '_');
+    let fullName = `${folder}/${cleanName}`;
+    let counter = 2;
+    while (usedNames.has(fullName)) {
+      const dot = cleanName.lastIndexOf('.');
+      const numbered = dot > 0 ? `${cleanName.slice(0, dot)}_${counter}${cleanName.slice(dot)}` : `${cleanName}_${counter}`;
+      fullName = `${folder}/${numbered}`;
+      counter++;
+    }
+    usedNames.add(fullName);
+    entries.push({ name: fullName, data: fileObj.data });
+  };
+
+  for (let i = 0; i < packingPhotos.length; i++) {
+    const f = await resolveFileToBuffer(packingPhotos[i], `packing_photo_${i + 1}`);
+    pushUnique('Packing_Images', f);
+  }
+  for (let i = 0; i < loadingPhotos.length; i++) {
+    const f = await resolveFileToBuffer(loadingPhotos[i], `loading_photo_${i + 1}`);
+    pushUnique('Packing_Images', f);
+  }
+
+  const lrDoc = safeBom.lrCopyDoc || safeBom.accounts_verification?._extra_data?.lrCopyDoc || vehicleLoading.lrCopyDoc || null;
+  if (lrDoc) {
+    const lrFile = await resolveFileToBuffer(lrDoc, 'LR_Copy');
+    pushUnique('LR_Copy', lrFile);
+  }
+
+  if (entries.length === 0) {
+    return { empty: true };
+  }
+
+  const safeCode = String(targetBomCode || 'Order').replace(/[^a-zA-Z0-9_-]/g, '_');
+  return {
+    filename: `${safeCode}_Dispatch_Files.zip`,
+    buffer: buildZipBuffer(entries)
+  };
 }
