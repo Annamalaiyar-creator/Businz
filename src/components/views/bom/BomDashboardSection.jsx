@@ -771,10 +771,7 @@ export default function BomDashboardSection({ ctx }) {
                 const isChecked = selectedRows.includes(row.code);
                 const lifecycle = getOrderLifecycle(row);
                 const isCancelled = Boolean(row.cancelled || row.status === 'Cancelled & Stock Restored' || (row.status || '').toLowerCase().includes('cancel') || row.tabGroup === 'Cancelled');
-                const isAwaitingSalesPayment = Boolean(
-                  row.awaitingSalesPaymentProof ||
-                  (typeof row.status === 'string' && row.status.toLowerCase().includes('awaiting sales payment proof'))
-                );
+                const isAwaitingSalesPayment = getBomActiveStage(row).name === 'Payment Proof Pending (Sales)';
                 const isSentToDispatch = Boolean(
                   row.salesConfirmed ||
                   row.salesReconfirmed ||
@@ -1640,10 +1637,7 @@ export default function BomDashboardSection({ ctx }) {
             const codeVal = (selectedRows && selectedRows.length > 0) ? selectedRows[0] : null;
             if (!codeVal) return null;
             const targetRow = (filteredRows || []).find(r => r.code === codeVal || r.id === codeVal || r.bomCode === codeVal) || (bomStore || []).find(b => (b.bomCode || b.code) === codeVal);
-            const isAwaitingProof = targetRow && (
-              targetRow.awaitingSalesPaymentProof ||
-              (typeof targetRow.status === 'string' && targetRow.status.toLowerCase().includes('awaiting sales payment proof'))
-            );
+            const isAwaitingProof = targetRow && getBomActiveStage(targetRow).name === 'Payment Proof Pending (Sales)';
             if (!isAwaitingProof || isCeo) return null;
             return (
               <button

@@ -531,16 +531,23 @@ export default function DispatchPackingModal({
   const progressPercent = isAlreadySentToAccounts ? 100 : (totalItemsCount > 0 ? Math.round((packedItemsCount / totalItemsCount) * 100) : 0);
   const isPartial = !isAlreadySentToAccounts && packedItemsCount > 0 && !allItemsPacked;
 
-  const isWhileDispatch = Boolean(
-    dispatchPackingModal?.paymentType === 'Payment While Dispatch' ||
-    String(dispatchPackingModal?.paymentType || '').toLowerCase().includes('while dispatch') ||
-    String(dispatchPackingModal?.paymentType || '').toLowerCase().includes('before dispatch')
+  const dispatchPayTypeLower = String(dispatchPackingModal?.paymentType || dispatchPackingModal?.paymentTerms || '').toLowerCase();
+  const isCreditTerms = Boolean(
+    dispatchPayTypeLower.includes('credit') ||
+    dispatchPayTypeLower.includes('net ') ||
+    dispatchPayTypeLower.includes('net30') ||
+    Number(dispatchPackingModal?.creditDays || 0) > 0
   );
-  const isPartialPaid = Boolean(
+  const isWhileDispatch = !isCreditTerms && Boolean(
+    dispatchPackingModal?.paymentType === 'Payment While Dispatch' ||
+    dispatchPayTypeLower.includes('while dispatch') ||
+    dispatchPayTypeLower.includes('before dispatch')
+  );
+  const isPartialPaid = !isCreditTerms && Boolean(
     dispatchPackingModal?.paymentType === 'Partial Paid' ||
     dispatchPackingModal?.paymentType === 'Partial Payment' ||
-    String(dispatchPackingModal?.paymentType || '').toLowerCase().includes('partial') ||
-    String(dispatchPackingModal?.paymentType || '').toLowerCase().includes('50%')
+    dispatchPayTypeLower.includes('partial') ||
+    dispatchPayTypeLower.includes('50%')
   );
 
   const hasAnyPaymentProof = Boolean(
@@ -722,16 +729,23 @@ export default function DispatchPackingModal({
       (dispatchPackingModal.c5 && dispatchPackingModal.c5.includes('100%'))
     );
 
-    const isWhileDispatch = Boolean(
-      dispatchPackingModal.paymentType === 'Payment While Dispatch' ||
-      String(dispatchPackingModal.paymentType || '').toLowerCase().includes('while dispatch') ||
-      String(dispatchPackingModal.paymentType || '').toLowerCase().includes('before dispatch')
+    const submitPayTypeLower = String(dispatchPackingModal.paymentType || dispatchPackingModal.paymentTerms || '').toLowerCase();
+    const isCreditTerms = Boolean(
+      submitPayTypeLower.includes('credit') ||
+      submitPayTypeLower.includes('net ') ||
+      submitPayTypeLower.includes('net30') ||
+      Number(dispatchPackingModal.creditDays || 0) > 0
     );
-    const isPartialPaid = Boolean(
+    const isWhileDispatch = !isCreditTerms && Boolean(
+      dispatchPackingModal.paymentType === 'Payment While Dispatch' ||
+      submitPayTypeLower.includes('while dispatch') ||
+      submitPayTypeLower.includes('before dispatch')
+    );
+    const isPartialPaid = !isCreditTerms && Boolean(
       dispatchPackingModal.paymentType === 'Partial Paid' ||
       dispatchPackingModal.paymentType === 'Partial Payment' ||
-      String(dispatchPackingModal.paymentType || '').toLowerCase().includes('partial') ||
-      String(dispatchPackingModal.paymentType || '').toLowerCase().includes('50%')
+      submitPayTypeLower.includes('partial') ||
+      submitPayTypeLower.includes('50%')
     );
 
     const hasAnyPaymentProof = Boolean(

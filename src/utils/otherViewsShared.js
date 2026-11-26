@@ -51,7 +51,7 @@ export const normalizePaymentTerm = (term) => {
   if (s.startsWith('partial') || s === 'partial paid' || s === 'partial payment') {
     return 'Partial Paid';
   }
-  if (s.includes('credit') || s.includes('net ') || s.includes('days')) {
+  if (s.includes('credit') || s.includes('net ') || /\bnet\d+\b/.test(s) || s.includes('days')) {
     return 'Credit Payment';
   }
   if (s.includes('while dispatch') || s.includes('before dispatch') || s.includes('dispatch')) {

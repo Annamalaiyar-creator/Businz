@@ -112,43 +112,74 @@ export const getBomActiveStage = (row) => {
     Boolean(row.packingCompletedAt || row.packedAt || row.packingVerifiedAt || row.accountsVerification?.packedAt || row.packingStatus === 'PACKING_VERIFIED');
   if (isPackingVerified) {
     const payType = String(
+      row.paymentType || 
       row.paymentTerms || 
       row.payments?.paymentType || 
       row.payments?.paymentTerms || 
-      row.salesPoDetails?.paymentTerms || 
-      row.paymentType || ''
+      row.salesPoDetails?.paymentTerms || ''
     ).toLowerCase();
 
-    const isCreditTerms = payType.includes('credit');
-    const isWhileDispatch = payType.includes('while dispatch') || payType.includes('before dispatch') || payType.includes('against delivery');
-    const isPartialPaidTerms = payType.includes('partial') || payType.includes('50%') || payType.includes('advance');
+    const isCreditTerms = payType.includes('credit') || payType.includes('net ') || payType.includes('net30') || Number(row.creditDays || 0) > 0;
+    const isWhileDispatch = !isCreditTerms && (payType.includes('while dispatch') || payType.includes('before dispatch') || payType.includes('against delivery'));
+    const isPartialPaidTerms = !isCreditTerms && (payType.includes('partial') || (payType.includes('50%') && !payType.includes('100%')));
 
     const rawProofForCheck = row.paymentProofDoc ||
       row.payments?.proofDocObj ||
       row.payments?.proofDoc ||
       row.proofDoc ||
+      row.proofDocData ||
       row.salesPoDetails?.proofDocObj ||
       row.balancePaymentProofDoc ||
+      row.balanceProofDoc ||
       row.payments?.balanceProofDocObj ||
       row.payments?.balanceProofDoc;
+
+    const hasUploadedDocInList = Array.isArray(row.uploadedDocuments) && row.uploadedDocuments.some(d =>
+      String(d?.category || '').toLowerCase().includes('payment') ||
+      String(d?.type || '').toLowerCase().includes('payment')
+    );
 
     const hasUploadedPaymentProof = Boolean(
       (typeof rawProofForCheck === 'string' && rawProofForCheck.trim().length > 0) ||
       (rawProofForCheck && typeof rawProofForCheck === 'object' && (rawProofForCheck.url || rawProofForCheck.dataUrl || rawProofForCheck.fileData || rawProofForCheck.storagePath || rawProofForCheck.name)) ||
       row.paymentProofDocName ||
+      row.paymentProofAttached ||
+      row.hasPaymentProof ||
+      hasUploadedDocInList ||
       (Array.isArray(row.paymentProofDocs) && row.paymentProofDocs.length > 0) ||
       (Array.isArray(row.balancePaymentProofDocs) && row.balancePaymentProofDocs.length > 0) ||
       row.balancePaymentProofDoc ||
+      row.balanceProofDoc ||
       row.payments?.balanceProofDoc ||
       row.payments?.balanceSettled ||
+      row.payments?.dispatch50Uploaded ||
       row.creditSettled ||
-      row.paymentSettled
+      row.paymentSettled ||
+      row.accountsVerification?.creditSettled
     );
 
-    const isMissingPaymentProof = !isCreditTerms && Boolean(
-      row.awaitingSalesPaymentProof ||
-      statusStr.includes('awaiting sales payment proof') ||
-      ((isWhileDispatch || isPartialPaidTerms) && !hasUploadedPaymentProof)
+    const hasRemainingBalanceProof = Boolean(
+      row.balancePaymentProofDoc ||
+      row.balanceProofDoc ||
+      (Array.isArray(row.balancePaymentProofDocs) && row.balancePaymentProofDocs.length > 0) ||
+      row.payments?.balanceProofDocObj ||
+      row.payments?.balanceProofDoc ||
+      row.payments?.balanceUploaded ||
+      row.payments?.balanceSettled ||
+      row.payments?.dispatch50Uploaded ||
+      row.paymentProofAttached ||
+      row.creditSettled ||
+      row.paymentSettled ||
+      row.accountsVerification?.creditSettled ||
+      row.accountsVerification?.paymentStatus === 'Payment Proof Attached' ||
+      row.accountsVerification?.paymentStatus === 'Payment Proof Attached by Sales' ||
+      (row.balanceAmount !== undefined && row.balanceAmount !== null && Number(row.balanceAmount) <= 0 && Number(row.partialAmount) > 0 && hasUploadedPaymentProof)
+    );
+
+    const isMissingPaymentProof = !isCreditTerms && (
+      isPartialPaidTerms
+        ? !hasRemainingBalanceProof
+        : ((isWhileDispatch || Boolean(row.awaitingSalesPaymentProof) || statusStr.includes('awaiting sales payment proof')) && !hasUploadedPaymentProof)
     );
 
     const bAddr = String(row.billingAddress || row.companyBillingAddress || '').trim().toLowerCase();

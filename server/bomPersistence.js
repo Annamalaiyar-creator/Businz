@@ -778,10 +778,14 @@ export function mergeBomRecords(existing, incoming) {
       : (existing.payments || {}),
     awaitingSalesPaymentProof: (incoming.awaitingSalesPaymentProof !== undefined)
       ? Boolean(incoming.awaitingSalesPaymentProof)
-      : Boolean(existing.awaitingSalesPaymentProof),
+      : (incoming.paymentProofAttached || String(incoming.paymentType || '').toLowerCase().includes('credit'))
+        ? false
+        : Boolean(existing.awaitingSalesPaymentProof),
     pendingSalesDispatchPayment: (incoming.pendingSalesDispatchPayment !== undefined)
       ? Boolean(incoming.pendingSalesDispatchPayment)
-      : Boolean(existing.pendingSalesDispatchPayment),
+      : (incoming.paymentProofAttached || String(incoming.paymentType || '').toLowerCase().includes('credit'))
+        ? false
+        : Boolean(existing.pendingSalesDispatchPayment),
     paymentProofAttached: Boolean(incoming.paymentProofAttached || existing.paymentProofAttached),
     paymentProofAttachedAt: incoming.paymentProofAttachedAt || existing.paymentProofAttachedAt || null,
     creditSettled: Boolean(incoming.creditSettled || existing.creditSettled),

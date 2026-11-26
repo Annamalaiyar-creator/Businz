@@ -598,6 +598,12 @@ export default function BomConfirmAuditSection({ ctx }) {
         : null,
       paymentProofDoc: savedPaymentDocs[0] || null,
       paymentProofDocs: savedPaymentDocs,
+      paymentProofAttached: savedPaymentDocs.length > 0 || Boolean(confirmingBomModal.paymentProofAttached),
+      awaitingSalesPaymentProof: (normalizedPayType === 'Credit Payment' || savedPaymentDocs.length > 0) ? false : confirmingBomModal.awaitingSalesPaymentProof,
+      pendingSalesDispatchPayment: (normalizedPayType === 'Credit Payment' || savedPaymentDocs.length > 0) ? false : confirmingBomModal.pendingSalesDispatchPayment,
+      status: (!confirmAndSend && typeof confirmingBomModal.status === 'string' && confirmingBomModal.status.toLowerCase().includes('awaiting sales payment proof') && (normalizedPayType === 'Credit Payment' || savedPaymentDocs.length > 0))
+        ? 'Dispatch Packing Verified - Sent to Accounts'
+        : confirmingBomModal.status,
       paymentUpdated: (normalizedPayType === '100% Paid' || isPartialPay) && savedPaymentDocs.length > 0,
       payments: confirmingBomModal.payments
         ? {

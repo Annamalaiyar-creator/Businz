@@ -145,6 +145,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
             const s = String(b?.status || '').toLowerCase();
             if (acc.verified || s.includes('accounts verified') || b?.isAccountsDone || s.includes('invoice') || s.includes('dispatched') || b?.fullyCompleted) return false;
             const pType = String(b?.paymentType || b?.paymentTerms || '').toLowerCase();
+            if (pType.includes('credit') || pType.includes('net ') || pType.includes('net30') || Number(b?.creditDays || 0) > 0) return false;
             if (pType.includes('partial') || pType.includes('50%')) return !hasRemainingBalanceProof(b);
             if (pType.includes('while dispatch') || pType.includes('before dispatch') || b?.awaitingSalesPaymentProof || s.includes('awaiting sales payment proof')) return !hasAnyProof(b);
             return false;

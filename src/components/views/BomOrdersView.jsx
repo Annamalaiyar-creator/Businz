@@ -2803,7 +2803,7 @@ export default function BomOrdersView(props) {
     setNewBomDestination(sourceBom.destination || '');
     setNewBomVehicleNo(sourceBom.vehicleNo || '');
     setNewBomTransportScope(sourceBom.transportScope || 'VRM Structures');
-    setNewBomPaymentType(sourceBom.paymentType || '100% Paid');
+    setNewBomPaymentType(normalizePaymentTerm(sourceBom.paymentType || sourceBom.paymentTerms || '100% Paid'));
     setNewBomPartialAmount(sourceBom.partialAmount != null ? String(sourceBom.partialAmount) : '');
     setNewBomCreditDays(sourceBom.creditDays || 7);
     setNewBomRemarks(sourceBom.remarks || '');

@@ -610,6 +610,9 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                   return false;
                 }
                 const pType = String(b?.paymentType || b?.paymentTerms || '').toLowerCase();
+                if (pType.includes('credit') || pType.includes('net ') || pType.includes('net30') || Number(b?.creditDays || 0) > 0) {
+                  return false;
+                }
                 const isPartialPaid = pType.includes('partial') || pType.includes('50%');
                 const isWhileDispatch = pType.includes('while dispatch') || pType.includes('before dispatch');
                 if (isPartialPaid) {
@@ -698,7 +701,7 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                   const isSettledCredit = Boolean(b.creditSettled || acc.creditSettled || (typeof b.status === 'string' && b.status.toLowerCase().includes('credit settled')));
                   const pTypeStr = String(b.paymentType || b.paymentTerms || '').toLowerCase();
                   const isDispatchOrPartialTerms = pTypeStr.includes('while dispatch') || pTypeStr.includes('before dispatch') || pTypeStr.includes('partial') || pTypeStr.includes('50%');
-                  const isCreditTerms = pTypeStr.includes('credit') || pTypeStr.includes('net 30');
+                  const isCreditTerms = pTypeStr.includes('credit') || pTypeStr.includes('net ') || pTypeStr.includes('net30') || Number(b.creditDays || 0) > 0;
                   const hasProofAttachedNow = !isPayProofPending && (isDispatchOrPartialTerms || hasAnyOrderPaymentProof(b));
                   const payStatus = isSettledCredit
                     ? '100% Received (Credit Settled)'
