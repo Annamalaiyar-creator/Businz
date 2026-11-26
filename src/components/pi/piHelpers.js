@@ -210,22 +210,22 @@ export const resolvePiSalesPersonName = (pi) => {
     }
   } catch (_) {}
 
-  // 2. Explicit assigned salesperson takes top priority if valid person name
-  if (assignedRaw && !assignedRaw.includes('@') && !nonSales.includes(assignedRaw.toLowerCase())) {
-    return assignedRaw;
-  }
-
-  // 3. Explicit primary salesperson name if valid person name
-  if (primaryRaw && !primaryRaw.includes('@') && !nonSales.includes(primaryRaw.toLowerCase())) {
-    return primaryRaw;
-  }
-
-  // 4. Fallback to canonical code mapping
+  // 2. Authoritative code-to-name mapping (prevents stale pi.salesPerson strings from showing wrong person for SE-XXX)
   if (canonicalCode && CODE_TO_SALES_NAME[canonicalCode]) {
     return CODE_TO_SALES_NAME[canonicalCode];
   }
   if (rawCode && CODE_TO_SALES_NAME[rawCode]) {
     return CODE_TO_SALES_NAME[rawCode];
+  }
+
+  // 3. Explicit assigned salesperson if no canonical code matched
+  if (assignedRaw && !assignedRaw.includes('@') && !nonSales.includes(assignedRaw.toLowerCase())) {
+    return assignedRaw;
+  }
+
+  // 4. Explicit primary salesperson name if no canonical code matched
+  if (primaryRaw && !primaryRaw.includes('@') && !nonSales.includes(primaryRaw.toLowerCase())) {
+    return primaryRaw;
   }
 
   // 5. Collect email candidates (strictly sales staff emails, NEVER pi.email which is customer contact!)

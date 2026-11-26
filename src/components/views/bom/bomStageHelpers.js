@@ -616,13 +616,9 @@ export const getCleanSalesPersonName = (rawName, code) => {
     }
   } catch (_) {}
 
-  // If a sales code is provided that maps to a real sales executive,
-  // and the record creator name is a non-sales user (e.g. KalpanaRam/Tech Support/Dispatch/Admin) or generic,
-  // the true salesperson is the assigned sales executive!
+  // Authoritative code-to-name mapping (prevents stale row.salesPerson strings from showing wrong person for SE-XXX)
   if (cleanCode && CODE_TO_SALES_NAME[cleanCode]) {
-    if (!name || name.includes('@') || nonSalesPersons.includes(name.toLowerCase())) {
-      return CODE_TO_SALES_NAME[cleanCode];
-    }
+    return CODE_TO_SALES_NAME[cleanCode];
   }
 
   if (cleanCode === 'SE-015' || (!name && cleanCode === 'SE-004') || String(rawName || '').includes('SE-015')) return 'Mohith JV';
