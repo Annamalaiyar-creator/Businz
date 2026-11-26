@@ -1317,16 +1317,16 @@ export async function getInternalTrackingOrders({ search = '', stage = '', page 
   );
   const totalCount = parseInt(countRes.rows[0].count, 10);
 
-  // Query records (extracting only lightweight items/dispatchPacking/vehicleLoading paths — never full bom_data blobs)
+  // Query records (extracting only lightweight items/dispatch_packing/vehicleLoading paths — never heavy doc blobs)
   const querySql = `
     SELECT 
       t.id, t.bom_code, t.source_pi_no, t.tracking_token, t.customer_name, 
       t.customer_mobile, t.status, t.current_stage, t.packing_percentage,
       t.access_count, t.last_accessed_at, t.created_at, t.updated_at,
       b.transporter_name, b.vehicle_no, b.lr_no, b.invoice_no,
-      b.bom_data->'items' as items_json,
-      COALESCE(b.bom_data->'dispatchPacking', b.bom_data->'dispatch_packing') as dispatch_packing_json,
-      COALESCE(b.bom_data->'vehicleLoading', b.bom_data->'accounts_verification'->'_extra_data'->'vehicleLoading') as vehicle_loading_json,
+      b.items as items_json,
+      b.dispatch_packing as dispatch_packing_json,
+      b.accounts_verification->'_extra_data'->'vehicleLoading' as vehicle_loading_json,
       (SELECT COUNT(*) FROM public.order_tracking_issues i WHERE i.tracking_id = t.id AND i.status = 'OPEN') as open_issues_count
     FROM public.order_tracking t
     LEFT JOIN public.bom_orders b ON (b.code = t.bom_code OR b.bom_code = t.bom_code)
