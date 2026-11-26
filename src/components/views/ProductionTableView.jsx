@@ -39,6 +39,7 @@ export default function ProductionTableView({
   onEditRecord,
   onQuickPreview,
   onUploadPayment,
+  onAttachLr,
   onSendWhatsAppStatus,
   onNotifySales,
   kpiFilterMeta,
@@ -1030,6 +1031,93 @@ export default function ProductionTableView({
                     <Edit3 size={14} style={{ color: '#64748B' }} /> Edit Info
                   </>
                 )}
+              </button>
+            );
+          })()}
+
+          {/* Attach LR Button in Floating Menu (Invoice Management & Dispatch Orders — Transport Mode ONLY) */}
+          {(() => {
+            if (!onAttachLr || selectedRows.length !== 1) return null;
+            if (activeTab !== 'Invoice Management' && activeTab !== 'Dispatch Orders') return null;
+
+            const targetCode = selectedRows[0];
+            const targetRow = (filteredRows || []).find(r => r.code === targetCode || r.id === targetCode || r.bomCode === targetCode);
+            if (!targetRow) return null;
+
+            const st = String(targetRow.status || targetRow.c7 || targetRow.c6 || '').toLowerCase();
+            if (st.includes('cancel')) return null;
+
+            // Skip duplicate button in Dispatch Orders when primary button is already "Upload LR Copy"
+            const isAlreadyPrimaryLr = activeTab === 'Dispatch Orders' && (
+              targetRow.status === 'AWAITING LR COPY' ||
+              targetRow.status === 'Dispatched - Awaiting LR Copy' ||
+              targetRow.tabGroup === 'AwaitingLrCopy'
+            );
+            if (isAlreadyPrimaryLr) return null;
+
+            const refBom = String(targetRow.bomCode || targetRow.poNo || targetRow.code || '').trim().toUpperCase();
+            const refInv = String(targetRow.invNo || targetRow.invoiceNo || targetRow.code || '').trim().toUpperCase();
+            const matchedBom = (bomStore || []).find(b => {
+              const bCode = String(b.bomCode || b.code || '').trim().toUpperCase();
+              const bInv = String(b.invoiceNo || '').trim().toUpperCase();
+              return (refBom && bCode === refBom) || (refInv && bInv === refInv);
+            });
+
+            const rawMode = String(
+              matchedBom?.transportMode ||
+              matchedBom?.deliveryMode ||
+              matchedBom?.vehicleLoading?.deliveryMode ||
+              targetRow.transportMode ||
+              targetRow.deliveryMode ||
+              ''
+            ).trim().toLowerCase();
+            const rawTransporter = String(
+              matchedBom?.transporterName ||
+              matchedBom?.vehicleLoading?.transporter ||
+              targetRow.transporterName ||
+              ''
+            ).trim().toLowerCase();
+            const isNonTransport =
+              rawMode.includes('own') ||
+              rawMode.includes('porter') ||
+              rawMode.includes('portal') ||
+              rawMode.includes('self') ||
+              rawMode.includes('direct') ||
+              rawMode.includes('pickup') ||
+              rawMode.includes('customer') ||
+              rawTransporter.includes('porter') ||
+              rawTransporter.includes('self') ||
+              rawTransporter.includes('direct');
+            if (isNonTransport) return null;
+
+            return (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setSelectedRows([]);
+                  onAttachLr(targetRow);
+                }}
+                style={{
+                  backgroundColor: '#FFFBEB',
+                  border: '1px solid #FCD34D',
+                  color: '#B45309',
+                  borderRadius: '10px',
+                  padding: '6px 14px',
+                  fontSize: '12px',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                }}
+                title="Attach Transporter Lorry Receipt (LR Copy)"
+              >
+                <FileText size={14} style={{ color: '#D97706' }} /> Attach LR
               </button>
             );
           })()}

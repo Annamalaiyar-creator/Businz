@@ -2444,12 +2444,7 @@ export default function InvoiceDetailModal({
                     const uploadedResults = [];
                     const targetCode = bomRefText || invNoText || inv.code || 'INVOICE';
                     for (const file of toUpload) {
-                      const check = validateClientFile(file);
-                      if (!check.valid) {
-                        alert(check.error || `Invalid file: ${file.name}`);
-                        continue;
-                      }
-                      const res = await uploadBomDocumentFile(file, targetCode, 'tax-invoice');
+                      const res = await uploadBomDocumentFile({ file, bomCode: targetCode, category: 'general' });
                       if (res && (res.url || res.storagePath)) {
                         uploadedResults.push({
                           id: `INV-DOC-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,

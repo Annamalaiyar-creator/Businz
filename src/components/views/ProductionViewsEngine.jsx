@@ -2331,6 +2331,16 @@ export default function ProductionViewsEngine(props) {
               }}
               onQuickPreview={(targetRow) => setQuickPreviewRecord(targetRow)}
               onUploadPayment={(targetRow) => setUploadPaymentModal(targetRow)}
+              onAttachLr={(targetRow) => {
+                const refBom = String(targetRow?.bomCode || targetRow?.poNo || targetRow?.code || '').trim().toUpperCase();
+                const refInv = String(targetRow?.invNo || targetRow?.invoiceNo || targetRow?.code || '').trim().toUpperCase();
+                const matchedBom = (bomStore || []).find(b => {
+                  const bCode = String(b.bomCode || b.code || '').trim().toUpperCase();
+                  const bInv = String(b.invoiceNo || '').trim().toUpperCase();
+                  return (refBom && bCode === refBom) || (refInv && bInv === refInv);
+                });
+                setLrUploadModal(matchedBom || targetRow);
+              }}
             />
           );
         } catch (err) {
