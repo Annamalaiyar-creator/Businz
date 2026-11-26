@@ -832,54 +832,59 @@ export default function InvoiceDetailModal({
         billingAddress: inv.billingAddress || matchingBom?.billingAddress,
         deliveryAddress: inv.deliveryAddress || matchingBom?.deliveryAddress,
         deliveryAddressProofDoc: hasAddressProof ? (inv.deliveryAddressProofDoc || matchingBom?.deliveryAddressProofDoc || foundBom?.deliveryAddressProofDoc) : null,
+        attachedInvoiceDocs: attachedInvoiceDocs,
         addressProofWaivedWithDisclaimer: waiveProofDisclaimer,
         addressProofDisclaimerClause: waiveProofDisclaimer ? 'The Invoice is processed without the Address Proof so if any problem happens means VRM Structures India Private Limited will not take any responsibility.' : null
       };
 
-      fetch('/api/invoices/complete', {
+      const sesId = (typeof window !== 'undefined' && window.localStorage)
+        ? (localStorage.getItem('controlroom_device_session_id') || localStorage.getItem('businz_device_session_id') || '')
+        : '';
+
+      const completeRes = await fetch('/api/invoices/complete', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(sesId ? { 'x-session-id': sesId } : {})
+        },
         body: JSON.stringify(stripDataUrlsFromRecord(serverPayload))
-      })
-        .then(res => res.json())
-        .then(result => {
-          if (result && result.success && result.invoice) {
-            const createdInv = result.invoice;
-            const finalConfirmedInvNo = createdInv.invoiceNo || createdInv.invNo || targetInvNumber;
-            setInvoiceList(prev => {
-              const updated = (prev || []).map(item =>
-                (item.invNo === targetInvNumber || item.code === targetInvNumber || item.bomCode === bomRefText)
-                  ? {
-                    ...item,
-                    code: finalConfirmedInvNo,
-                    invoiceNo: finalConfirmedInvNo,
-                    id: createdInv.id || item.id,
-                    invoiceNumber: finalConfirmedInvNo,
-                    status: 'Invoice Confirmed',
-                    match: 'Matched',
-                    pay: 'Completed & Locked'
-                  }
-                  : item
-              );
-              try {
-                localStorage.setItem('controlroom_invoice_store', JSON.stringify(updated.map(stripDataUrlsFromRecord)));
-              } catch (_) {}
-              return updated;
-            });
-            setBomStore(prev => {
-              const updated = (prev || []).map(b =>
-                (b.bomCode === bomRefText || b.code === bomRefText)
-                  ? { ...b, invoiceNo: finalConfirmedInvNo, invoiceConfirmed: true }
-                  : b
-              );
-              try {
-                localStorage.setItem('controlroom_bom_store', JSON.stringify(updated.map(stripDataUrlsFromRecord)));
-              } catch (_) {}
-              return updated;
-            });
-          }
-        })
-        .catch(err => console.warn('Invoice sync notice:', err));
+      });
+      const result = await completeRes.json().catch(() => null);
+      if (completeRes.ok && result && result.success && result.invoice) {
+        const createdInv = result.invoice;
+        const finalConfirmedInvNo = createdInv.invoiceNo || createdInv.invNo || targetInvNumber;
+        setInvoiceList(prev => {
+          const updated = (prev || []).map(item =>
+            (item.invNo === targetInvNumber || item.code === targetInvNumber || item.bomCode === bomRefText)
+              ? {
+                ...item,
+                code: finalConfirmedInvNo,
+                invoiceNo: finalConfirmedInvNo,
+                id: createdInv.id || item.id,
+                invoiceNumber: finalConfirmedInvNo,
+                status: 'Invoice Confirmed',
+                match: 'Matched',
+                pay: 'Completed & Locked'
+              }
+              : item
+          );
+          try {
+            localStorage.setItem('controlroom_invoice_store', JSON.stringify(updated.map(stripDataUrlsFromRecord)));
+          } catch (_) {}
+          return updated;
+        });
+        setBomStore(prev => {
+          const updated = (prev || []).map(b =>
+            (b.bomCode === bomRefText || b.code === bomRefText)
+              ? { ...b, invoiceNo: finalConfirmedInvNo, invoiceConfirmed: true }
+              : b
+          );
+          try {
+            localStorage.setItem('controlroom_bom_store', JSON.stringify(updated.map(stripDataUrlsFromRecord)));
+          } catch (_) {}
+          return updated;
+        });
+      }
     } catch (e) { console.error('Invoice fetch trigger error:', e); }
 
     // Trigger Real-time Workflow Notifications with synthesized sound & deep-links for Sales & Dispatch

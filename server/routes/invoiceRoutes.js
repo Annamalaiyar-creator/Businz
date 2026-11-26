@@ -228,5 +228,147 @@ router.post('/api/invoices', async (req, res) => {
   }
 });
 
+// Authoritative endpoint to complete an Invoice & advance its BOM to "Awaiting Vehicle Loading & Dispatch"
+router.post('/api/invoices/complete', async (req, res) => {
+  const session = await getVerifiedUserSession(req);
+  if (!session || !session.valid) {
+    return res.status(401).json({
+      success: false,
+      error: session?.error || 'Unauthorized: Active Businz session required (x-session-id)'
+    });
+  }
+  if (!hasAnyUserRole(session.role, ['billing', 'accounts', 'finance'])) {
+    return res.status(403).json({
+      success: false,
+      error: `Forbidden: Role "${session.role}" is not authorized to complete invoices.`
+    });
+  }
+
+  try {
+    const body = req.body || {};
+    const assignedInvNo = (body.invNo && body.invNo !== 'Pending Confirmation')
+      ? body.invNo
+      : (body.invoiceNo && body.invoiceNo !== 'Pending Confirmation')
+        ? body.invoiceNo
+        : `VRM-INV-${Date.now()}`;
+    const targetBomCode = String(body.bomCode || body.poNo || '').trim();
+    const attachedDocs = Array.isArray(body.attachedInvoiceDocs) ? body.attachedInvoiceDocs : [];
+    const nowIso = new Date().toISOString();
+
+    const invRecord = {
+      ...body,
+      id: body.id || assignedInvNo,
+      invNo: assignedInvNo,
+      invoiceNo: assignedInvNo,
+      bomCode: targetBomCode,
+      poNo: targetBomCode,
+      status: 'Invoice Confirmed',
+      pay: 'Completed & Locked',
+      match: 'Matched',
+      invoiceConfirmed: true,
+      invoiceConfirmedAt: nowIso,
+      confirmedBy: session.name || 'Billing & Invoice Exec',
+      attachedInvoiceDocs: attachedDocs,
+      updatedAt: nowIso
+    };
+
+    // 1. Persist in invoice_store (memory + disk + DB)
+    const invStorePath = getStoreFilePath('invoice_store.json');
+    let localInvList = Array.isArray(supabaseMemoryStore['invoice_store']) ? [...supabaseMemoryStore['invoice_store']] : [];
+    if (localInvList.length === 0 && fs.existsSync(invStorePath)) {
+      try { localInvList = JSON.parse(fs.readFileSync(invStorePath, 'utf8')); } catch (_) {}
+    }
+    if (!Array.isArray(localInvList)) localInvList = [];
+
+    const matchIdx = localInvList.findIndex(i =>
+      i && (
+        (assignedInvNo && (i.invNo === assignedInvNo || i.invoiceNo === assignedInvNo || i.id === assignedInvNo)) ||
+        (targetBomCode && (i.bomCode === targetBomCode || i.poNo === targetBomCode))
+      )
+    );
+    if (matchIdx !== -1) {
+      localInvList[matchIdx] = { ...localInvList[matchIdx], ...invRecord };
+    } else {
+      localInvList.unshift(invRecord);
+    }
+    try { fs.writeFileSync(invStorePath, JSON.stringify(localInvList, null, 2), 'utf8'); } catch (_) {}
+    supabaseMemoryStore['invoice_store'] = localInvList;
+    if (isDbConnected()) {
+      await saveDatabaseStore('invoice_store', localInvList).catch(() => {});
+    }
+
+    // 2. Update public.bom_orders directly in PostgreSQL & memory store
+    if (targetBomCode) {
+      if (isDbConnected()) {
+        await query(
+          `UPDATE public.bom_orders
+           SET invoice_no = $1,
+               invoice_confirmed = true,
+               stock_deducted = true,
+               stock_deduction_date = COALESCE(stock_deduction_date, NOW()),
+               status = CASE
+                 WHEN status ILIKE '%complete%' OR status ILIKE '%dispatched%' OR status ILIKE '%delivered%' THEN status
+                 ELSE 'Awaiting Vehicle Loading & Dispatch'
+               END,
+               accounts_verification = jsonb_set(
+                 jsonb_set(
+                   COALESCE(accounts_verification, '{}'::jsonb),
+                   '{verified}',
+                   'true'::jsonb,
+                   true
+                 ),
+                 '{_extra_data}',
+                 COALESCE(accounts_verification->'_extra_data', '{}'::jsonb) || $2::jsonb,
+                 true
+               ),
+               updated_at = NOW()
+           WHERE bom_code = $3 OR code = $3 OR id = $3`,
+          [
+            assignedInvNo,
+            JSON.stringify({
+              invoiceConfirmedAt: nowIso,
+              invoiceNo: assignedInvNo,
+              attachedInvoiceDocs: attachedDocs
+            }),
+            targetBomCode
+          ]
+        );
+      }
+
+      if (Array.isArray(supabaseMemoryStore.bom_store)) {
+        supabaseMemoryStore.bom_store = supabaseMemoryStore.bom_store.map(b => {
+          if (b && (b.bomCode === targetBomCode || b.code === targetBomCode || b.id === targetBomCode)) {
+            const nextStatus = (b.status === 'Completed' || b.status === 'COMPLETED & DISPATCHED' || b.status === 'Fully Dispatched & Delivered')
+              ? b.status
+              : 'Awaiting Vehicle Loading & Dispatch';
+            return {
+              ...b,
+              invoiceNo: assignedInvNo,
+              invoiceConfirmed: true,
+              invoiceConfirmedAt: b.invoiceConfirmedAt || nowIso,
+              attachedInvoiceDocs: attachedDocs,
+              status: nextStatus
+            };
+          }
+          return b;
+        });
+      }
+
+      try {
+        broadcastRealtimeEvent('bom_updated', { action: 'update', recordId: targetBomCode });
+      } catch (_) {}
+    }
+
+    try {
+      broadcastRealtimeEvent('invoice_updated', { action: 'update', recordId: assignedInvNo, invoice: invRecord });
+    } catch (_) {}
+
+    return res.json({ success: true, invoice: invRecord });
+  } catch (err) {
+    console.error('[POST /api/invoices/complete ERROR]:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
   return router;
 }
