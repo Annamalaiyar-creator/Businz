@@ -13,6 +13,12 @@ export let syncMissingRelationalBoms = async () => {};
 let cachedBomsResult = null;
 let lastBomFetchTimestamp = 0;
 let cachedBomsWirePayload = null;
+
+export function invalidateBomsRouterCache() {
+  cachedBomsResult = null;
+  cachedBomsWirePayload = null;
+  lastBomFetchTimestamp = 0;
+}
 let serverBomSequenceCounter = null;
 let serverBomReservationLock = Promise.resolve();
 

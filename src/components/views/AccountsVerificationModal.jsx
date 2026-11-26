@@ -321,7 +321,7 @@ export default function AccountsVerificationModal({
     const targetPiNo = accountsVerificationModal?.sourcePiNo || accountsVerificationModal?.piNo;
     if (!targetPiNo || typeof window === 'undefined') return null;
     try {
-      const rawPiStore = localStorage.getItem('controlroom_pi_store') || localStorage.getItem('businz_pi_store') || localStorage.getItem('sales_pi_store');
+      const rawPiStore = localStorage.getItem('controlroom_sales_pi_store') || localStorage.getItem('controlroom_pi_store') || localStorage.getItem('businz_pi_store') || localStorage.getItem('sales_pi_store');
       if (!rawPiStore) return null;
       const parsedPis = JSON.parse(rawPiStore);
       const piArr = Array.isArray(parsedPis) ? parsedPis : (parsedPis.pis || []);
@@ -2199,7 +2199,9 @@ export default function AccountsVerificationModal({
           };
         });
 
-        const rawPresetGroups = accountsVerificationModal.presetGroups || matchedPi?.presetGroups || {};
+        const bomPG = accountsVerificationModal.presetGroups;
+        const hasBomPG = Array.isArray(bomPG) ? bomPG.length > 0 : Boolean(bomPG && typeof bomPG === 'object' && Object.keys(bomPG).length > 0);
+        const rawPresetGroups = hasBomPG ? bomPG : (matchedPi?.presetGroups || resolvedMatchedPi?.presetGroups || {});
         let pGroups = (Array.isArray(rawPresetGroups) && rawPresetGroups.length > 0)
           ? rawPresetGroups.map((g, i) => ({ ...g, groupId: g?.groupId || g?.id || `preset-${i + 1}` }))
           : (typeof rawPresetGroups === 'object' && Object.keys(rawPresetGroups).length > 0)

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import fs from 'fs';
 import path from 'path';
 import { getStoreFilePath } from '../runtimePaths.js';
+import { invalidateBomsRouterCache } from './bomWorkflowRoutes.js';
 
 export default function createInvoiceRouter(dependencies) {
   const router = Router();
@@ -355,6 +356,7 @@ router.post('/api/invoices/complete', async (req, res) => {
       }
 
       try {
+        invalidateBomsRouterCache();
         broadcastRealtimeEvent('bom_updated', { action: 'update', recordId: targetBomCode });
       } catch (_) {}
     }

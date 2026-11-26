@@ -585,14 +585,18 @@ export default function BomExecutiveModals({ ctx }) {
                     {validPDocs.length > 0 ? (
                       <div style={{ marginTop: '5px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
                         {validPDocs.map((pDoc, pIdx) => {
-                          const rawName = typeof pDoc === 'string' ? pDoc : (pDoc?.name || pDoc?.originalName || `Payment Slip #${pIdx + 1}`);
+                          let parsedDoc = pDoc;
+                          if (typeof pDoc === 'string' && pDoc.trim().startsWith('{')) {
+                            try { parsedDoc = JSON.parse(pDoc); } catch (_) {}
+                          }
+                          const rawName = typeof parsedDoc === 'string' ? parsedDoc : (parsedDoc?.name || parsedDoc?.originalName || `Payment Slip #${pIdx + 1}`);
                           const isPdf = /\.pdf($|\?)/i.test(rawName);
-                          const attachedTimeStr = formatPaymentAttachedTime(pDoc, pIdx);
+                          const attachedTimeStr = formatPaymentAttachedTime(parsedDoc, pIdx);
                           return (
                             <div key={pIdx} style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                               <button
                                 type="button"
-                                onClick={() => setPreviewDocModal({ title: `Payment Proof #${pIdx + 1}: ${rawName}`, doc: pDoc, bomCode })}
+                                onClick={() => setPreviewDocModal({ title: `Payment Proof #${pIdx + 1}: ${rawName}`, doc: parsedDoc, bomCode })}
                                 style={{
                                   border: isPaymentProofPending ? '1px solid #FCA5A5' : '1px solid #BBF7D0',
                                   backgroundColor: '#FFFFFF',

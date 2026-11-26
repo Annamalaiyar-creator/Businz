@@ -98,11 +98,22 @@ export default function BomConfirmAuditSection({ ctx }) {
       ? '100% Paid'
       : normalizePaymentTerm(confirmingBomModal.paymentType || confirmingBomModal.paymentTerms || confirmingBomModal.piPaymentTerms || '100% Paid');
 
-    const rawPresetGroupsList = Array.isArray(confirmingBomModal.presetGroups)
-      ? confirmingBomModal.presetGroups
-      : (confirmingBomModal.presetGroups && typeof confirmingBomModal.presetGroups === 'object'
-        ? Object.values(confirmingBomModal.presetGroups)
-        : []);
+    const bomPG = confirmingBomModal.presetGroups;
+    const hasBomPG = Array.isArray(bomPG) ? bomPG.length > 0 : Boolean(bomPG && typeof bomPG === 'object' && Object.keys(bomPG).length > 0);
+    let fallbackPiPG = null;
+    if (!hasBomPG && (confirmingBomModal.sourcePiNo || confirmingBomModal.piNo) && typeof window !== 'undefined') {
+      try {
+        const rawPis = localStorage.getItem('controlroom_sales_pi_store') || localStorage.getItem('controlroom_pi_store');
+        const piList = rawPis ? JSON.parse(rawPis) : [];
+        const targetPi = String(confirmingBomModal.sourcePiNo || confirmingBomModal.piNo).trim().toLowerCase();
+        const foundPi = (Array.isArray(piList) ? piList : []).find(p => String(p?.piNo || p?.id || '').trim().toLowerCase() === targetPi);
+        if (foundPi?.presetGroups) fallbackPiPG = foundPi.presetGroups;
+      } catch (_) {}
+    }
+    const effPG = hasBomPG ? bomPG : (fallbackPiPG || []);
+    const rawPresetGroupsList = Array.isArray(effPG)
+      ? effPG
+      : (effPG && typeof effPG === 'object' ? Object.values(effPG) : []);
     const modalPresetGroups = rawPresetGroupsList.length > 0
       ? rawPresetGroupsList.map(g => ({ ...g }))
       : (confirmingBomModal.presetName || (cleanNum(confirmingBomModal.presetKitPrice) > 0))

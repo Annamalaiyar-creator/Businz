@@ -964,7 +964,9 @@ export function toConsumerBom(row) {
     presetName: row.preset_name || extraData.presetName || '',
     presetKitPrice: Number(row.preset_kit_price || extraData.presetKitPrice || 0),
     presetSetCount: Number(row.preset_set_count || extraData.presetSetCount || 0),
-    presetGroups: Array.isArray(row.preset_groups) ? row.preset_groups : (extraData.presetGroups || []),
+    presetGroups: (row.preset_groups && (Array.isArray(row.preset_groups) ? row.preset_groups.length > 0 : Object.keys(row.preset_groups).length > 0))
+      ? row.preset_groups
+      : (extraData.presetGroups || []),
     subTotal: Number(row.sub_total || 0),
     gstAmount: Number(row.gst_amount || 0),
     cgstAmount: Number(row.cgst_amount || 0),
@@ -1234,7 +1236,7 @@ export function toDatabaseBomRow(item) {
     preset_name: item.presetName || '',
     preset_kit_price: sanitizeNumber(item.presetKitPrice, 0),
     preset_set_count: Math.round(sanitizeNumber(item.presetSetCount, 0)),
-    preset_groups: Array.isArray(item.presetGroups) ? item.presetGroups : [],
+    preset_groups: (item.presetGroups && typeof item.presetGroups === 'object') ? item.presetGroups : [],
     sub_total: sanitizeNumber(item.subTotal, 0),
     gst_amount: sanitizeNumber(item.gstAmount, 0),
     cgst_amount: sanitizeNumber(item.cgstAmount, 0),

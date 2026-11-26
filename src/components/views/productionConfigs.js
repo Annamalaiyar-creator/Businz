@@ -934,6 +934,13 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                 );
               };
 
+              const confirmedInvoiceBomRefs = new Set(
+                (invoiceList || [])
+                  .filter(i => i && (i.status === 'Invoice Confirmed' || i.status === 'Completed' || i.invoiceConfirmed === true || i.pay === 'Completed & Locked'))
+                  .map(i => String(i.bomCode || i.poNo || '').trim().toUpperCase())
+                  .filter(Boolean)
+              );
+
               const isClosedOrder = (b) => {
                 if (!b || b.cancelled || b.status === 'Cancelled' || b.status === 'Cancelled & Stock Restored') return false;
                 const s = String(b.status || '').toLowerCase();
@@ -942,7 +949,8 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
 
                 // Only if vehicle loading has actually occurred and dispatched
                 const isAccountsDone = Boolean(b.isAccountsDone || b.accountsVerification?.verified);
-                const isInvoiceDone = Boolean(b.invoiceConfirmed === true || b.status === 'Invoice Confirmed');
+                const bRef = String(b.bomCode || b.code || '').trim().toUpperCase();
+                const isInvoiceDone = Boolean(b.invoiceConfirmed === true || b.status === 'Invoice Confirmed' || (bRef && confirmedInvoiceBomRefs.has(bRef)));
                 const hasVehicleLoaded = Boolean(b.vehicleLoading?.loadedAt && (b.vehicleLoading?.dispatched || b.vehicleLoading?.completedAt || b.vehicleLoading?.fullyCompleted));
                 const hasLr = Boolean(b.lrCopyDoc || b.vehicleLoading?.lrCopyDoc || (b.lrNo && b.lrNo !== 'N/A' && b.lrNo !== 'Self-Pickup' && b.lrNo !== 'Awaiting LR Copy'));
                 const isDirect = b.deliveryMode === 'direct' || b.transportMode === 'Self-Pickup' || b.transportMode === 'Direct' || b.deliveryMode === 'own_vehicle' || b.transportMode === 'Own Vehicle';
@@ -963,7 +971,8 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
 
                 // Or vehicle loading has actually dispatched on road via 3rd party transport without LR attached
                 const isAccountsDone = Boolean(b.isAccountsDone || b.accountsVerification?.verified);
-                const isInvoiceDone = Boolean(b.invoiceConfirmed === true || b.status === 'Invoice Confirmed');
+                const bRef = String(b.bomCode || b.code || '').trim().toUpperCase();
+                const isInvoiceDone = Boolean(b.invoiceConfirmed === true || b.status === 'Invoice Confirmed' || (bRef && confirmedInvoiceBomRefs.has(bRef)));
                 const hasVehicleLoaded = Boolean(b.vehicleLoading?.loadedAt && (b.vehicleLoading?.dispatched || b.vehicleLoading?.completedAt));
                 const hasLr = Boolean(b.lrCopyDoc || b.vehicleLoading?.lrCopyDoc || (b.lrNo && b.lrNo !== 'N/A' && b.lrNo !== 'Self-Pickup' && b.lrNo !== 'Awaiting LR Copy'));
                 const isDirect = b.deliveryMode === 'direct' || b.transportMode === 'Self-Pickup' || b.transportMode === 'Direct' || b.deliveryMode === 'own_vehicle' || b.transportMode === 'Own Vehicle';
@@ -981,7 +990,8 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                 if (isAwaitingLrOrder(b)) return false;
 
                 const isAccountsDone = Boolean(b.isAccountsDone || b.accountsVerification?.verified);
-                const isInvoiceDone = Boolean(b.invoiceConfirmed === true || b.status === 'Invoice Confirmed');
+                const bRef = String(b.bomCode || b.code || '').trim().toUpperCase();
+                const isInvoiceDone = Boolean(b.invoiceConfirmed === true || b.status === 'Invoice Confirmed' || (bRef && confirmedInvoiceBomRefs.has(bRef)));
 
                 // An order qualifies for Awaiting Vehicle Loading ONLY when Accounts verification AND Invoice confirmation are both completed
                 if (b.status === 'Awaiting Vehicle Loading & Dispatch' || b.status === 'AWAITING VEHICLE LOADING' || String(b.status || '').toLowerCase().includes('awaiting vehicle load')) {
