@@ -174,6 +174,8 @@ export function buildCanonicalInvoices({ bomStore: rawBomStore = [], invoiceList
         diff: '0.00', match: 'Matched',
         pay: payVal,
         status: statusVal,
+        invoiceConfirmed: isConf,
+        attachedInvoiceDocs: Array.isArray(b.attachedInvoiceDocs) ? b.attachedInvoiceDocs : [],
         items: packedItems,
         dispatchPacking: b.dispatchPacking,
         billingAddress: b.billingAddress,

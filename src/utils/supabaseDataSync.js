@@ -954,6 +954,9 @@ export function toConsumerBom(row) {
     invoiceConfirmedAt: row.invoice_confirmed_at || extraData.invoiceConfirmedAt || row.stock_deduction_date || extraData.stockDeductionDate || null,
     invoiceDeducted: Boolean(row.invoice_deducted),
     invoiceNo: row.invoice_no || extraData.invoiceNo || '',
+    attachedInvoiceDocs: Array.isArray(row.attached_invoice_docs)
+      ? row.attached_invoice_docs
+      : (Array.isArray(extraData.attachedInvoiceDocs) ? extraData.attachedInvoiceDocs : []),
     stockBlocked: Boolean(row.stock_blocked),
     stockBlockedAt: row.stock_blocked_at || null,
     stockDeducted: Boolean(row.stock_deducted),
@@ -1099,6 +1102,7 @@ export function toDatabaseBomRow(item) {
   if (item.pendingSalesDispatchPayment !== undefined) mergedExtra.pendingSalesDispatchPayment = item.pendingSalesDispatchPayment;
   if (item.fullyCompleted !== undefined) mergedExtra.fullyCompleted = item.fullyCompleted;
   if (item.invoiceNo) mergedExtra.invoiceNo = item.invoiceNo;
+  if (Array.isArray(item.attachedInvoiceDocs)) mergedExtra.attachedInvoiceDocs = item.attachedInvoiceDocs;
   if (item.destination) mergedExtra.destination = item.destination;
   if (item.cancelled !== undefined || String(item.status || '').toLowerCase().includes('cancel')) {
     mergedExtra.cancelled = Boolean(item.cancelled || String(item.status || '').toLowerCase().includes('cancel'));
@@ -1281,7 +1285,7 @@ export async function saveCloudBomRow(bom) {
         const curEmp = typeof window !== 'undefined' && window.localStorage
           ? (localStorage.getItem('controlroom_logged_emp_id') || 'SE-001')
           : 'SE-001';
-        fetch(`${baseUrl}/api/boms`, {
+        await fetch(`${baseUrl}/api/boms`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -1290,7 +1294,7 @@ export async function saveCloudBomRow(bom) {
             'x-employee-code': curEmp
           },
           body: JSON.stringify({ bom: consumerBom, isUpdate: true })
-        }).catch(() => {});
+        });
       }
     } catch (_) {}
 

@@ -593,7 +593,7 @@ export default function InvoiceDetailModal({
     }
   };
 
-  const handleConfirmInvoice = () => {
+  const handleConfirmInvoice = async () => {
     // 1. Check if 1 hour has expired on an active reissue request -> Auto-Cancel
     const isReissuePending = Boolean(
       inv.addressProofReuploadRequested ||
@@ -753,7 +753,6 @@ export default function InvoiceDetailModal({
         (targetInvNumber && (item.invNo === targetInvNumber || item.code === targetInvNumber))
       ) ? updatedInvoiceRecord : item);
       try {
-        saveCloudInvoiceRow(updatedInvoiceRecord);
         localStorage.setItem('controlroom_invoice_store', JSON.stringify(updated.map(stripDataUrlsFromRecord)));
       } catch (e) { }
       return updated;
@@ -764,6 +763,9 @@ export default function InvoiceDetailModal({
     const targetBomId = matchingBom?.id || (foundBom && foundBom.id);
     const updatedBomData = {
       ...(matchingBom || foundBom || {}),
+      id: (matchingBom?.id || foundBom?.id || targetBomCode),
+      bomCode: (matchingBom?.bomCode || foundBom?.bomCode || targetBomCode),
+      code: (matchingBom?.code || foundBom?.code || targetBomCode),
       status: ((matchingBom?.status === 'Completed' || matchingBom?.status === 'COMPLETED & DISPATCHED' || matchingBom?.status === 'Fully Dispatched & Delivered')
         ? matchingBom.status
         : 'Awaiting Vehicle Loading & Dispatch'),
@@ -797,11 +799,16 @@ export default function InvoiceDetailModal({
         addressProofDisclaimerClause: waiveProofDisclaimer ? 'The Invoice is processed without the Address Proof so if any problem happens means VRM Structures India Private Limited will not take any responsibility.' : null
       } : b);
       try {
-        saveCloudBomRow(updatedBomData);
         localStorage.setItem('controlroom_bom_store', JSON.stringify(updatedBoms.map(stripDataUrlsFromRecord)));
       } catch (e) { }
       return updatedBoms;
     });
+
+    // Await authoritative cloud/server persistence for BOTH invoice and BOM so refresh never reverts
+    await Promise.allSettled([
+      saveCloudInvoiceRow(updatedInvoiceRecord),
+      saveCloudBomRow(updatedBomData)
+    ]);
 
     // 6. Broadcast global events
     window.dispatchEvent(new CustomEvent('controlroom_bom_store_updated', { detail: { bom: updatedBomData } }));
