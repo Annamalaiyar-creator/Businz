@@ -460,6 +460,10 @@ export function toConsumerInvoice(row) {
     vehicleLoading: meta.vehicleLoading || null,
     lrCopyDoc: meta.lrCopyDoc || null,
     deliveryAddressProofDoc: meta.deliveryAddressProofDoc || null,
+    invoiceConfirmed: Boolean(meta.invoiceConfirmed || row.status === 'Invoice Confirmed' || row.status === 'Completed' || row.pay === 'Completed & Locked'),
+    invoiceConfirmedAt: meta.invoiceConfirmedAt || null,
+    confirmedBy: meta.confirmedBy || null,
+    attachedInvoiceDocs: Array.isArray(meta.attachedInvoiceDocs) ? meta.attachedInvoiceDocs : [],
     presetName: meta.presetName || '',
     createdAt: row.created_at,
     updatedAt: row.updated_at
@@ -497,6 +501,10 @@ export function toDatabaseInvoiceRow(item) {
     vehicleLoading: item.vehicleLoading || null,
     lrCopyDoc: item.lrCopyDoc || null,
     deliveryAddressProofDoc: item.deliveryAddressProofDoc || null,
+    invoiceConfirmed: Boolean(item.invoiceConfirmed || status === 'Invoice Confirmed' || status === 'Completed' || pay === 'Completed & Locked'),
+    invoiceConfirmedAt: item.invoiceConfirmedAt || null,
+    confirmedBy: item.confirmedBy || null,
+    attachedInvoiceDocs: Array.isArray(item.attachedInvoiceDocs) ? item.attachedInvoiceDocs : [],
     presetName: typeof item.preset_name === 'string' && !item.preset_name.startsWith('{') ? item.preset_name : (item.presetName || '')
   };
 
@@ -533,15 +541,20 @@ export async function saveCloudInvoiceRow(invoice) {
       console.warn('[SupabaseSync] Single invoice save error:', error.message);
     }
 
-    const consumerInv = toConsumerInvoice(data?.[0] || row);
+    const consumerInv = {
+      ...invoice,
+      ...toConsumerInvoice(data?.[0] || row),
+      invoiceConfirmed: Boolean(invoice.invoiceConfirmed || invoice.status === 'Invoice Confirmed' || invoice.pay === 'Completed & Locked'),
+      attachedInvoiceDocs: Array.isArray(invoice.attachedInvoiceDocs) ? invoice.attachedInvoiceDocs : []
+    };
 
     // Broadcast local event matching existing listeners
     safeDispatchWindowEvent('controlroom_invoice_store_updated', { invoice: consumerInv, action: 'upsert' });
     safeDispatchWindowEvent('controlroom_store_update', { storeKey: 'invoice_store', action: 'upsert', item: consumerInv });
 
-    // Async disk backup fallback
+    // Await authoritative BUSINZ server invoice_store persistence so refresh never reverts status
     try {
-      fetch('/api/store/invoice_store', {
+      await fetch('/api/store/invoice_store', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -550,7 +563,7 @@ export async function saveCloudInvoiceRow(invoice) {
             : {})
         },
         body: JSON.stringify(consumerInv)
-      }).catch(() => {});
+      });
     } catch (_) {}
 
     return consumerInv;

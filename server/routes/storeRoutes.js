@@ -671,7 +671,12 @@ router.post('/api/store/:key', async (req, res) => {
         return item.employee || item.invNo || item.invoiceNo || item.invoiceNumber || item.id || item.piNo || item.estimate_number || item.estimateId || item.bomCode || item.code || item.poNo || item.grnNo || item.vendorCode || item.email || item.name;
       };
       const singleId = getId(storeData);
-      const existingIdx = singleId ? list.findIndex(it => getId(it) === singleId) : -1;
+      const singleBomRef = key === 'invoice_store' ? String(storeData.bomCode || storeData.poNo || '').trim().toUpperCase() : '';
+      const existingIdx = list.findIndex(it => {
+        if (singleId && getId(it) === singleId) return true;
+        if (singleBomRef && it && (String(it.bomCode || it.poNo || '').trim().toUpperCase() === singleBomRef)) return true;
+        return false;
+      });
       if (existingIdx !== -1) {
         list[existingIdx] = { ...list[existingIdx], ...storeData };
       } else {
