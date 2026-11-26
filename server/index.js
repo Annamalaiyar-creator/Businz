@@ -3322,7 +3322,8 @@ app.use(createStoreRouter({
   isDbConnected,
   supabase,
   supabaseMemoryStore,
-  STORE_PAYLOAD_LIMIT_BYTES
+  STORE_PAYLOAD_LIMIT_BYTES,
+  applyDefaultCableUom
 }));
 
 import createCustomerRouter from './routes/customerRoutes.js';
@@ -3748,6 +3749,7 @@ app.use(createRawMaterialsRouter({
   saveDeletedRawMaterialCodes,
   resolveDefaultUom,
   resolveProductCode,
+  applyDefaultCableUom,
   safeWriteJsonFileAsync,
   saveDatabaseStore,
   getDatabaseStore,

@@ -50,7 +50,8 @@ export default function createStoreRouter(dependencies) {
     isDbConnected,
     supabase,
     supabaseMemoryStore,
-    STORE_PAYLOAD_LIMIT_BYTES
+    STORE_PAYLOAD_LIMIT_BYTES,
+    applyDefaultCableUom = (item) => item
   } = dependencies;
 
 router.get('/api/store/:key', async (req, res) => {

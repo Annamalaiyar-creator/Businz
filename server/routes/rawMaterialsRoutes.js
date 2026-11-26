@@ -17,6 +17,7 @@ export default function createRawMaterialsRouter(dependencies) {
     saveDeletedRawMaterialCodes,
     resolveDefaultUom,
     resolveProductCode,
+    applyDefaultCableUom = (item) => item,
     safeWriteJsonFileAsync,
     saveDatabaseStore,
     getDatabaseStore,
