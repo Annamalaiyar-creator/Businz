@@ -637,7 +637,8 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                 );
               };
 
-              const allAccountsBoms = (bomStore || []).filter(isAccountsEligible).sort(compareBomDescending);
+              const isNotArchivedBom = (b) => Boolean(b && !b.archived && String(b.bomCode || b.code || b.id || '').trim().toUpperCase() !== 'VRM-BOM-2026-07');
+              const allAccountsBoms = (bomStore || []).filter(b => isNotArchivedBom(b) && isAccountsEligible(b)).sort(compareBomDescending);
               const attachedAccountsBoms = allAccountsBoms.filter(b => !isPaymentProofPendingOrder(b));
               const paymentProofPendingBoms = allAccountsBoms.filter(b => isPaymentProofPendingOrder(b));
 
@@ -687,7 +688,7 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                   { id: 'AwaitingPaymentProof', label: 'Payment Proof Pending', count: paymentProofPendingBoms.length, bg: '#FFEDD5', fg: '#C2410C' },
                   { id: 'Verified', label: 'Verified', count: attachedAccountsBoms.filter(b => isAccVerifiedOrder(b)).length, bg: '#DCFCE7', fg: '#166534' }
                 ],
-                headers: ['BOM Code', 'Customer Name', 'Received Date', 'Document', 'Payment Type', 'Total Amount', 'Credit Amount', 'Status'],
+                headers: ['BOM Code', 'Customer Name', 'Received Date', 'Document', 'Payment Type', 'Credit Amount', 'Status'],
                 rows: allAccountsBoms.map(b => {
                   const acc = b.accountsVerification || {};
                   const isVerified = isAccVerifiedOrder(b);
@@ -879,8 +880,7 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                     docType: docTypeVal,
                     c4: docTypeVal,
                     c5: b.paymentType || b.paymentTerms || b.piPaymentTerms || '100% Paid',
-                    c6: totalAmtFormatted,
-                    c7: creditAmtFormatted,
+                    c6: creditAmtFormatted,
                     paymentStatusText: payStatus,
                     packingProgressText: null,
                     status: statusText,
@@ -1037,7 +1037,7 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                 return hasEnteredPipeline;
               };
 
-              const allDispatchBoms = (bomStore || []).filter(isDispatchEligible);
+              const allDispatchBoms = (bomStore || []).filter(b => b && !b.archived && String(b.bomCode || b.code || b.id || '').trim().toUpperCase() !== 'VRM-BOM-2026-07' && isDispatchEligible(b));
 
               // Hoist PI localStorage read & JSON.parse once per config build (prevents N x JSON.parse main-thread freeze)
               const piByNumMap = new Map();

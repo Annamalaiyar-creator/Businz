@@ -4,7 +4,7 @@ import {
   FileCheck, CheckSquare, XCircle, ChevronLeft, RotateCcw,
   Truck, Download, Printer, Receipt, Camera, Video, Film, FileCode, User
 } from "lucide-react";
-import { getMediaFromCache, getMediaFromCacheAsync, saveMediaToCache, compressAndSaveFile, stripDataUrlsFromRecord } from "../../utils/otherViewsShared";
+import { getMediaFromCache, getMediaFromCacheAsync, saveMediaToCache, compressAndSaveFile, stripDataUrlsFromRecord, cleanNum } from "../../utils/otherViewsShared";
 import { uploadBomDocumentFile, validateClientFile } from "../../utils/bomStorageClient";
 import { resolveDocumentUrl, resolveDocumentUrlAsync } from "../../utils/documentResolver";
 import { saveCloudStore, saveCloudBomRow, saveCloudInvoiceRow } from "../../utils/supabaseDataSync";
@@ -529,758 +529,419 @@ export default function InvoiceDetailModal({
     });
   };
 
+  const handleCancelInvoice = () => {
+    if (window.confirm(`Are you sure you want to cancel Invoice ${invNoText}? This will mark the invoice as Cancelled and return the order status.`)) {
+      const nowIso = new Date().toISOString();
+      const targetCode = inv.poNo || inv.code || bomRefText;
+
+      setViewingInvoiceModal(prev => prev ? {
+        ...prev,
+        status: 'Cancelled',
+        pay: 'Cancelled',
+        cancelledAt: nowIso
+      } : prev);
+
+      setInvoiceList(prev => {
+        const updatedInvoices = prev.map(item => (item.invNo === inv.invNo || item.code === inv.code || item.bomCode === inv.bomCode) ? {
+          ...item,
+          status: 'Cancelled',
+          pay: 'Cancelled',
+          cancelledAt: nowIso
+        } : item);
+        try {
+          const cancelledInv = updatedInvoices.find(item => item.invNo === inv.invNo || item.code === inv.code || item.bomCode === inv.bomCode);
+          if (cancelledInv) saveCloudInvoiceRow(cancelledInv);
+        } catch (e) { }
+        return updatedInvoices;
+      });
+
+      setBomStore(prev => prev.map(b => (
+        isBomCodeMatching(b.bomCode || b.code, targetCode) ||
+        (b.salesOrderNo && isBomCodeMatching(b.salesOrderNo, targetCode))
+      ) ? {
+        ...b,
+        status: 'Invoice Cancelled',
+        invoiceConfirmed: false,
+        invoiceCancelledAt: nowIso
+      } : b));
+
+      try {
+        addLiveNotification({
+          title: `Invoice ${invNoText} Cancelled`,
+          message: `Invoice ${invNoText} for BOM ${bomRefText} has been marked as Cancelled.`,
+          type: 'alert'
+        });
+      } catch (e) { }
+
+      alert(`Invoice ${invNoText} has been successfully marked as Cancelled.`);
+    }
+  };
+
+  const handleConfirmInvoice = () => {
+    // 1. Check if 1 hour has expired on an active reissue request -> Auto-Cancel
+    const isReissuePending = Boolean(
+      inv.addressProofReuploadRequested ||
+      matchingBom?.addressProofReuploadRequested ||
+      matchingBom?.status === 'Address Proof Requested from Sales' ||
+      inv.status === 'Address Proof Reissue Requested'
+    );
+    const reqAt = inv.addressProofReuploadRequestedAt || inv.reissueRequestedAt || matchingBom?.addressProofReuploadRequestedAt;
+    const ONE_HOUR_MS = 60 * 60 * 1000;
+    if (isReissuePending && reqAt && (Date.now() - new Date(reqAt).getTime() >= ONE_HOUR_MS)) {
+      handleAutoCancelForMissingProof();
+      return;
+    }
+
+    // 2. Check address proof requirement for alternate delivery address
+    const targetRef = bomRefText || inv.poNo || inv.bomCode || inv.code;
+    const foundBom = matchingBom || (bomStore || []).find(b => isBomCodeMatching(b.bomCode || b.code, targetRef));
+    const bAddr = inv.billingAddress || matchingBom?.billingAddress || foundBom?.billingAddress || 'Plot No 42, SIDCO Industrial Estate, Ambattur, Chennai';
+    const dAddr = inv.deliveryAddress || matchingBom?.deliveryAddress || foundBom?.deliveryAddress || bAddr;
+    const isDifferentAddress = !Boolean(
+      inv.sameAsBilling ||
+      matchingBom?.sameAsBilling ||
+      foundBom?.sameAsBilling ||
+      (bAddr && dAddr && bAddr.trim().toLowerCase() === dAddr.trim().toLowerCase())
+    );
+    const hasAddressProof = Boolean(
+      inv.deliveryAddressProofDoc ||
+      (Array.isArray(inv.deliveryAddressProofDocs) && inv.deliveryAddressProofDocs.length > 0) ||
+      matchingBom?.deliveryAddressProofDoc ||
+      (Array.isArray(matchingBom?.deliveryAddressProofDocs) && matchingBom.deliveryAddressProofDocs.length > 0) ||
+      foundBom?.deliveryAddressProofDoc ||
+      (Array.isArray(foundBom?.deliveryAddressProofDocs) && foundBom.deliveryAddressProofDocs.length > 0)
+    );
+
+    const waiveProofDisclaimer = false;
+    if (isDifferentAddress && (!hasAddressProof || isReissuePending)) {
+      const msg = isReissuePending
+        ? 'Address Proof reissue is still pending from Sales. The invoice cannot move to Vehicle Loading & Dispatch until Sales attaches the verified address proof (or the 1-hour SLA expires and cancels the order).'
+        : 'Address Proof is mandatory because Billing Address and Delivery Address are different.\n\nThis invoice cannot proceed to Vehicle Loading & Dispatch without the Address Proof. Click "Reissue" to notify Sales (1-hour SLA — if not attached within 1 hour, the BOM & Invoice will be cancelled automatically).';
+      if (typeof showCustomAlert === 'function') {
+        showCustomAlert(msg, 'Address Proof Mandatory', 'warning');
+      } else {
+        alert(`⚠️ ${msg}`);
+      }
+      return;
+    }
+
+    // 1. Identify items to deduct (if any selected, use selected, otherwise deduct ALL invoice items)
+    const hasExplicitSelection = (itemsList || []).some(item => item.selected === true);
+    const packedItemsToDeduct = hasExplicitSelection
+      ? (itemsList || []).filter(item => Boolean(item.selected))
+      : (itemsList || []);
+
+    // Check if matching BOM already blocked/deducted stock at creation/verification time
+    const isStockAlreadyBlocked = Boolean(matchingBom?.stockBlocked || inv.stockDeducted || inv.stockBlocked);
+
+    if (!isStockAlreadyBlocked) {
+      // 2. Reduce stock in stockRegistry (if available)
+      try {
+        const rawRegistry = localStorage.getItem('controlroom_stock_registry_store');
+        if (rawRegistry) {
+          const updated = JSON.parse(rawRegistry) || [];
+          packedItemsToDeduct.forEach(pItem => {
+            const qtyToDeduct = parseInt(pItem.invQty || pItem.bomQty || pItem.qty || 1, 10) || 0;
+            const matchIdx = updated.findIndex(r =>
+              (r.sku && pItem.sku && r.sku === pItem.sku) ||
+              (r.itemCode && pItem.itemCode && r.itemCode === pItem.itemCode) ||
+              (r.name && (pItem.name || pItem.itemName) && r.name.toLowerCase() === (pItem.name || pItem.itemName).toLowerCase())
+            );
+            if (matchIdx !== -1) {
+              const currentStock = parseInt(updated[matchIdx].currentStock || updated[matchIdx].stock || 0, 10);
+              updated[matchIdx].currentStock = Math.max(0, currentStock - qtyToDeduct);
+              updated[matchIdx].lastUpdated = new Date().toISOString();
+            }
+          });
+          localStorage.setItem('controlroom_stock_registry_store', JSON.stringify(updated));
+        }
+      } catch (err) {
+        console.warn('Stock registry reduction note:', err);
+      }
+
+      // 3. Central inventory live audit deduction for raw materials
+      try {
+        packedItemsToDeduct.forEach(pItem => {
+          const qtyToDeduct = parseInt(pItem.invQty || pItem.bomQty || pItem.qty || 1, 10) || 0;
+          if (qtyToDeduct > 0) {
+            centralInventoryStore.deductStock(
+              pItem.sku || pItem.itemCode || pItem.name || 'Raw Material',
+              qtyToDeduct,
+              `Invoice Clearance for ${invNoText} (${bomRefText})`,
+              'Priya / Anand (Billing)',
+              'Billing'
+            );
+          }
+        });
+      } catch (err) {
+        console.warn('Central inventory live stock deduction notice:', err);
+      }
+    }
+
+    // 4. Update the Invoice itself
+    const unpackedItems = (itemsList || []).filter(it => it.selected === false);
+    const formattedInvAmt = cleanNum(inv.totalVal, cleanNum(inv.amount, cleanNum(inv.totalAmount, 0)));
+    const targetInvNumber = (invNoText && invNoText !== 'Pending Confirmation')
+      ? invNoText
+      : (inv.invNo && inv.invNo !== 'Pending Confirmation'
+        ? inv.invNo
+        : (matchingBom?.invoiceNo && matchingBom.invoiceNo !== 'Pending Confirmation'
+          ? matchingBom.invoiceNo
+          : (inv.code && inv.code !== 'Pending Confirmation' ? inv.code : 'VRM-INV-2026-01')));
+
+    const updatedInvoiceRecord = {
+      ...inv,
+      invoiceNo: targetInvNumber,
+      invNo: targetInvNumber,
+      code: targetInvNumber,
+      invAmt: formattedInvAmt,
+      amount: formattedInvAmt,
+      poVal: formattedInvAmt,
+      grnVal: formattedInvAmt,
+      status: 'Invoice Confirmed',
+      match: 'Matched',
+      pay: 'Completed & Locked',
+      stockDeducted: true,
+      stockDeductionDate: new Date().toISOString(),
+      packedItemsDeducted: packedItemsToDeduct,
+      unpackedItemsRemaining: unpackedItems,
+      addressProofReuploadRequested: false,
+      invoiceConfirmed: true,
+      invoiceConfirmedAt: new Date().toISOString(),
+      confirmedBy: 'Priya (Billing & Invoice Exec)',
+      confirmedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short', year: 'numeric' }),
+      deliveryAddressProofDoc: hasAddressProof ? (inv.deliveryAddressProofDoc || matchingBom?.deliveryAddressProofDoc || foundBom?.deliveryAddressProofDoc) : null,
+      addressProofWaivedWithDisclaimer: waiveProofDisclaimer,
+      addressProofDisclaimerClause: waiveProofDisclaimer ? 'The Invoice is processed without the Address Proof so if any problem happens means VRM Structures India Private Limited will not take any responsibility.' : null,
+      termsAndConditions: waiveProofDisclaimer
+        ? [...(inv.termsAndConditions || []), 'The Invoice is processed without the Address Proof so if any problem happens means VRM Structures India Private Limited will not take any responsibility.']
+        : inv.termsAndConditions
+    };
+
+    setViewingInvoiceModal(updatedInvoiceRecord);
+    setInvoiceList(prev => {
+      const updated = (prev || []).map(item => (
+        item.invNo === inv.invNo || item.code === inv.code || item.bomCode === inv.bomCode ||
+        (targetInvNumber && (item.invNo === targetInvNumber || item.code === targetInvNumber))
+      ) ? updatedInvoiceRecord : item);
+      try {
+        saveCloudInvoiceRow(updatedInvoiceRecord);
+        localStorage.setItem('controlroom_invoice_store', JSON.stringify(updated.map(stripDataUrlsFromRecord)));
+      } catch (e) { }
+      return updated;
+    });
+
+    // 5. Update BOM order stage to "Awaiting Vehicle Loading & Dispatch"
+    const targetBomCode = bomRefText || inv.poNo || inv.bomCode || inv.code;
+    const targetBomId = matchingBom?.id || (foundBom && foundBom.id);
+    const updatedBomData = {
+      ...(matchingBom || foundBom || {}),
+      status: ((matchingBom?.status === 'Completed' || matchingBom?.status === 'COMPLETED & DISPATCHED' || matchingBom?.status === 'Fully Dispatched & Delivered')
+        ? matchingBom.status
+        : 'Awaiting Vehicle Loading & Dispatch'),
+      invoiceConfirmed: true,
+      invoiceConfirmedAt: new Date().toISOString(),
+      invoiceConfirmedBy: 'Priya (Billing & Invoice Exec)',
+      invoiceNo: targetInvNumber,
+      stockDeducted: true,
+      stockDeductionDate: new Date().toISOString(),
+      deliveryAddressProofDoc: hasAddressProof ? (inv.deliveryAddressProofDoc || matchingBom?.deliveryAddressProofDoc || foundBom?.deliveryAddressProofDoc) : null,
+      addressProofWaivedWithDisclaimer: waiveProofDisclaimer,
+      addressProofDisclaimerClause: waiveProofDisclaimer ? 'The Invoice is processed without the Address Proof so if any problem happens means VRM Structures India Private Limited will not take any responsibility.' : null
+    };
+
+    setBomStore(prev => {
+      const updatedBoms = (prev || []).map(b => (
+        (targetBomCode && isBomCodeMatching(b.bomCode || b.code || b.salesOrderNo, targetBomCode)) ||
+        (matchingBom && (b.bomCode === matchingBom.bomCode || b.code === matchingBom.code || b.id === matchingBom.id))
+      ) ? {
+        ...b,
+        status: (b.status === 'Completed' || b.status === 'COMPLETED & DISPATCHED' || b.status === 'Fully Dispatched & Delivered') ? b.status : 'Awaiting Vehicle Loading & Dispatch',
+        invoiceConfirmed: true,
+        invoiceConfirmedAt: b.invoiceConfirmedAt || new Date().toISOString(),
+        invoiceNo: targetInvNumber,
+        stockDeducted: true,
+        stockDeductionDate: new Date().toISOString(),
+        deliveryAddressProofDoc: hasAddressProof ? (inv.deliveryAddressProofDoc || matchingBom?.deliveryAddressProofDoc || foundBom?.deliveryAddressProofDoc) : null,
+        addressProofWaivedWithDisclaimer: waiveProofDisclaimer,
+        addressProofDisclaimerClause: waiveProofDisclaimer ? 'The Invoice is processed without the Address Proof so if any problem happens means VRM Structures India Private Limited will not take any responsibility.' : null
+      } : b);
+      try {
+        saveCloudBomRow(updatedBomData);
+        localStorage.setItem('controlroom_bom_store', JSON.stringify(updatedBoms.map(stripDataUrlsFromRecord)));
+      } catch (e) { }
+      return updatedBoms;
+    });
+
+    // 6. Broadcast global events
+    window.dispatchEvent(new CustomEvent('controlroom_bom_store_updated', { detail: { bom: updatedBomData } }));
+    window.dispatchEvent(new CustomEvent('controlroom_invoice_store_updated', { detail: { invoice: updatedInvoiceRecord } }));
+    window.dispatchEvent(new Event('controlroom_storage_update'));
+    window.dispatchEvent(new Event('storage'));
+
+    // 7. Push to Server API Endpoint
+    try {
+      const serverPayload = {
+        invoiceNo: targetInvNumber,
+        invNo: targetInvNumber,
+        bomCode: bomRefText,
+        customerName: customerText,
+        invoiceDate: invDateText,
+        totalAmount: formattedInvAmt,
+        items: packedItemsToDeduct,
+        unpackedItemsRemaining: unpackedItems,
+        isEditing: isEditingInvoice,
+        editPayload: isEditingInvoice ? invoiceEditForm : null,
+        billingAddress: inv.billingAddress || matchingBom?.billingAddress,
+        deliveryAddress: inv.deliveryAddress || matchingBom?.deliveryAddress,
+        deliveryAddressProofDoc: hasAddressProof ? (inv.deliveryAddressProofDoc || matchingBom?.deliveryAddressProofDoc || foundBom?.deliveryAddressProofDoc) : null,
+        addressProofWaivedWithDisclaimer: waiveProofDisclaimer,
+        addressProofDisclaimerClause: waiveProofDisclaimer ? 'The Invoice is processed without the Address Proof so if any problem happens means VRM Structures India Private Limited will not take any responsibility.' : null
+      };
+
+      fetch('/api/invoices/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(stripDataUrlsFromRecord(serverPayload))
+      })
+        .then(res => res.json())
+        .then(result => {
+          if (result && result.success && result.invoice) {
+            const createdInv = result.invoice;
+            const finalConfirmedInvNo = createdInv.invoiceNo || createdInv.invNo || targetInvNumber;
+            setInvoiceList(prev => {
+              const updated = (prev || []).map(item =>
+                (item.invNo === targetInvNumber || item.code === targetInvNumber || item.bomCode === bomRefText)
+                  ? {
+                    ...item,
+                    code: finalConfirmedInvNo,
+                    invoiceNo: finalConfirmedInvNo,
+                    id: createdInv.id || item.id,
+                    invoiceNumber: finalConfirmedInvNo,
+                    status: 'Invoice Confirmed',
+                    match: 'Matched',
+                    pay: 'Completed & Locked'
+                  }
+                  : item
+              );
+              try {
+                localStorage.setItem('controlroom_invoice_store', JSON.stringify(updated.map(stripDataUrlsFromRecord)));
+              } catch (_) {}
+              return updated;
+            });
+            setBomStore(prev => {
+              const updated = (prev || []).map(b =>
+                (b.bomCode === bomRefText || b.code === bomRefText)
+                  ? { ...b, invoiceNo: finalConfirmedInvNo, invoiceConfirmed: true }
+                  : b
+              );
+              try {
+                localStorage.setItem('controlroom_bom_store', JSON.stringify(updated.map(stripDataUrlsFromRecord)));
+              } catch (_) {}
+              return updated;
+            });
+          }
+        })
+        .catch(err => console.warn('Invoice sync notice:', err));
+    } catch (e) { console.error('Invoice fetch trigger error:', e); }
+
+    // Trigger Real-time Workflow Notifications with synthesized sound & deep-links for Sales & Dispatch
+    try {
+      notifyInvoiceCompletedReadyForDispatch({
+        invoiceNo: invNoText,
+        bomCode: bomRefText,
+        customerName: customerText,
+        salesPerson: inv.salesPerson || (matchingBom && matchingBom.salesPerson)
+      });
+    } catch (notifErr) {
+      console.warn('Dispatch notification warning in InvoiceDetailModal:', notifErr);
+    }
+
+    // Return to main page cleanly - close modal and push user back to invoice ledger / table
+    setIsEditingInvoice(false);
+    setViewingInvoiceModal(null);
+    if (typeof showCustomAlert === 'function') {
+      showCustomAlert(`Invoice ${invNoText} for BOM ${bomRefText} (${customerText}) confirmed successfully! Order forwarded to Dispatch for vehicle loading.`, 'Invoice Confirmed & Released', 'success');
+    }
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-      {/* Back Header Bar */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <button
-          onClick={() => {
-            setIsEditingInvoice(false);
-            setViewingInvoiceModal(null);
-          }}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            backgroundColor: '#FFFFFF',
-            border: '1px solid #CBD5E1',
-            borderRadius: '8px',
-            padding: '8px 16px',
-            fontSize: '13px',
-            fontWeight: '700',
-            color: '#475569',
-            cursor: 'pointer',
-            boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-          }}
-        >
-          <ChevronLeft style={{ width: '16px', height: '16px' }} /> Back to Invoice List
-        </button>
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-          {/* Print button */}
-          <button
-            onClick={() => setPrintTaxInvoiceModal(inv)}
-            style={{
-              backgroundColor: '#FFFFFF',
-              border: '1px solid #CBD5E1',
-              borderRadius: '8px',
-              padding: '0 16px',
-              height: '38px',
-              fontSize: '13px',
-              fontWeight: '700',
-              color: '#334155',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}
-          >
-            <Printer style={{ width: '15px', height: '15px', color: '#475569' }} /> Print
-          </button>
-
-          {/* Download button */}
-          <button
-            onClick={() => alert(`Downloading Invoice ${invNoText} PDF...`)}
-            style={{
-              backgroundColor: '#FFFFFF',
-              border: '1px solid #CBD5E1',
-              borderRadius: '8px',
-              padding: '0 16px',
-              height: '38px',
-              fontSize: '13px',
-              fontWeight: '700',
-              color: '#334155',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}
-          >
-            <Download style={{ width: '15px', height: '15px', color: '#475569' }} /> Download
-          </button>
-
-          {/* Cancel Invoice button */}
-          {inv.status === 'Cancelled' ? (
-            <div
-              style={{
-                backgroundColor: '#FEF2F2',
-                border: '1px solid #FECACA',
-                borderRadius: '8px',
-                padding: '0 16px',
-                height: '38px',
-                fontSize: '13px',
-                fontWeight: '800',
-                color: '#DC2626',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px'
-              }}
-            >
-              <XCircle style={{ width: '15px', height: '15px', color: '#DC2626' }} /> Cancelled
-            </div>
-          ) : (
-            <button
-              onClick={() => {
-                if (window.confirm(`Are you sure you want to cancel Invoice ${invNoText}? This will mark the invoice as Cancelled and return the order status.`)) {
-                  const nowIso = new Date().toISOString();
-                  const targetCode = inv.poNo || inv.code || bomRefText;
-
-                  setViewingInvoiceModal(prev => prev ? {
-                    ...prev,
-                    status: 'Cancelled',
-                    pay: 'Cancelled',
-                    cancelledAt: nowIso
-                  } : prev);
-
-                  setInvoiceList(prev => {
-                    const updatedInvoices = prev.map(item => (item.invNo === inv.invNo || item.code === inv.code || item.bomCode === inv.bomCode) ? {
-                      ...item,
-                      status: 'Cancelled',
-                      pay: 'Cancelled',
-                      cancelledAt: nowIso
-                    } : item);
-                    try {
-                      const cancelledInv = updatedInvoices.find(item => item.invNo === inv.invNo || item.code === inv.code || item.bomCode === inv.bomCode);
-                      if (cancelledInv) saveCloudInvoiceRow(cancelledInv);
-                    } catch (e) { }
-                    return updatedInvoices;
-                  });
-
-                  setBomStore(prev => prev.map(b => (
-                    isBomCodeMatching(b.bomCode || b.code, targetCode) ||
-                    (b.salesOrderNo && isBomCodeMatching(b.salesOrderNo, targetCode))
-                  ) ? {
-                    ...b,
-                    status: 'Invoice Cancelled',
-                    invoiceConfirmed: false,
-                    invoiceCancelledAt: nowIso
-                  } : b));
-
-                  try {
-                    addLiveNotification({
-                      title: `Invoice ${invNoText} Cancelled`,
-                      message: `Invoice ${invNoText} for BOM ${bomRefText} has been marked as Cancelled.`,
-                      type: 'alert'
-                    });
-                  } catch (e) { }
-
-                  alert(`Invoice ${invNoText} has been successfully marked as Cancelled.`);
-                }
-              }}
-              style={{
-                backgroundColor: '#FEF2F2',
-                border: '1px solid #FECACA',
-                borderRadius: '8px',
-                padding: '0 16px',
-                height: '38px',
-                fontSize: '13px',
-                fontWeight: '700',
-                color: '#DC2626',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                transition: 'all 0.15s ease'
-              }}
-              title="Cancel this invoice"
-            >
-              <XCircle style={{ width: '15px', height: '15px', color: '#DC2626' }} /> Cancel
-            </button>
-          )}
-
-          {/* Invoices are strictly official records and read-only */}
-
-          {/* Confirm Invoice primary button */}
-          {['Invoice Confirmed', 'CLOSED', 'Completed', 'Confirmed', 'Fully Dispatched & Delivered'].includes(inv.status) ? (
-            <div
-              style={{
-                backgroundColor: '#DCFCE7',
-                color: '#166534',
-                border: '1px solid #86EFAC',
-                borderRadius: '8px',
-                padding: '0 18px',
-                height: '38px',
-                fontSize: '13px',
-                fontWeight: '800',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px'
-              }}
-            >
-              <CheckCircle style={{ width: '16px', height: '16px', color: '#166534' }} /> Invoice Completed
-            </div>
-          ) : (
-            <button
-              onClick={() => {
-                // 1. Check if 1 hour has expired on an active reissue request -> Auto-Cancel
-                const isReissuePending = Boolean(
-                  inv.addressProofReuploadRequested ||
-                  matchingBom?.addressProofReuploadRequested ||
-                  matchingBom?.status === 'Address Proof Requested from Sales' ||
-                  inv.status === 'Address Proof Reissue Requested'
-                );
-                const reqAt = inv.addressProofReuploadRequestedAt || inv.reissueRequestedAt || matchingBom?.addressProofReuploadRequestedAt;
-                const ONE_HOUR_MS = 60 * 60 * 1000;
-                if (isReissuePending && reqAt && (Date.now() - new Date(reqAt).getTime() >= ONE_HOUR_MS)) {
-                  handleAutoCancelForMissingProof();
-                  return;
-                }
-
-                // 2. Check address proof requirement for alternate delivery address
-                const targetRef = bomRefText || inv.poNo || inv.bomCode || inv.code;
-                const foundBom = matchingBom || (bomStore || []).find(b => isBomCodeMatching(b.bomCode || b.code, targetRef));
-                const bAddr = inv.billingAddress || matchingBom?.billingAddress || foundBom?.billingAddress || 'Plot No 42, SIDCO Industrial Estate, Ambattur, Chennai';
-                const dAddr = inv.deliveryAddress || matchingBom?.deliveryAddress || foundBom?.deliveryAddress || bAddr;
-                const isDifferentAddress = !Boolean(
-                  inv.sameAsBilling ||
-                  matchingBom?.sameAsBilling ||
-                  foundBom?.sameAsBilling ||
-                  (bAddr && dAddr && bAddr.trim().toLowerCase() === dAddr.trim().toLowerCase())
-                );
-                const hasAddressProof = Boolean(inv.deliveryAddressProofDoc || matchingBom?.deliveryAddressProofDoc || foundBom?.deliveryAddressProofDoc);
-
-                let waiveProofDisclaimer = false;
-                if (isDifferentAddress && (!hasAddressProof || isReissuePending)) {
-                  const disclaimerClause = 'The Invoice is processed without the Address Proof so if any problem happens means VRM Structures India Private Limited will not take any responsibility.';
-                  const confirmWaive = window.confirm(
-                    `⚠️ Address proof has not been provided by Sales.\n\nUnder company policy, this invoice can ONLY be completed with the following mandatory disclaimer added to Terms & Conditions:\n\n"${disclaimerClause}"\n\nDo you want to proceed and complete the invoice under this condition?`
-                  );
-                  if (!confirmWaive) {
-                    return;
-                  }
-                  waiveProofDisclaimer = true;
-                }
-
-                // 1. Identify items to deduct (if any selected, use selected, otherwise deduct ALL invoice items)
-                const hasExplicitSelection = (itemsList || []).some(item => item.selected === true);
-                const packedItemsToDeduct = hasExplicitSelection
-                  ? (itemsList || []).filter(item => Boolean(item.selected))
-                  : (itemsList || []);
-
-                // Check if matching BOM already blocked/deducted stock at creation/verification time
-                const isStockAlreadyBlocked = Boolean(matchingBom?.stockBlocked || inv.stockDeducted || inv.stockBlocked);
-
-                if (!isStockAlreadyBlocked) {
-                  // 2. Reduce stock in stockRegistry (if available)
-                  try {
-                    const rawRegistry = localStorage.getItem('controlroom_stock_registry_store');
-                    if (rawRegistry) {
-                      const updated = JSON.parse(rawRegistry) || [];
-                      packedItemsToDeduct.forEach(pItem => {
-                        const qtyToDeduct = parseInt(pItem.invQty || pItem.bomQty || pItem.qty || 1, 10) || 0;
-                        const matchIdx = updated.findIndex(r =>
-                          (r.code && pItem.code && r.code.toLowerCase().trim() === pItem.code.toLowerCase().trim()) ||
-                          (r.item && pItem.name && (
-                            r.item.toLowerCase().trim() === pItem.name.toLowerCase().trim() ||
-                            r.item.toLowerCase().includes(pItem.name.toLowerCase().trim()) ||
-                            pItem.name.toLowerCase().includes(r.item.toLowerCase().trim())
-                          ))
-                        );
-                        if (matchIdx !== -1) {
-                          const currentStock = Math.max(0, parseInt(String(updated[matchIdx].stock).replace(/,/g, ''), 10) || 0);
-                          const newStock = Math.max(0, currentStock - qtyToDeduct);
-                          const minLvl = parseInt(String(updated[matchIdx].minLevel || '500').replace(/,/g, ''), 10) || 500;
-                          updated[matchIdx] = {
-                            ...updated[matchIdx],
-                            stock: String(newStock),
-                            status: newStock === 0 ? 'Out of Stock' : (newStock <= minLvl ? 'Low Stock' : 'In Stock')
-                          };
-                        }
-                      });
-                      localStorage.setItem('controlroom_stock_registry_store', JSON.stringify(updated));
-                    }
-                  } catch (e) { console.warn('Stock registry update warning in InvoiceDetailModal:', e); }
-
-                // 3. Deduct stock directly from prodModuleEngine central live inventory
-                try {
-                  const engineInv = prodModuleEngine.getInventory();
-                  packedItemsToDeduct.forEach(pItem => {
-                    const qtyToDeduct = parseInt(pItem.invQty || pItem.bomQty || pItem.qty || 1, 10) || 0;
-                    const pCode = (pItem.code || '').toUpperCase().trim();
-                    const pName = (pItem.name || pItem.description || '').toLowerCase().trim();
-
-                    let targetItem = engineInv.find(i => {
-                      const iCode = (i.code || '').toUpperCase().trim();
-                      const iName = (i.name || '').toLowerCase().trim();
-                      if (pCode && iCode === pCode) return true;
-                      if (pName && iName && (iName === pName || iName.includes(pName) || pName.includes(iName))) return true;
-                      return false;
-                    });
-
-                    if (targetItem) {
-                      targetItem.physicalStock = Math.max(0, targetItem.physicalStock - qtyToDeduct);
-                      targetItem.availableStock = Math.max(0, targetItem.physicalStock - (targetItem.reservedStock || 0));
-                    } else {
-                      targetItem = {
-                        code: pCode || `FG-${Date.now().toString().slice(-4)}`,
-                        name: pItem.name || pItem.description || 'Finished Good Item',
-                        category: 'Finished Goods',
-                        unit: pItem.uom || pItem.unit || 'Nos',
-                        physicalStock: Math.max(0, 1000 - qtyToDeduct),
-                        availableStock: Math.max(0, 1000 - qtyToDeduct),
-                        reservedStock: 0,
-                        safetyStock: 50,
-                        bayLocation: 'Main Store'
-                      };
-                      prodModuleEngine.inventory.push(targetItem);
-                    }
-
-                    // Record in central audit log ledger for inventory traceability
-                    const salesRepName = inv.salesPerson || (inv.createdByName ? `${inv.createdByName} (Sales)` : 'Sales Team');
-                    const targetCodeName = targetItem ? targetItem.code : (pCode || 'FG-ITEM');
-                    prodModuleEngine.addLedgerEntry({
-                      timestamp: new Date().toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }),
-                      type: 'PRODUCTION_CONSUMPTION',
-                      woId: invNoText,
-                      itemCode: targetCodeName,
-                      itemName: pItem.name || pItem.description || 'Finished Good Item',
-                      qty: -qtyToDeduct,
-                      unit: pItem.uom || pItem.unit || 'Nos',
-                      previousStock: targetItem.physicalStock + qtyToDeduct,
-                      newStock: targetItem.physicalStock,
-                      user: 'Accounts & Billing Department',
-                      employee: salesRepName,
-                      reason: `Dispatch & Invoice Outflow (-${qtyToDeduct} ${pItem.uom || pItem.unit || 'Nos'}): Sales order BOM (${bomRefText}) invoiced (${invNoText}) by ${salesRepName}. Stock deducted from inventory.`,
-                      referenceDoc: invNoText
-                    });
-                  });
-                  prodModuleEngine.saveToStorage();
-                } catch (e) { console.error('Invoice stock deduction engine error:', e); }
-
-                // 4. Update controlroom_raw_materials_store accurately
-                try {
-                  const savedMatStr = localStorage.getItem('controlroom_raw_materials_store');
-                  let currentMats = [];
-                  if (savedMatStr) {
-                    try { currentMats = JSON.parse(savedMatStr); } catch (e) { }
-                  }
-                  if (!Array.isArray(currentMats)) {
-                    currentMats = [];
-                  }
-
-                  packedItemsToDeduct.forEach(pItem => {
-                    const qtyToDeduct = parseInt(pItem.invQty || pItem.bomQty || pItem.qty || 1, 10) || 0;
-                    const pCode = (pItem.code || '').toUpperCase().trim();
-                    const pName = (pItem.name || pItem.description || '').toLowerCase().trim();
-
-                    let match = currentMats.find(m => {
-                      const mCode = (m.code || '').toUpperCase().trim();
-                      const mName = (m.name || '').toLowerCase().trim();
-                      if (pCode && mCode === pCode) return true;
-                      if (pName && (mName === pName || mName.includes(pName) || pName.includes(mName))) return true;
-                      return false;
-                    });
-
-                    if (match) {
-                      const currSt = Math.max(0, parseInt(String(match.stock).replace(/,/g, ''), 10) || 0);
-                      const newSt = Math.max(0, currSt - qtyToDeduct);
-                      const minL = parseInt(String(match.minLevel || '100').replace(/,/g, ''), 10) || 100;
-                      match.stock = newSt;
-                      match.issuedProd = (match.issuedProd || 0) + qtyToDeduct;
-                      match.status = newSt === 0 ? 'Out of Stock' : (newSt <= minL ? 'Low Stock' : 'In Stock');
-                      match.lastUpdated = new Date().toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-                    } else {
-                      const startStock = 1000;
-                      const newSt = Math.max(0, startStock - qtyToDeduct);
-                      currentMats.push({
-                        code: pCode || `FG-${Date.now().toString().slice(-4)}`,
-                        name: pItem.name || pItem.description || 'Finished Good Item',
-                        cat: 'Finished Goods',
-                        unit: pItem.uom || pItem.unit || 'Nos',
-                        stock: newSt,
-                        minLevel: 50,
-                        status: newSt === 0 ? 'Out of Stock' : (newSt <= 50 ? 'Low Stock' : 'In Stock'),
-                        store: 'Main Store',
-                        hsn: pItem.hsn || pItem.hsnCode || getHsnCode(pItem),
-                        lastUpdated: new Date().toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
-                        reserved: 0,
-                        openingStock: startStock,
-                        goodsReceived: 0,
-                        issuedProd: qtyToDeduct,
-                        matReturn: 0,
-                        stockAdj: 0
-                      });
-                    }
-                  });
-
-                  localStorage.setItem('controlroom_raw_materials_store', JSON.stringify(currentMats));
-                  saveCloudStore('raw_materials_store', currentMats);
-                  window.dispatchEvent(new Event('controlroom_raw_materials_update'));
-                } catch (err) { console.error('Error updating raw materials store:', err); }
-              } // end if (!isStockAlreadyBlocked)
-
-              // Deduct Inventory in Central Inventory Store
-              try {
-                centralInventoryStore.deductStockForBOM(bomRefText, packedItemsToDeduct, 'Accounts Invoice Confirmation');
-                window.dispatchEvent(new Event('central_inventory_updated'));
-                window.dispatchEvent(new Event('controlroom_storage_update'));
-                window.dispatchEvent(new Event('storage'));
-              } catch (cErr) {
-                console.warn('Central inventory store deduction error in InvoiceDetailModal:', cErr);
-              }
-
-                // 5. Update Invoice status & persist to localStorage / cloud store
-                const unpackedItems = (itemsList || []).filter(it => it.selected === false);
-                const disclaimerClause = 'The Invoice is processed without the Address Proof so if any problem happens means VRM Structures India Private Limited will not take any responsibility.';
-                const targetInvNumber = (invNoText && invNoText !== 'Pending Confirmation')
-                  ? invNoText
-                  : (inv.invNo && inv.invNo !== 'Pending Confirmation'
-                    ? inv.invNo
-                    : (matchingBom?.invoiceNo && matchingBom.invoiceNo !== 'Pending Confirmation'
-                      ? matchingBom.invoiceNo
-                      : (inv.code && inv.code !== 'Pending Confirmation' ? inv.code : 'VRM-INV-2026-01')));
-
-                const finalInvAmt = cleanAmtNum(totalAmtRaw) || invAmtNum || bomTotalAmt || computedGrandTotal || 0;
-                const formattedInvAmt = `₹ ${finalInvAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
-
-                const confirmedInvRecord = {
-                  ...inv,
-                  id: inv.id || targetInvNumber,
-                  invNo: targetInvNumber,
-                  code: targetInvNumber,
-                  invoiceNo: targetInvNumber,
-                  invoiceNumber: targetInvNumber,
-                  poNo: bomRefText,
-                  bomCode: bomRefText,
-                  vendor: customerText,
-                  customerName: customerText,
-                  date: invDateText || new Date().toISOString().split('T')[0],
-                  invAmt: finalInvAmt,
-                  total: finalInvAmt,
-                  rawTotal: finalInvAmt,
-                  amount: formattedInvAmt,
-                  poVal: formattedInvAmt,
-                  grnVal: formattedInvAmt,
-                  status: 'Invoice Confirmed',
-                  match: 'Matched',
-                  pay: 'Completed & Locked',
-                  stockDeducted: true,
-                  stockDeductionDate: new Date().toISOString(),
-                  packedItemsDeducted: packedItemsToDeduct,
-                  unpackedItemsRemaining: unpackedItems,
-                  addressProofReuploadRequested: false,
-                  processedWithoutAddressProof: waiveProofDisclaimer ? true : Boolean(inv.processedWithoutAddressProof),
-                  addressProofWaived: waiveProofDisclaimer ? true : Boolean(inv.addressProofWaived),
-                  disclaimerTerm: waiveProofDisclaimer ? disclaimerClause : inv.disclaimerTerm,
-                  terms: waiveProofDisclaimer
-                    ? ((inv.terms ? inv.terms + '\n• ' : '') + disclaimerClause)
-                    : inv.terms,
-                  items: packedItemsToDeduct.length > 0 ? packedItemsToDeduct : (inv.items || matchingBom?.dispatchPacking || matchingBom?.items || [])
-                };
-
-                setInvoiceList(prev => {
-                  const currentList = Array.isArray(prev) ? prev : [];
-                  const matchKey = (item) =>
-                    (item.invNo && item.invNo === targetInvNumber) ||
-                    (item.code && item.code === targetInvNumber) ||
-                    (item.id && item.id === confirmedInvRecord.id) ||
-                    (item.bomCode && item.bomCode === bomRefText) ||
-                    (item.poNo && item.poNo === bomRefText) ||
-                    (inv.invNo && item.invNo === inv.invNo) ||
-                    (inv.id && item.id === inv.id);
-
-                  const exists = currentList.some(matchKey);
-                  const updatedInvoices = exists
-                    ? currentList.map(item => matchKey(item) ? { ...item, ...confirmedInvRecord } : item)
-                    : [confirmedInvRecord, ...currentList];
-
-                  try {
-                    localStorage.setItem('controlroom_invoice_store', JSON.stringify(updatedInvoices.map(stripDataUrlsFromRecord)));
-                    saveCloudInvoiceRow(confirmedInvRecord);
-                  } catch (e) { }
-                  return updatedInvoices;
-                });
-
-                // Update viewing modal state directly
-                setViewingInvoiceModal(confirmedInvRecord);
-
-                // Broadcast local event matching existing listeners
-                try {
-                  window.dispatchEvent(new CustomEvent('controlroom_invoice_store_updated', {
-                    detail: { invoice: confirmedInvRecord }
-                  }));
-                  window.dispatchEvent(new Event('controlroom_storage_update'));
-                  window.dispatchEvent(new Event('storage'));
-                } catch (_) {}
-
-                // 6. Update matching BOM status to 'Awaiting Vehicle Loading & Dispatch'
-                const targetBomCode = (matchingBom && (matchingBom.bomCode || matchingBom.code)) || bomRefText || inv.bomCode || inv.poNo || inv.code;
-                setBomStore(prev => {
-                  const updatedBoms = (prev || []).map(b => (
-                    (targetBomCode && isBomCodeMatching(b.bomCode || b.code || b.salesOrderNo, targetBomCode)) ||
-                    (matchingBom && (b.bomCode === matchingBom.bomCode || b.code === matchingBom.code || b.id === matchingBom.id))
-                  ) ? {
-                    ...b,
-                    status: (b.status === 'Completed' || b.status === 'COMPLETED & DISPATCHED' || b.status === 'Fully Dispatched & Delivered') ? b.status : 'Awaiting Vehicle Loading & Dispatch',
-                    invoiceConfirmed: true,
-                    invoiceConfirmedAt: b.invoiceConfirmedAt || new Date().toISOString(),
-                    invoiceNo: targetInvNumber,
-                    stockDeducted: true,
-                    stockDeductionDate: new Date().toISOString(),
-                    packedItemsDeducted: packedItemsToDeduct,
-                    unpackedItemsRemaining: unpackedItems,
-                    addressProofReuploadRequested: false,
-                    processedWithoutAddressProof: waiveProofDisclaimer ? true : Boolean(b.processedWithoutAddressProof),
-                    addressProofWaived: waiveProofDisclaimer ? true : Boolean(b.addressProofWaived),
-                    disclaimerTerm: waiveProofDisclaimer ? disclaimerClause : b.disclaimerTerm
-                  } : b);
-
-                  try {
-                    localStorage.setItem('controlroom_bom_store', JSON.stringify(updatedBoms.map(stripDataUrlsFromRecord)));
-                    const matchedUpdated = updatedBoms.find(b => b.bomCode === targetBomCode || b.code === targetBomCode || (matchingBom && b.bomCode === matchingBom.bomCode));
-                    if (matchedUpdated) {
-                      saveCloudBomRow(matchedUpdated);
-                      try {
-                        autoDispatchOrderStatusToCustomer(matchedUpdated, 'INVOICE_CONFIRMED');
-                      } catch (_) {}
-                      fetch('/api/boms', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ bom: stripDataUrlsFromRecord(matchedUpdated), isUpdate: true })
-                      }).catch(() => {});
-                      window.dispatchEvent(new CustomEvent('controlroom_bom_store_updated', { detail: { bom: matchedUpdated } }));
-                    }
-                    window.dispatchEvent(new Event('storage'));
-                  } catch (persistErr) {
-                    console.error('Error persisting BOM store upon invoice confirm:', persistErr);
-                  }
-
-                  return updatedBoms;
-                });
-
-                // 7. Post Invoice to BUSINZ Native Catalog API (/api/invoices) - Dynamic support for Individual Products vs Preset Packages
-                const rawPresetGroups = matchingBom?.presetGroups || inv.presetGroups;
-                const presetGroupsList = Array.isArray(rawPresetGroups)
-                  ? rawPresetGroups
-                  : (rawPresetGroups && typeof rawPresetGroups === 'object' ? Object.values(rawPresetGroups) : []);
-
-                const isPresetOrder = Boolean(
-                  (presetGroupsList && presetGroupsList.length > 0) ||
-                  (matchingBom?.presetName && matchingBom.presetName !== 'Solar Mounting Structure Kit') ||
-                  (inv.presetName && inv.presetName !== 'Solar Mounting Structure Kit')
-                );
-
-                let backendItems = [];
-                let totalAmt = 0;
-                let invoiceNotes = '';
-
-                if (isPresetOrder) {
-                  const presetName = (presetGroupsList.length > 0 && presetGroupsList[0]?.presetName) ||
-                    matchingBom?.presetName || inv.presetName || 'Solar Mounting Structure Preset Kit';
-                  const totalPresetPrice = Number(cleanAmtNum(totalAmtRaw) || invAmtNum || bomTotalAmt || computedGrandTotal || 0);
-                  totalAmt = totalPresetPrice;
-
-                  if (presetGroupsList.length > 0) {
-                    presetGroupsList.forEach(grp => {
-                      const setCount = parseFloat(grp.setCount) || 1;
-                      const unitPrice = parseFloat(grp.kitPrice != null ? grp.kitPrice : grp.price) || 0;
-                      const gName = grp.presetName || grp.name || presetName;
-                      backendItems.push({
-                        name: gName,
-                        rate: unitPrice,
-                        quantity: setCount,
-                        unit: 'SET',
-                        description: `Preset Structure Package: ${gName}${bomRefText ? ` (Ref BOM: ${bomRefText})` : ''}`
-                      });
-                    });
-
-                    // Append any custom individual products added alongside the preset
-                    const extraItems = (itemsList || []).filter(it => it.selected !== false && !it.isPresetItem && !it.presetGroupId);
-                    extraItems.forEach(it => {
-                      const q = parseFloat(it.invQty != null ? it.invQty : (it.qty != null ? it.qty : it.bomQty)) || 1;
-                      const r = parseFloat(it.rate != null ? it.rate : it.unitPrice) || 0;
-                      backendItems.push({
-                        name: it.name || it.productName || 'Solar Structure Component',
-                        rate: r,
-                        quantity: q,
-                        unit: it.uom || it.unit || 'Nos',
-                        description: it.desc || it.description || ''
-                      });
-                    });
-                  } else {
-                    backendItems.push({
-                      name: presetName,
-                      rate: totalPresetPrice,
-                      quantity: 1,
-                      unit: 'SET',
-                      description: `Preset Structure Package: ${presetName}${bomRefText ? ` (Ref BOM: ${bomRefText})` : ''}`
-                    });
-                  }
-                  invoiceNotes = `Sales Invoice confirmed for BOM ${bomRefText} (${presetName}).`;
-                } else {
-                  // Individual products (Single product or multiple individual products)
-                  const billedItems = (itemsList || []).filter(it => it.selected !== false);
-                  const itemsToInclude = billedItems.length > 0 ? billedItems : (itemsList || []);
-
-                  backendItems = itemsToInclude.map(it => {
-                    const q = parseFloat(it.invQty != null ? it.invQty : (it.qty != null ? it.qty : it.bomQty)) || 1;
-                    const r = parseFloat(it.rate != null ? it.rate : it.unitPrice) || 0;
-                    return {
-                      name: it.name || it.productName || 'Solar Structure Component',
-                      rate: r,
-                      quantity: q,
-                      unit: it.uom || it.unit || 'Nos',
-                      description: it.desc || it.description || ''
-                    };
-                  });
-
-                  totalAmt = Number(cleanAmtNum(totalAmtRaw) || invAmtNum || bomTotalAmt || computedGrandTotal || 0);
-                  invoiceNotes = `Sales Invoice confirmed for BOM ${bomRefText}.`;
-                }
-
-                if (waiveProofDisclaimer) {
-                  invoiceNotes += `\nTerms: ${disclaimerClause}`;
-                }
-
-                try {
-                  fetch('/api/invoices', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      invNo: targetInvNumber,
-                      invoiceNo: targetInvNumber,
-                      poNo: bomRefText,
-                      bomCode: bomRefText,
-                      vendor: customerText,
-                      customerName: customerText,
-                      date: invDateText || new Date().toISOString().split('T')[0],
-                      invAmt: totalAmt,
-                      isPreset: isPresetOrder,
-                      presetName: isPresetOrder ? (matchingBom?.presetName || inv.presetName) : undefined,
-                      presetGroups: isPresetOrder ? presetGroupsList : undefined,
-                      items: backendItems,
-                      notes: invoiceNotes,
-                      terms: waiveProofDisclaimer ? disclaimerClause : (inv.terms || undefined)
-                    })
-                  })
-                    .then(res => res.json())
-                    .then(data => {
-                      if (data && data.invoice) {
-                        const createdInv = data.invoice;
-                        const finalConfirmedInvNo = createdInv.invoice_number || createdInv.invNo || targetInvNumber;
-                        setInvoiceList(prev => {
-                          const updated = (prev || []).map(item =>
-                            (item.invNo === inv.invNo || item.code === inv.code || item.bomCode === inv.bomCode || item.poNo === bomRefText || item.invNo === targetInvNumber)
-                              ? {
-                                  ...item,
-                                  invNo: finalConfirmedInvNo,
-                                  code: finalConfirmedInvNo,
-                                  invoiceNo: finalConfirmedInvNo,
-                                  id: createdInv.id || item.id,
-                                  invoiceNumber: finalConfirmedInvNo,
-                                  status: 'Invoice Confirmed',
-                                  pay: 'Completed & Locked',
-                                  synced: true
-                                }
-                              : item
-                          );
-                          try {
-                            localStorage.setItem('controlroom_invoice_store', JSON.stringify(updated.map(stripDataUrlsFromRecord)));
-                          } catch (_) {}
-                          return updated;
-                        });
-                        setBomStore(prev => {
-                          const updated = (prev || []).map(b =>
-                            (b.bomCode === bomRefText || b.code === bomRefText)
-                              ? { ...b, invoiceNo: finalConfirmedInvNo, invoiceConfirmed: true }
-                              : b
-                          );
-                          try {
-                            localStorage.setItem('controlroom_bom_store', JSON.stringify(updated.map(stripDataUrlsFromRecord)));
-                          } catch (_) {}
-                          return updated;
-                        });
-                      }
-                    })
-                    .catch(err => console.warn('Invoice sync notice:', err));
-                } catch (e) { console.error('Invoice fetch trigger error:', e); }
-
-                // Trigger Real-time Workflow Notifications with synthesized sound & deep-links for Sales & Dispatch
-                try {
-                  notifyInvoiceCompletedReadyForDispatch({
-                    invoiceNo: invNoText,
-                    bomCode: bomRefText,
-                    customerName: customerText,
-                    salesPerson: inv.salesPerson || (matchingBom && matchingBom.salesPerson)
-                  });
-                } catch (notifErr) {
-                  console.warn('Dispatch notification warning in InvoiceDetailModal:', notifErr);
-                }
-
-                // Return to main page cleanly - close modal and push user back to invoice ledger / table
-                setIsEditingInvoice(false);
-                setViewingInvoiceModal(null);
-                if (typeof showCustomAlert === 'function') {
-                  showCustomAlert(`Invoice ${invNoText} for BOM ${bomRefText} (${customerText}) confirmed successfully! Order forwarded to Dispatch for vehicle loading.`, 'Invoice Confirmed & Released', 'success');
-                }
-              }}
-              style={{
-                backgroundColor: '#3B82F6',
-                color: '#FFFFFF',
-                border: 'none',
-                borderRadius: '8px',
-                padding: '0 20px',
-                height: '38px',
-                fontSize: '13px',
-                fontWeight: '700',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                boxShadow: '0 2px 4px rgba(37,99,235,0.2)'
-              }}
-            >
-              <CheckCircle style={{ width: '16px', height: '16px', color: '#FFFFFF' }} /> Confirm Invoice & Send to Dispatch Loading
-            </button>
-          )}
-        </div>
-      </div>
+      {/* Top Header Action Bar removed — actions live in Sticky Bottom Bar */}
 
       {/* CARD 1: TOP HEADER METRICS & INVOICE SUMMARY */}
       <div style={{
         backgroundColor: '#FFFFFF',
         borderRadius: '16px',
         border: '1px solid #E2E8F0',
-        padding: '24px',
-        display: 'grid',
-        gridTemplateColumns: '1.2fr 1fr',
-        gap: '24px'
+        boxShadow: '0 2px 12px rgba(15, 23, 42, 0.05)',
+        overflow: 'hidden'
       }}>
-        {/* Left Header Section */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        {/* Dark Slate-Teal Top Banner */}
+        <div style={{
+          background: 'linear-gradient(135deg, #0F172A 0%, #1E293B 100%)',
+          padding: '18px 24px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '16px'
+        }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
             <div style={{
-              width: '48px',
-              height: '48px',
+              width: '44px',
+              height: '44px',
               borderRadius: '12px',
-              backgroundColor: '#EEF2FF',
+              background: 'linear-gradient(135deg, #0E7490, #0891B2)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: '#4F46E5'
+              boxShadow: '0 2px 10px rgba(14,116,144,0.4)'
             }}>
-              <Receipt style={{ width: '26px', height: '26px' }} />
+              <Receipt style={{ width: '22px', height: '22px', color: '#FFFFFF' }} />
             </div>
             <div>
-              <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#64748B', textTransform: 'uppercase' }}>Invoice Number</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <h2 style={{ margin: 0, fontSize: '22px', fontWeight: '800', color: '#0F172A' }}>{invNoText}</h2>
+              <div style={{ fontSize: '10.5px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
+                Invoice Number
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginTop: '2px' }}>
+                <h2 style={{ margin: 0, fontSize: '21px', fontWeight: '900', color: '#FFFFFF', letterSpacing: '-0.3px' }}>{invNoText}</h2>
                 {(inv?.docType === 'DC' || matchingBom?.docType === 'DC') ? (
-                  <span style={{ backgroundColor: '#FEF3C7', color: '#92400E', border: '1px solid #FCD34D', padding: '3px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{
+                    backgroundColor: 'rgba(251,191,36,0.18)', color: '#FDE68A',
+                    border: '1px solid rgba(251,191,36,0.4)',
+                    padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '800',
+                    display: 'inline-flex', alignItems: 'center', gap: '4px'
+                  }}>
                     <Truck size={12} strokeWidth={2.2} />
                     <span>DC (DELIVERY CHALLAN)</span>
                   </span>
                 ) : (
-                  <span style={{ backgroundColor: '#EEF2FF', color: '#3730A3', border: '1px solid #C7D2FE', padding: '3px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{
+                    backgroundColor: 'rgba(99,102,241,0.22)', color: '#C7D2FE',
+                    border: '1px solid rgba(165,180,252,0.35)',
+                    padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '800',
+                    display: 'inline-flex', alignItems: 'center', gap: '4px'
+                  }}>
                     <FileText size={12} strokeWidth={2.2} />
                     <span>TAX INVOICE</span>
                   </span>
                 )}
                 {['Invoice Confirmed', 'CLOSED', 'Completed', 'Confirmed'].includes(inv.status) ? (
-                  <span style={{ backgroundColor: '#DCFCE7', color: '#166534', border: '1px solid #86EFAC', padding: '3px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                    <Check style={{ width: '13px', height: '13px', strokeWidth: 3 }} /> INVOICE COMPLETED & LOCKED
+                  <span style={{
+                    backgroundColor: 'rgba(34,197,94,0.2)', color: '#86EFAC',
+                    border: '1px solid rgba(134,239,172,0.4)',
+                    padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '800',
+                    display: 'inline-flex', alignItems: 'center', gap: '4px'
+                  }}>
+                    <Check style={{ width: '12px', height: '12px', strokeWidth: 3 }} /> INVOICE COMPLETED & LOCKED
                   </span>
                 ) : (
-                  <span style={{ backgroundColor: '#FEF3C7', color: '#B45309', border: '1px solid #FDE68A', padding: '3px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: '800' }}>
+                  <span style={{
+                    backgroundColor: 'rgba(251,191,36,0.18)', color: '#FDE68A',
+                    border: '1px solid rgba(251,191,36,0.4)',
+                    padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '800'
+                  }}>
                     INVOICE PENDING
                   </span>
                 )}
@@ -1288,132 +949,180 @@ export default function InvoiceDetailModal({
             </div>
           </div>
 
-          {/* Metadata Grid with Complete Payment Information */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px 16px', borderTop: '1px solid #F1F5F9', paddingTop: '16px', fontSize: '12px' }}>
-            <div>
-              <div style={{ color: '#64748B', fontSize: '11px', fontWeight: '600' }}>Related BOM</div>
-              <strong style={{ color: '#2563EB' }}>{bomRefText}</strong>
+          {/* Right Header Grand Total Pill */}
+          <div style={{
+            backgroundColor: 'rgba(14,116,144,0.22)',
+            border: '1px solid rgba(103,232,249,0.3)',
+            borderRadius: '12px',
+            padding: '10px 18px',
+            textAlign: 'right'
+          }}>
+            <div style={{ fontSize: '10px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              Grand Total (incl. GST)
             </div>
-            <div>
-              <div style={{ color: '#64748B', fontSize: '11px', fontWeight: '600' }}>Invoice Date</div>
-              <strong style={{ color: '#1E293B' }}>{invDateText}</strong>
-            </div>
-            <div>
-              <div style={{ color: '#64748B', fontSize: '11px', fontWeight: '600' }}>Payment Due Date</div>
-              <strong style={{ color: '#1E293B' }}>{invDateText}</strong>
-            </div>
-
-            <div>
-              <div style={{ color: '#64748B', fontSize: '11px', fontWeight: '600' }}>Customer</div>
-              <strong style={{ color: '#2563EB' }}>{customerText}</strong>
-              {(invGst || matchingBom?.gstNo || matchingBom?.customerGst) && (
-                <div style={{ marginTop: '2px', fontSize: '11px', fontWeight: '700', color: '#0E7490' }}>
-                  GSTIN: {invGst || matchingBom?.gstNo || matchingBom?.customerGst}
-                </div>
-              )}
-            </div>
-            <div>
-              <div style={{ color: '#64748B', fontSize: '11px', fontWeight: '600' }}>Sales Person</div>
-              <strong style={{ color: '#0E7490', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                <User size={13} style={{ color: '#0E7490' }} />
-                {safeStringVal(inv.salesPerson || matchingBom?.salesPerson || matchingBom?.createdBy, 'Sales Department').replace(/\s*\([^)]*\)/g, '').trim()}
-              </strong>
-            </div>
-            <div>
-              <div style={{ color: '#64748B', fontSize: '11px', fontWeight: '600' }}>Payment Type</div>
-              <strong style={{ color: '#1E293B' }}>{paymentTypeText}</strong>
-            </div>
-
-            <div>
-              <div style={{ color: '#64748B', fontSize: '11px', fontWeight: '600', marginBottom: '3px' }}>Payment Status</div>
-              <div>
-                <span style={{
-                  backgroundColor: (balanceAmt === 0 || ['Invoice Confirmed', 'CLOSED', 'Completed', 'Confirmed'].includes(inv.status)) ? '#DCFCE7' : '#FEF3C7',
-                  color: (balanceAmt === 0 || ['Invoice Confirmed', 'CLOSED', 'Completed', 'Confirmed'].includes(inv.status)) ? '#166534' : '#B45309',
-                  border: (balanceAmt === 0 || ['Invoice Confirmed', 'CLOSED', 'Completed', 'Confirmed'].includes(inv.status)) ? '1px solid #86EFAC' : '1px solid #FDE68A',
-                  padding: '2px 8px',
-                  borderRadius: '10px',
-                  fontSize: '10.5px',
-                  fontWeight: '800',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '4px'
-                }}>
-                  <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: (balanceAmt === 0 || ['Invoice Confirmed', 'CLOSED', 'Completed', 'Confirmed'].includes(inv.status)) ? '#16A34A' : '#D97706' }} />
-                  {['Invoice Confirmed', 'CLOSED', 'Completed', 'Confirmed'].includes(inv.status) ? 'Verified & Paid (100%)' : paymentStatusText}
-                </span>
-              </div>
-            </div>
-            <div>
-              <div style={{ color: '#64748B', fontSize: '11px', fontWeight: '600' }}>Advance Received</div>
-              <div style={{ fontWeight: '800', color: '#0F172A' }}>
-                ₹ {advanceAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })} {isFullAdvance ? '(100%)' : (is50Percent ? '(50%)' : '')}
-              </div>
-            </div>
-            <div>
-              <div style={{ color: '#64748B', fontSize: '11px', fontWeight: '600' }}>Balance Amount</div>
-              <div style={{ fontWeight: '800', color: balanceAmt === 0 ? '#166534' : '#DC2626' }}>
-                ₹ {balanceAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-              </div>
+            <div style={{ fontSize: '20px', fontWeight: '900', color: '#67E8F9', marginTop: '2px' }}>
+              ₹ {totalAmtRaw.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
           </div>
         </div>
 
-        {/* Right Invoice Summary Box */}
+        {/* Body: Left Metadata Tiles + Right Invoice Summary */}
         <div style={{
-          backgroundColor: '#F8FAFC',
-          borderRadius: '12px',
-          border: '1px solid #E2E8F0',
-          padding: '20px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '10px',
-          justify: 'center'
+          padding: '20px 24px',
+          display: 'grid',
+          gridTemplateColumns: '1.35fr 1fr',
+          gap: '20px',
+          alignItems: 'stretch'
         }}>
-          <h4 style={{ margin: 0, fontSize: '14px', fontWeight: '800', color: '#0F172A' }}>Invoice Summary</h4>
-
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#475569' }}>
-            <span>Subtotal (Before Tax)</span>
-            <strong style={{ color: '#0F172A' }}>₹ {subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
-          </div>
-
-          {isInvIntra ? (
-            <>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#475569' }}>
-                <span>CGST (9%)</span>
-                <strong style={{ color: '#0F172A' }}>₹ {(taxGst / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#475569' }}>
-                <span>SGST (9%)</span>
-                <strong style={{ color: '#0F172A' }}>₹ {(taxGst / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
-              </div>
-            </>
-          ) : (
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#475569' }}>
-              <span>IGST (18%)</span>
-              <strong style={{ color: '#0F172A' }}>₹ {taxGst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+          {/* Left 3x3 Metadata Grid */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(3, 1fr)',
+            gap: '12px'
+          }}>
+            <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '10px', padding: '11px 14px' }}>
+              <div style={{ color: '#64748B', fontSize: '10.5px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Related BOM</div>
+              <div style={{ marginTop: '4px', fontSize: '13px', fontWeight: '800', color: '#2563EB' }}>{bomRefText}</div>
             </div>
-          )}
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#475569' }}>
-            <span>Shipping Charges</span>
-            <strong style={{ color: '#0F172A' }}>₹ 0.00</strong>
+            <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '10px', padding: '11px 14px' }}>
+              <div style={{ color: '#64748B', fontSize: '10.5px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Invoice Date</div>
+              <div style={{ marginTop: '4px', fontSize: '13px', fontWeight: '800', color: '#0F172A' }}>{invDateText}</div>
+            </div>
+
+            <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '10px', padding: '11px 14px' }}>
+              <div style={{ color: '#64748B', fontSize: '10.5px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Payment Due Date</div>
+              <div style={{ marginTop: '4px', fontSize: '13px', fontWeight: '800', color: '#0F172A' }}>{invDateText}</div>
+            </div>
+
+            <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '10px', padding: '11px 14px' }}>
+              <div style={{ color: '#64748B', fontSize: '10.5px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Customer</div>
+              <div style={{ marginTop: '4px', fontSize: '13px', fontWeight: '800', color: '#0F172A' }}>{customerText}</div>
+              {(invGst || matchingBom?.gstNo || matchingBom?.customerGst) && (
+                <div style={{ marginTop: '3px', fontSize: '10.5px', fontWeight: '700', color: '#0E7490' }}>
+                  GSTIN: {invGst || matchingBom?.gstNo || matchingBom?.customerGst}
+                </div>
+              )}
+            </div>
+
+            <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '10px', padding: '11px 14px' }}>
+              <div style={{ color: '#64748B', fontSize: '10.5px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Sales Person</div>
+              <div style={{ marginTop: '4px', fontSize: '13px', fontWeight: '800', color: '#0E7490', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                <User size={13} style={{ color: '#0E7490' }} />
+                {safeStringVal(inv.salesPerson || matchingBom?.salesPerson || matchingBom?.createdBy, 'Sales Department').replace(/\s*\([^)]*\)/g, '').trim()}
+              </div>
+            </div>
+
+            <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '10px', padding: '11px 14px' }}>
+              <div style={{ color: '#64748B', fontSize: '10.5px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Payment Type</div>
+              <div style={{ marginTop: '4px', fontSize: '13px', fontWeight: '800', color: '#0F172A' }}>{paymentTypeText}</div>
+            </div>
+
+            <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '10px', padding: '11px 14px' }}>
+              <div style={{ color: '#64748B', fontSize: '10.5px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '5px' }}>Payment Status</div>
+              <span style={{
+                backgroundColor: (balanceAmt === 0 || ['Invoice Confirmed', 'CLOSED', 'Completed', 'Confirmed'].includes(inv.status)) ? '#DCFCE7' : '#FEF3C7',
+                color: (balanceAmt === 0 || ['Invoice Confirmed', 'CLOSED', 'Completed', 'Confirmed'].includes(inv.status)) ? '#166534' : '#B45309',
+                border: (balanceAmt === 0 || ['Invoice Confirmed', 'CLOSED', 'Completed', 'Confirmed'].includes(inv.status)) ? '1px solid #86EFAC' : '1px solid #FDE68A',
+                padding: '3px 9px',
+                borderRadius: '20px',
+                fontSize: '10.5px',
+                fontWeight: '800',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px'
+              }}>
+                <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: (balanceAmt === 0 || ['Invoice Confirmed', 'CLOSED', 'Completed', 'Confirmed'].includes(inv.status)) ? '#16A34A' : '#D97706' }} />
+                {['Invoice Confirmed', 'CLOSED', 'Completed', 'Confirmed'].includes(inv.status) ? 'Verified & Paid (100%)' : paymentStatusText}
+              </span>
+            </div>
+
+            <div style={{ backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: '10px', padding: '11px 14px' }}>
+              <div style={{ color: '#166534', fontSize: '10.5px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Advance Received</div>
+              <div style={{ marginTop: '4px', fontSize: '14px', fontWeight: '900', color: '#166534' }}>
+                ₹ {advanceAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })} {isFullAdvance ? '(100%)' : (is50Percent ? '(50%)' : '')}
+              </div>
+            </div>
+
+            <div style={{
+              backgroundColor: balanceAmt === 0 ? '#F0FDF4' : '#FEF2F2',
+              border: `1px solid ${balanceAmt === 0 ? '#BBF7D0' : '#FECACA'}`,
+              borderRadius: '10px',
+              padding: '11px 14px'
+            }}>
+              <div style={{ color: balanceAmt === 0 ? '#166534' : '#991B1B', fontSize: '10.5px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Balance Amount</div>
+              <div style={{ marginTop: '4px', fontSize: '14px', fontWeight: '900', color: balanceAmt === 0 ? '#166534' : '#DC2626' }}>
+                ₹ {balanceAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              </div>
+            </div>
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#475569' }}>
-            <span>Discount</span>
-            <strong style={{ color: '#0F172A' }}>- ₹ 0.00</strong>
-          </div>
+          {/* Right Invoice Summary Card */}
+          <div style={{
+            backgroundColor: '#F8FAFC',
+            borderRadius: '12px',
+            border: '1px solid #E2E8F0',
+            padding: '18px 20px',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            gap: '10px'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #E2E8F0', paddingBottom: '10px' }}>
+              <h4 style={{ margin: 0, fontSize: '13.5px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                Invoice Summary
+              </h4>
+              <span style={{ fontSize: '10.5px', fontWeight: '700', color: '#0E7490', backgroundColor: '#ECFEFF', border: '1px solid #A5F3FC', padding: '2px 8px', borderRadius: '12px' }}>
+                {isInvIntra ? 'Intra-State (CGST + SGST)' : 'Inter-State (IGST)'}
+              </span>
+            </div>
 
-          <div style={{ borderTop: '1px solid #CBD5E1', paddingTop: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '14px', fontWeight: '800', color: '#0F172A' }}>Grand Total</span>
-            <strong style={{ fontSize: '20px', fontWeight: '800', color: '#4F46E5' }}>
-              ₹ {totalAmtRaw.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </strong>
-          </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12.5px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569' }}>
+                <span>Subtotal (Before Tax)</span>
+                <strong style={{ color: '#0F172A' }}>₹ {subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+              </div>
 
-          <div style={{ fontSize: '10px', color: '#64748B', fontStyle: 'italic', marginTop: '2px' }}>
-            Amount in Words: <strong>Rupees {totalAmtRaw.toLocaleString('en-IN')} Only</strong>
+              {isInvIntra ? (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569' }}>
+                    <span>CGST (9%)</span>
+                    <strong style={{ color: '#0F172A' }}>₹ {(taxGst / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569' }}>
+                    <span>SGST (9%)</span>
+                    <strong style={{ color: '#0F172A' }}>₹ {(taxGst / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                  </div>
+                </>
+              ) : (
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569' }}>
+                  <span>IGST (18%)</span>
+                  <strong style={{ color: '#0F172A' }}>₹ {taxGst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569' }}>
+                <span>Shipping Charges</span>
+                <strong style={{ color: '#0F172A' }}>₹ 0.00</strong>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569' }}>
+                <span>Discount</span>
+                <strong style={{ color: '#0F172A' }}>- ₹ 0.00</strong>
+              </div>
+            </div>
+
+            <div style={{ borderTop: '1.5px solid #CBD5E1', paddingTop: '10px', marginTop: '2px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '14px', fontWeight: '800', color: '#0F172A' }}>Grand Total</span>
+                <strong style={{ fontSize: '20px', fontWeight: '900', color: '#0E7490' }}>
+                  ₹ {totalAmtRaw.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </strong>
+              </div>
+              <div style={{ fontSize: '10.5px', color: '#64748B', fontStyle: 'italic', marginTop: '4px' }}>
+                Amount in Words: <strong>Rupees {totalAmtRaw.toLocaleString('en-IN')} Only</strong>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -1568,6 +1277,31 @@ export default function InvoiceDetailModal({
               addressProofDoc = { ...addressProofDoc, dataUrl: cached };
             }
           }
+          // Collect all attached address proof files (supports multiple images/PDFs from Sales)
+          const rawAddressProofList = (() => {
+            const candidates = [
+              ...(Array.isArray(matchingBom?.deliveryAddressProofDocs) ? matchingBom.deliveryAddressProofDocs : []),
+              ...(Array.isArray(foundBom?.deliveryAddressProofDocs) ? foundBom.deliveryAddressProofDocs : []),
+              ...(Array.isArray(inv.deliveryAddressProofDocs) ? inv.deliveryAddressProofDocs : [])
+            ].filter(Boolean);
+            if (candidates.length === 0 && addressProofDoc) {
+              candidates.push(addressProofDoc);
+            }
+            const seen = new Set();
+            return candidates.reduce((acc, doc) => {
+              const name = typeof doc === 'string' ? doc : (doc?.originalName || doc?.name || doc?.storagePath || '');
+              const key = `${name}::${doc?.storagePath || ''}`;
+              if (key !== '::' && seen.has(key)) return acc;
+              seen.add(key);
+              let enriched = doc;
+              if (enriched && typeof enriched === 'object' && !enriched.dataUrl && enriched.name) {
+                const cached = getMediaFromCache(enriched.name);
+                if (cached) enriched = { ...enriched, dataUrl: cached };
+              }
+              acc.push(enriched);
+              return acc;
+            }, []);
+          })();
           const bAddr = safeStringVal(inv.billingAddress || matchingBom?.billingAddress || foundBom?.billingAddress, 'Plot No 42, SIDCO Industrial Estate, Ambattur, Chennai');
           const dAddr = safeStringVal(inv.deliveryAddress || matchingBom?.deliveryAddress || foundBom?.deliveryAddress, bAddr);
           const isSameAddress = Boolean(
@@ -1578,40 +1312,69 @@ export default function InvoiceDetailModal({
           );
 
           return (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-              {/* TABLE 1: PACKED & DISPATCHED ITEMS (GREEN THEME) */}
-              <div style={{ borderRadius: '12px', border: '1px solid #86EFAC', backgroundColor: '#F0FDF4', overflow: 'hidden', padding: '16px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <CheckCircle style={{ width: '18px', height: '18px', color: '#166534' }} />
-                    <h4 style={{ margin: 0, fontSize: '14px', fontWeight: '800', color: '#166534' }}>
-                      1. Packed & Dispatched Items ({packedItems.length})
-                    </h4>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              {/* ── SECTION 1: PACKED & DISPATCHED ITEMS ── */}
+              <div style={{
+                borderRadius: '14px',
+                border: '1px solid #BBF7D0',
+                overflow: 'hidden',
+                boxShadow: '0 2px 8px rgba(22,163,74,0.08)'
+              }}>
+                {/* Section Header */}
+                <div style={{
+                  background: 'linear-gradient(135deg, #064E3B 0%, #065F46 100%)',
+                  padding: '14px 20px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: '10px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{
+                      width: '32px', height: '32px', borderRadius: '8px',
+                      backgroundColor: 'rgba(255,255,255,0.15)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    }}>
+                      <CheckCircle style={{ width: '17px', height: '17px', color: '#6EE7B7' }} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '14px', fontWeight: '800', color: '#FFFFFF' }}>
+                        1. Packed & Dispatched Items
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#6EE7B7', marginTop: '1px' }}>
+                        {packedItems.length} item{packedItems.length !== 1 ? 's' : ''} · Ready for Invoice / Delivery
+                      </div>
+                    </div>
                   </div>
-                  <span style={{ backgroundColor: '#DCFCE7', color: '#166534', border: '1px solid #86EFAC', padding: '4px 12px', borderRadius: '12px', fontSize: '11px', fontWeight: '800' }}>
-                    Ready for Invoice / Delivery
+                  <span style={{
+                    backgroundColor: 'rgba(110,231,183,0.2)', color: '#6EE7B7',
+                    border: '1px solid rgba(110,231,183,0.4)',
+                    padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '800'
+                  }}>
+                    ₹ {packedTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
 
-                <div style={{ overflowX: 'auto', backgroundColor: '#FFFFFF', borderRadius: '8px', border: '1px solid #DCFCE7' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
+                {/* Table */}
+                <div style={{ overflowX: 'auto', backgroundColor: '#FFFFFF' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
                     <thead>
-                      <tr style={{ backgroundColor: '#F0FDF4', color: '#166534', borderBottom: '1px solid #DCFCE7' }}>
-                        <th style={{ padding: '10px' }}>Product Code</th>
-                        <th style={{ padding: '10px' }}>Product Name</th>
-                        <th style={{ padding: '10px' }}>Description</th>
-                        <th style={{ padding: '10px', textAlign: 'center' }}>UOM</th>
-                        <th style={{ padding: '10px', textAlign: 'center' }}>BOM Qty</th>
-                        <th style={{ padding: '10px', textAlign: 'right' }}>Unit Price</th>
-                        <th style={{ padding: '10px', textAlign: 'center' }}>Tax (%)</th>
-                        <th style={{ padding: '10px', textAlign: 'right' }}>Amount</th>
-                        <th style={{ padding: '10px', textAlign: 'center', width: '120px' }}>Status</th>
+                      <tr style={{ backgroundColor: '#F0FDF4', borderBottom: '1.5px solid #BBF7D0' }}>
+                        <th style={{ padding: '10px 14px', textAlign: 'left', fontSize: '10px', fontWeight: '700', color: '#065F46', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Code</th>
+                        <th style={{ padding: '10px 14px', textAlign: 'left', fontSize: '10px', fontWeight: '700', color: '#065F46', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Product</th>
+                        <th style={{ padding: '10px 14px', textAlign: 'left', fontSize: '10px', fontWeight: '700', color: '#065F46', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Description</th>
+                        <th style={{ padding: '10px 14px', textAlign: 'center', fontSize: '10px', fontWeight: '700', color: '#065F46', textTransform: 'uppercase', letterSpacing: '0.5px' }}>UOM</th>
+                        <th style={{ padding: '10px 14px', textAlign: 'center', fontSize: '10px', fontWeight: '700', color: '#065F46', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Qty</th>
+                        <th style={{ padding: '10px 14px', textAlign: 'right', fontSize: '10px', fontWeight: '700', color: '#065F46', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Unit Price</th>
+                        <th style={{ padding: '10px 14px', textAlign: 'center', fontSize: '10px', fontWeight: '700', color: '#065F46', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Tax</th>
+                        <th style={{ padding: '10px 14px', textAlign: 'right', fontSize: '10px', fontWeight: '700', color: '#065F46', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Amount</th>
+                        <th style={{ padding: '10px 14px', textAlign: 'center', fontSize: '10px', fontWeight: '700', color: '#065F46', textTransform: 'uppercase', letterSpacing: '0.5px', width: '90px' }}>Status</th>
                       </tr>
                     </thead>
                     <tbody>
                       {packedItems.length > 0 ? (
                         <>
-                          {/* Preset Kit Groups — show Preset header & merged Preset Kit Price (NOT separate per-item prices) */}
                           {visiblePackedPresetSections.map((sec, sIdx) => {
                             const theme = INV_PRESET_THEMES[sIdx % INV_PRESET_THEMES.length];
                             const sCount = parseFloat(sec.grp.setCount) || 1;
@@ -1622,77 +1385,50 @@ export default function InvoiceDetailModal({
                             const kGstPct = extractGstRate(rawGst, 18);
                             const kGstAmt = kSub * (kGstPct / 100);
                             const kGrandTotal = kSub + kGstAmt;
-
                             return (
                               <React.Fragment key={`inv-preset-${sec.grp.groupId || sIdx}`}>
                                 <tr style={{ backgroundColor: theme.bg, borderTop: `2px solid ${theme.primary}`, borderBottom: `1.5px solid ${theme.border}` }}>
-                                  <td colSpan={9} style={{ padding: '9px 14px' }}>
+                                  <td colSpan={9} style={{ padding: '9px 16px' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                                        <span style={{ backgroundColor: theme.primary, color: '#FFFFFF', fontSize: '10px', fontWeight: '900', padding: '2px 8px', borderRadius: '6px', letterSpacing: '0.5px' }}>
-                                          {theme.badge}
-                                        </span>
-                                        <span style={{ fontSize: '12.5px', fontWeight: '800', color: '#0F172A' }}>
-                                          {sec.grp.presetName || 'Pre-Engineered Structure Kit'} ({sCount} {unitType})
-                                        </span>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <span style={{ backgroundColor: theme.primary, color: '#FFFFFF', fontSize: '10px', fontWeight: '900', padding: '2px 8px', borderRadius: '5px' }}>{theme.badge}</span>
+                                        <span style={{ fontSize: '12.5px', fontWeight: '800', color: '#0F172A' }}>{sec.grp.presetName || 'Pre-Engineered Structure Kit'} ({sCount} {unitType})</span>
                                       </div>
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap', fontSize: '11.5px', fontWeight: '700' }}>
-                                        <span style={{ color: '#475569' }}>
-                                          Kit Rate: <strong style={{ color: theme.primary }}>₹ {kPrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong> / {unitType}
-                                        </span>
-                                        <span style={{ color: '#166534' }}>
-                                          GST ({kGstPct}%): <strong>₹ {kGstAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
-                                        </span>
-                                        <span style={{ color: '#0E7490', fontWeight: '800' }}>
-                                          Preset Total: <strong>₹ {kGrandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
-                                        </span>
+                                      <div style={{ display: 'flex', gap: '16px', fontSize: '11px', fontWeight: '700', flexWrap: 'wrap' }}>
+                                        <span style={{ color: '#475569' }}>Kit Rate: <strong style={{ color: theme.primary }}>₹ {kPrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong> / {unitType}</span>
+                                        <span style={{ color: '#166534' }}>GST ({kGstPct}%): <strong>₹ {kGstAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
+                                        <span style={{ color: '#0E7490', fontWeight: '800' }}>Total: <strong>₹ {kGrandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
                                       </div>
                                     </div>
                                   </td>
                                 </tr>
                                 {sec.items.map((it, kIdx) => (
-                                  <tr key={`inv-preset-item-${sIdx}-${kIdx}`} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: theme.bg }}>
-                                    <td style={{ padding: '9px 10px', fontWeight: 'bold', color: '#475569', fontFamily: 'monospace' }}>
-                                      {safeStringVal(it.code, `PRD-00${kIdx + 1}`)}
+                                  <tr key={`inv-preset-item-${sIdx}-${kIdx}`} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: kIdx % 2 === 0 ? '#FFFFFF' : theme.bg }}>
+                                    <td style={{ padding: '10px 14px' }}>
+                                      <span style={{ fontFamily: 'monospace', fontSize: '11px', fontWeight: '800', color: '#2563EB', backgroundColor: '#EFF6FF', padding: '2px 7px', borderRadius: '5px' }}>
+                                        {safeStringVal(it.code, `PRD-00${kIdx + 1}`)}
+                                      </span>
                                     </td>
-                                    <td style={{ padding: '9px 10px', fontWeight: '700', color: '#0F172A' }}>
-                                      {safeStringVal(it.name, 'Item')}
-                                    </td>
-                                    <td style={{ padding: '9px 10px', color: '#64748B' }}>
-                                      {safeStringVal(it.desc || it.category, 'Preset component')}
-                                    </td>
-                                    <td style={{ padding: '9px 10px', textAlign: 'center', color: '#64748B' }}>
-                                      {safeStringVal(it.uom, 'Nos')}
-                                    </td>
-                                    <td style={{ padding: '9px 10px', textAlign: 'center', fontWeight: '700', color: '#166534' }}>
-                                      {Number(it.bomQty || it.qty || 1) || 1}
-                                    </td>
+                                    <td style={{ padding: '10px 14px', fontWeight: '700', color: '#0F172A' }}>{safeStringVal(it.name, 'Item')}</td>
+                                    <td style={{ padding: '10px 14px', color: '#64748B', fontSize: '11.5px' }}>{safeStringVal(it.desc || it.category, 'Preset component')}</td>
+                                    <td style={{ padding: '10px 14px', textAlign: 'center', color: '#64748B' }}>{safeStringVal(it.uom, 'Nos')}</td>
+                                    <td style={{ padding: '10px 14px', textAlign: 'center', fontWeight: '700', color: '#166534' }}>{Number(it.bomQty || it.qty || 1) || 1}</td>
                                     {kIdx === 0 && (
                                       <>
-                                        <td rowSpan={sec.items.length} style={{ padding: '10px', textAlign: 'right', verticalAlign: 'middle', backgroundColor: '#FFFFFF', borderLeft: `1px solid ${theme.border}`, borderRight: `1px solid ${theme.border}` }}>
-                                          <div style={{ fontWeight: '800', color: theme.primary }}>
-                                            ₹ {kPrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                          </div>
-                                          <div style={{ fontSize: '10px', color: '#64748B', fontWeight: '600' }}>
-                                            {sCount} {unitType}
-                                          </div>
+                                        <td rowSpan={sec.items.length} style={{ padding: '10px 14px', textAlign: 'right', verticalAlign: 'middle', backgroundColor: '#FFFFFF', borderLeft: `1px solid ${theme.border}`, borderRight: `1px solid ${theme.border}` }}>
+                                          <div style={{ fontWeight: '800', color: theme.primary }}>₹ {kPrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                                          <div style={{ fontSize: '10px', color: '#64748B' }}>{sCount} {unitType}</div>
                                         </td>
-                                        <td rowSpan={sec.items.length} style={{ padding: '10px', textAlign: 'center', verticalAlign: 'middle', backgroundColor: '#FFFFFF', borderRight: `1px solid ${theme.border}`, fontWeight: '700', color: '#475569' }}>
-                                          {kGstPct}%
-                                        </td>
-                                        <td rowSpan={sec.items.length} style={{ padding: '10px', textAlign: 'right', verticalAlign: 'middle', backgroundColor: '#FFFFFF', borderRight: `1px solid ${theme.border}` }}>
-                                          <div style={{ fontWeight: '800', color: '#166534' }}>
-                                            ₹ {kGrandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                          </div>
-                                          <div style={{ fontSize: '10px', color: '#64748B', fontWeight: '600' }}>
-                                            Sub: ₹ {kSub.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                          </div>
+                                        <td rowSpan={sec.items.length} style={{ padding: '10px 14px', textAlign: 'center', verticalAlign: 'middle', backgroundColor: '#FFFFFF', borderRight: `1px solid ${theme.border}`, fontWeight: '700', color: '#475569' }}>{kGstPct}%</td>
+                                        <td rowSpan={sec.items.length} style={{ padding: '10px 14px', textAlign: 'right', verticalAlign: 'middle', backgroundColor: '#FFFFFF', borderRight: `1px solid ${theme.border}` }}>
+                                          <div style={{ fontWeight: '800', color: '#166534' }}>₹ {kGrandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                                          <div style={{ fontSize: '10px', color: '#64748B' }}>Sub: ₹ {kSub.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                                         </td>
                                       </>
                                     )}
-                                    <td style={{ padding: '9px 10px', textAlign: 'center' }}>
-                                      <span style={{ backgroundColor: '#DCFCE7', color: '#166534', border: '1px solid #86EFAC', padding: '2px 8px', borderRadius: '12px', fontSize: '10px', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                                        <Check style={{ width: '11px', height: '11px', strokeWidth: 3 }} /> Packed
+                                    <td style={{ padding: '10px 14px', textAlign: 'center' }}>
+                                      <span style={{ backgroundColor: '#DCFCE7', color: '#166534', border: '1px solid #86EFAC', padding: '3px 10px', borderRadius: '20px', fontSize: '10px', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                        <Check style={{ width: '10px', height: '10px', strokeWidth: 3 }} /> Packed
                                       </span>
                                     </td>
                                   </tr>
@@ -1701,11 +1437,10 @@ export default function InvoiceDetailModal({
                             );
                           })}
 
-                          {/* Separate / Standalone Products — show individual Unit Price, Tax & Amount */}
                           {visiblePackedPresetSections.length > 0 && standalonePackedItems.length > 0 && (
                             <tr style={{ backgroundColor: '#F8FAFC', borderTop: '2px solid #64748B', borderBottom: '1px solid #CBD5E1' }}>
-                              <td colSpan={9} style={{ padding: '8px 14px' }}>
-                                <span style={{ padding: '2px 8px', borderRadius: '6px', backgroundColor: '#475569', color: '#FFFFFF', fontSize: '10px', fontWeight: '900', letterSpacing: '0.5px' }}>
+                              <td colSpan={9} style={{ padding: '7px 14px' }}>
+                                <span style={{ padding: '2px 8px', borderRadius: '5px', backgroundColor: '#475569', color: '#FFFFFF', fontSize: '10px', fontWeight: '900', letterSpacing: '0.5px' }}>
                                   INDIVIDUAL / STANDALONE PRODUCTS
                                 </span>
                               </td>
@@ -1713,34 +1448,24 @@ export default function InvoiceDetailModal({
                           )}
 
                           {standalonePackedItems.map((it, idx) => (
-                            <tr key={`inv-standalone-${idx}`} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                              <td style={{ padding: '10px', fontWeight: 'bold', color: '#475569', fontFamily: 'monospace' }}>
-                                {safeStringVal(it.code, `PRD-00${idx + 1}`)}
+                            <tr key={`inv-standalone-${idx}`} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC' }}>
+                              <td style={{ padding: '11px 14px' }}>
+                                <span style={{ fontFamily: 'monospace', fontSize: '11px', fontWeight: '800', color: '#2563EB', backgroundColor: '#EFF6FF', padding: '2px 7px', borderRadius: '5px' }}>
+                                  {safeStringVal(it.code, `PRD-00${idx + 1}`)}
+                                </span>
                               </td>
-                              <td style={{ padding: '10px', fontWeight: '700', color: '#0F172A' }}>
-                                {safeStringVal(it.name, 'Item')}
-                              </td>
-                              <td style={{ padding: '10px', color: '#64748B' }}>
-                                {safeStringVal(it.desc || it.category, 'High grade component')}
-                              </td>
-                              <td style={{ padding: '10px', textAlign: 'center', color: '#64748B' }}>
-                                {safeStringVal(it.uom, 'Nos')}
-                              </td>
-                              <td style={{ padding: '10px', textAlign: 'center', fontWeight: '700', color: '#166534' }}>
-                                {Number(it.bomQty || it.qty || 1) || 1}
-                              </td>
-                              <td style={{ padding: '10px', textAlign: 'right', color: '#475569' }}>
-                                ₹ {parseFloat(it.rate || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                              </td>
-                              <td style={{ padding: '10px', textAlign: 'center', color: '#64748B' }}>
-                                {safeStringVal(it.tax !== undefined ? it.tax : 18, '18')}%
-                              </td>
-                              <td style={{ padding: '10px', textAlign: 'right', fontWeight: '800', color: '#166534' }}>
+                              <td style={{ padding: '11px 14px', fontWeight: '700', color: '#0F172A' }}>{safeStringVal(it.name, 'Item')}</td>
+                              <td style={{ padding: '11px 14px', color: '#64748B', fontSize: '11.5px' }}>{safeStringVal(it.desc || it.category, 'High grade component')}</td>
+                              <td style={{ padding: '11px 14px', textAlign: 'center', color: '#64748B' }}>{safeStringVal(it.uom, 'Nos')}</td>
+                              <td style={{ padding: '11px 14px', textAlign: 'center', fontWeight: '700', color: '#166534' }}>{Number(it.bomQty || it.qty || 1) || 1}</td>
+                              <td style={{ padding: '11px 14px', textAlign: 'right', color: '#475569' }}>₹ {parseFloat(it.rate || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                              <td style={{ padding: '11px 14px', textAlign: 'center', color: '#64748B' }}>{safeStringVal(it.tax !== undefined ? it.tax : 18, '18')}%</td>
+                              <td style={{ padding: '11px 14px', textAlign: 'right', fontWeight: '800', color: '#166534' }}>
                                 ₹ {(it.amt > 0 ? parseFloat(it.amt) : ((parseFloat(it.bomQty || it.qty || 1) * parseFloat(it.rate || 0)) * (1 + (parseFloat(it.tax !== undefined ? it.tax : 18) / 100)))).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </td>
-                              <td style={{ padding: '10px', textAlign: 'center' }}>
-                                <span style={{ backgroundColor: '#DCFCE7', color: '#166534', border: '1px solid #86EFAC', padding: '2px 8px', borderRadius: '12px', fontSize: '10px', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                                  <Check style={{ width: '11px', height: '11px', strokeWidth: 3 }} /> Packed
+                              <td style={{ padding: '11px 14px', textAlign: 'center' }}>
+                                <span style={{ backgroundColor: '#DCFCE7', color: '#166534', border: '1px solid #86EFAC', padding: '3px 10px', borderRadius: '20px', fontSize: '10px', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                  <Check style={{ width: '10px', height: '10px', strokeWidth: 3 }} /> Packed
                                 </span>
                               </td>
                             </tr>
@@ -1748,16 +1473,12 @@ export default function InvoiceDetailModal({
                         </>
                       ) : (
                         <tr>
-                          <td colSpan={9} style={{ padding: '16px', textAlign: 'center', color: '#64748B', fontStyle: 'italic' }}>
-                            No items packed in dispatch yet.
-                          </td>
+                          <td colSpan={9} style={{ padding: '20px', textAlign: 'center', color: '#64748B', fontStyle: 'italic' }}>No items packed in dispatch yet.</td>
                         </tr>
                       )}
-                      <tr style={{ backgroundColor: '#F0FDF4', fontWeight: '800' }}>
-                        <td colSpan={7} style={{ padding: '10px', textAlign: 'right', color: '#166534' }}>Subtotal (Packed Items)</td>
-                        <td style={{ padding: '10px', textAlign: 'right', color: '#166534', fontSize: '13px' }}>
-                          ₹ {packedTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </td>
+                      <tr style={{ backgroundColor: '#F0FDF4', borderTop: '1.5px solid #BBF7D0' }}>
+                        <td colSpan={7} style={{ padding: '11px 14px', textAlign: 'right', color: '#065F46', fontWeight: '800', fontSize: '12px' }}>Subtotal (Packed Items)</td>
+                        <td style={{ padding: '11px 14px', textAlign: 'right', color: '#065F46', fontWeight: '900', fontSize: '14px' }}>₹ {packedTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                         <td></td>
                       </tr>
                     </tbody>
@@ -1765,123 +1486,151 @@ export default function InvoiceDetailModal({
                 </div>
               </div>
 
-              {/* TABLE 2: UNPACKED / MISSING / PENDING ITEMS (RED THEME BELOW) */}
-              <div style={{ borderRadius: '12px', border: '1px solid #FCA5A5', backgroundColor: '#FEF2F2', overflow: 'hidden', padding: '16px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <AlertCircle style={{ width: '18px', height: '18px', color: '#DC2626' }} />
-                    <h4 style={{ margin: 0, fontSize: '14px', fontWeight: '800', color: '#991B1B' }}>
-                      2. Unpacked / Pending Items ({unpackedItems.length}) — Pending Dispatch
-                    </h4>
+              {/* ── SECTION 2: UNPACKED / PENDING ITEMS ── */}
+              <div style={{
+                borderRadius: '14px',
+                border: `1px solid ${unpackedItems.length > 0 ? '#FCA5A5' : '#BBF7D0'}`,
+                overflow: 'hidden',
+                boxShadow: `0 2px 8px rgba(${unpackedItems.length > 0 ? '220,38,38' : '22,163,74'},0.07)`
+              }}>
+                {/* Section Header */}
+                <div style={{
+                  background: unpackedItems.length > 0
+                    ? 'linear-gradient(135deg, #7F1D1D 0%, #991B1B 100%)'
+                    : 'linear-gradient(135deg, #064E3B 0%, #065F46 100%)',
+                  padding: '14px 20px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: '10px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{
+                      width: '32px', height: '32px', borderRadius: '8px',
+                      backgroundColor: 'rgba(255,255,255,0.15)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    }}>
+                      {unpackedItems.length > 0
+                        ? <AlertCircle style={{ width: '17px', height: '17px', color: '#FCA5A5' }} />
+                        : <CheckCircle style={{ width: '17px', height: '17px', color: '#6EE7B7' }} />
+                      }
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '14px', fontWeight: '800', color: '#FFFFFF' }}>
+                        2. Unpacked / Pending Items
+                        <span style={{
+                          marginLeft: '8px', fontSize: '12px', fontWeight: '700',
+                          backgroundColor: 'rgba(255,255,255,0.15)',
+                          padding: '1px 8px', borderRadius: '12px'
+                        }}>({unpackedItems.length})</span>
+                      </div>
+                      <div style={{ fontSize: '11px', color: unpackedItems.length > 0 ? '#FCA5A5' : '#6EE7B7', marginTop: '1px' }}>
+                        {unpackedItems.length > 0 ? 'Pending Dispatch — Create DC for these items' : 'All BOM items fully packed & dispatched'}
+                      </div>
+                    </div>
                   </div>
-                  {unpackedItems.length > 0 ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (typeof setPendingDcModal === 'function') {
-                          setPendingDcModal({
-                            ...inv,
-                            invNo: invNoText,
-                            poNo: bomRefText,
-                            bomCode: bomRefText,
-                            customerName: customerText,
-                            vendor: customerText,
-                            deliveryAddress: inv.deliveryAddress || matchingBom?.deliveryAddress || 'Client Delivery Site',
-                            items: unpackedItems
-                          });
-                          if (typeof setViewingInvoiceModal === 'function') {
-                            setViewingInvoiceModal(null);
-                          }
-                        }
-                      }}
-                      style={{
-                        backgroundColor: '#DC2626',
-                        color: '#FFFFFF',
-                        border: 'none',
-                        padding: '6px 14px',
-                        borderRadius: '8px',
-                        fontSize: '11px',
-                        fontWeight: '800',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        cursor: 'pointer',
-                        boxShadow: '0 2px 4px rgba(220,38,38,0.25)'
-                      }}
-                    >
-                      <Truck style={{ width: '13px', height: '13px' }} /> Create Delivery Challan (DC) for Pending Items
-                    </button>
-                  ) : (
-                    <span style={{ backgroundColor: '#FEE2E2', color: '#991B1B', border: '1px solid #FCA5A5', padding: '4px 12px', borderRadius: '12px', fontSize: '11px', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                      <AlertCircle style={{ width: '12px', height: '12px' }} /> All items dispatched
-                    </span>
-                  )}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {unpackedItems.length > 0 ? (
+                      <>
+                        <span style={{
+                          backgroundColor: 'rgba(252,165,165,0.2)', color: '#FCA5A5',
+                          border: '1px solid rgba(252,165,165,0.4)',
+                          padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '800'
+                        }}>
+                          ₹ {unpackedTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} pending
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (typeof setPendingDcModal === 'function') {
+                              setPendingDcModal({
+                                ...inv,
+                                invNo: invNoText,
+                                poNo: bomRefText,
+                                bomCode: bomRefText,
+                                customerName: customerText,
+                                vendor: customerText,
+                                deliveryAddress: inv.deliveryAddress || matchingBom?.deliveryAddress || 'Client Delivery Site',
+                                items: unpackedItems
+                              });
+                              if (typeof setViewingInvoiceModal === 'function') setViewingInvoiceModal(null);
+                            }
+                          }}
+                          style={{
+                            backgroundColor: '#DC2626', color: '#FFFFFF',
+                            border: 'none', padding: '6px 14px', borderRadius: '8px',
+                            fontSize: '11px', fontWeight: '800',
+                            display: 'inline-flex', alignItems: 'center', gap: '6px',
+                            cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.3)'
+                          }}
+                        >
+                          <Truck style={{ width: '13px', height: '13px' }} /> Create Delivery Challan (DC)
+                        </button>
+                      </>
+                    ) : (
+                      <span style={{
+                        backgroundColor: 'rgba(110,231,183,0.2)', color: '#6EE7B7',
+                        border: '1px solid rgba(110,231,183,0.4)',
+                        padding: '4px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: '800',
+                        display: 'inline-flex', alignItems: 'center', gap: '5px'
+                      }}>
+                        <CheckCircle style={{ width: '12px', height: '12px' }} /> All items dispatched
+                      </span>
+                    )}
+                  </div>
                 </div>
 
-                <div style={{ overflowX: 'auto', backgroundColor: '#FFFFFF', borderRadius: '8px', border: '1px solid #FEE2E2' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
+                {/* Table */}
+                <div style={{ overflowX: 'auto', backgroundColor: '#FFFFFF' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
                     <thead>
-                      <tr style={{ backgroundColor: '#FEF2F2', color: '#991B1B', borderBottom: '1px solid #FEE2E2' }}>
-                        <th style={{ padding: '10px' }}>Product Code</th>
-                        <th style={{ padding: '10px' }}>Product Name</th>
-                        <th style={{ padding: '10px' }}>Description</th>
-                        <th style={{ padding: '10px', textAlign: 'center' }}>UOM</th>
-                        <th style={{ padding: '10px', textAlign: 'center' }}>BOM Qty</th>
-                        <th style={{ padding: '10px', textAlign: 'right' }}>Unit Price</th>
-                        <th style={{ padding: '10px', textAlign: 'center' }}>Tax (%)</th>
-                        <th style={{ padding: '10px', textAlign: 'right' }}>Amount</th>
-                        <th style={{ padding: '10px', textAlign: 'center', width: '120px' }}>Status</th>
+                      <tr style={{ backgroundColor: unpackedItems.length > 0 ? '#FEF2F2' : '#F0FDF4', borderBottom: `1.5px solid ${unpackedItems.length > 0 ? '#FCA5A5' : '#BBF7D0'}` }}>
+                        <th style={{ padding: '10px 14px', textAlign: 'left', fontSize: '10px', fontWeight: '700', color: unpackedItems.length > 0 ? '#991B1B' : '#065F46', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Code</th>
+                        <th style={{ padding: '10px 14px', textAlign: 'left', fontSize: '10px', fontWeight: '700', color: unpackedItems.length > 0 ? '#991B1B' : '#065F46', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Product</th>
+                        <th style={{ padding: '10px 14px', textAlign: 'left', fontSize: '10px', fontWeight: '700', color: unpackedItems.length > 0 ? '#991B1B' : '#065F46', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Description</th>
+                        <th style={{ padding: '10px 14px', textAlign: 'center', fontSize: '10px', fontWeight: '700', color: unpackedItems.length > 0 ? '#991B1B' : '#065F46', textTransform: 'uppercase', letterSpacing: '0.5px' }}>UOM</th>
+                        <th style={{ padding: '10px 14px', textAlign: 'center', fontSize: '10px', fontWeight: '700', color: unpackedItems.length > 0 ? '#991B1B' : '#065F46', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Qty</th>
+                        <th style={{ padding: '10px 14px', textAlign: 'right', fontSize: '10px', fontWeight: '700', color: unpackedItems.length > 0 ? '#991B1B' : '#065F46', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Unit Price</th>
+                        <th style={{ padding: '10px 14px', textAlign: 'center', fontSize: '10px', fontWeight: '700', color: unpackedItems.length > 0 ? '#991B1B' : '#065F46', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Tax</th>
+                        <th style={{ padding: '10px 14px', textAlign: 'right', fontSize: '10px', fontWeight: '700', color: unpackedItems.length > 0 ? '#991B1B' : '#065F46', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Amount</th>
+                        <th style={{ padding: '10px 14px', textAlign: 'center', fontSize: '10px', fontWeight: '700', color: unpackedItems.length > 0 ? '#991B1B' : '#065F46', textTransform: 'uppercase', letterSpacing: '0.5px', width: '90px' }}>Status</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {unpackedItems.length > 0 ? unpackedItems.map((it, idx) => {
-                        const origIdx = it.originalIndex !== undefined ? it.originalIndex : idx;
-                        return (
-                          <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: '#FFF5F5' }}>
-                            <td style={{ padding: '10px', fontWeight: 'bold', color: '#475569', fontFamily: 'monospace' }}>
+                      {unpackedItems.length > 0 ? unpackedItems.map((it, idx) => (
+                        <tr key={idx} style={{ borderBottom: '1px solid #FFF5F5', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FFF5F5' }}>
+                          <td style={{ padding: '11px 14px' }}>
+                            <span style={{ fontFamily: 'monospace', fontSize: '11px', fontWeight: '800', color: '#DC2626', backgroundColor: '#FEF2F2', padding: '2px 7px', borderRadius: '5px' }}>
                               {safeStringVal(it.code, `PRD-00${idx + 1}`)}
-                            </td>
-                            <td style={{ padding: '10px', fontWeight: '700', color: '#991B1B' }}>
-                              {safeStringVal(it.name, 'Item')}
-                            </td>
-                            <td style={{ padding: '10px', color: '#64748B' }}>
-                              {safeStringVal(it.desc || it.category, 'High grade component')}
-                            </td>
-                            <td style={{ padding: '10px', textAlign: 'center', color: '#64748B' }}>
-                              {safeStringVal(it.uom, 'Nos')}
-                            </td>
-                            <td style={{ padding: '10px', textAlign: 'center', fontWeight: '700', color: '#DC2626' }}>
-                              {Number(it.bomQty || it.qty || 1) || 1}
-                            </td>
-                            <td style={{ padding: '10px', textAlign: 'right', color: '#475569' }}>
-                              ₹ {parseFloat(it.rate || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </td>
-                            <td style={{ padding: '10px', textAlign: 'center', color: '#64748B' }}>
-                              {safeStringVal(it.tax !== undefined ? it.tax : 18, '18')}%
-                            </td>
-                            <td style={{ padding: '10px', textAlign: 'right', fontWeight: '800', color: '#DC2626' }}>
-                              ₹ {(it.amt ? parseFloat(it.amt) : ((parseFloat(it.bomQty || it.qty || 1) * parseFloat(it.rate || 0)) * (1 + (parseFloat(it.tax !== undefined ? it.tax : 18) / 100)))).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </td>
-                            <td style={{ padding: '10px', textAlign: 'center' }}>
-                              <span style={{ backgroundColor: '#FEE2E2', color: '#991B1B', border: '1px solid #FCA5A5', padding: '2px 8px', borderRadius: '12px', fontSize: '10px', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                                <X style={{ width: '11px', height: '11px', strokeWidth: 3 }} /> Unpacked
-                              </span>
-                            </td>
-                          </tr>
-                        );
-                      }) : (
+                            </span>
+                          </td>
+                          <td style={{ padding: '11px 14px', fontWeight: '700', color: '#991B1B' }}>{safeStringVal(it.name, 'Item')}</td>
+                          <td style={{ padding: '11px 14px', color: '#64748B', fontSize: '11.5px' }}>{safeStringVal(it.desc || it.category, 'High grade component')}</td>
+                          <td style={{ padding: '11px 14px', textAlign: 'center', color: '#64748B' }}>{safeStringVal(it.uom, 'Nos')}</td>
+                          <td style={{ padding: '11px 14px', textAlign: 'center', fontWeight: '700', color: '#DC2626' }}>{Number(it.bomQty || it.qty || 1) || 1}</td>
+                          <td style={{ padding: '11px 14px', textAlign: 'right', color: '#475569' }}>₹ {parseFloat(it.rate || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                          <td style={{ padding: '11px 14px', textAlign: 'center', color: '#64748B' }}>{safeStringVal(it.tax !== undefined ? it.tax : 18, '18')}%</td>
+                          <td style={{ padding: '11px 14px', textAlign: 'right', fontWeight: '800', color: '#DC2626' }}>
+                            ₹ {(it.amt ? parseFloat(it.amt) : ((parseFloat(it.bomQty || it.qty || 1) * parseFloat(it.rate || 0)) * (1 + (parseFloat(it.tax !== undefined ? it.tax : 18) / 100)))).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                          <td style={{ padding: '11px 14px', textAlign: 'center' }}>
+                            <span style={{ backgroundColor: '#FEE2E2', color: '#991B1B', border: '1px solid #FCA5A5', padding: '3px 10px', borderRadius: '20px', fontSize: '10px', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                              <X style={{ width: '10px', height: '10px', strokeWidth: 3 }} /> Unpacked
+                            </span>
+                          </td>
+                        </tr>
+                      )) : (
                         <tr>
-                          <td colSpan={9} style={{ padding: '16px', textAlign: 'center', color: '#166534', fontWeight: '700' }}>
+                          <td colSpan={9} style={{ padding: '20px', textAlign: 'center', color: '#166534', fontWeight: '700' }}>
                             All BOM items are fully packed & dispatched! No pending items.
                           </td>
                         </tr>
                       )}
                       {unpackedItems.length > 0 && (
-                        <tr style={{ backgroundColor: '#FEF2F2', fontWeight: '800' }}>
-                          <td colSpan={7} style={{ padding: '10px', textAlign: 'right', color: '#991B1B' }}>Pending Subtotal (Unpacked Items)</td>
-                          <td style={{ padding: '10px', textAlign: 'right', color: '#DC2626', fontSize: '13px' }}>
-                            ₹ {unpackedTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </td>
+                        <tr style={{ backgroundColor: '#FEF2F2', borderTop: '1.5px solid #FCA5A5' }}>
+                          <td colSpan={7} style={{ padding: '11px 14px', textAlign: 'right', color: '#991B1B', fontWeight: '800', fontSize: '12px' }}>Pending Subtotal (Unpacked Items)</td>
+                          <td style={{ padding: '11px 14px', textAlign: 'right', color: '#DC2626', fontWeight: '900', fontSize: '14px' }}>₹ {unpackedTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                           <td></td>
                         </tr>
                       )}
@@ -2110,7 +1859,7 @@ export default function InvoiceDetailModal({
                       (proofDataUrl && (proofDataUrl.startsWith('data:application/pdf') || proofDataUrl.includes('.pdf')))
                     );
 
-                    if (!addressProofDoc) {
+                    if (!addressProofDoc && rawAddressProofList.length === 0) {
                       return (
                         <div style={{ borderTop: '1px solid #E2E8F0', paddingTop: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                           <div style={{ padding: '14px 16px', borderRadius: '10px', backgroundColor: '#FFFBEB', border: '1px solid #FDE68A', display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -2120,7 +1869,7 @@ export default function InvoiceDetailModal({
                                 Address Proof Document Not Attached by Sales
                               </div>
                               <div style={{ fontSize: '11px', color: '#92400E', marginTop: '2px' }}>
-                                This order has a delivery destination different from the billing address. Click <strong>Reissue</strong> above to request Sales to attach the verified address proof (1 hr SLA). Or complete invoice with the mandatory Terms &amp; Conditions liability disclaimer.
+                                This order has a delivery destination different from the billing address. <strong>Address Proof is mandatory</strong> before this invoice can proceed to Vehicle Loading &amp; Dispatch. Click <strong>Reissue</strong> above to request Sales to attach the verified address proof (1 hr SLA — if not attached within 1 hour, the BOM &amp; Invoice will be automatically cancelled).
                               </div>
                             </div>
                           </div>
@@ -2128,14 +1877,20 @@ export default function InvoiceDetailModal({
                       );
                     }
 
+                    const docsToRender = (selectedProofVersionIdx === null && rawAddressProofList.length > 1)
+                      ? rawAddressProofList
+                      : [activeDoc || rawAddressProofList[0]].filter(Boolean);
+
                     return (
-                      <div style={{ borderTop: '1px solid #E2E8F0', paddingTop: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      <div style={{ borderTop: '1px solid #E2E8F0', paddingTop: '14px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
                           <div style={{ fontSize: '12px', fontWeight: '800', color: '#1E293B', display: 'flex', alignItems: 'center', gap: '6px' }}>
                             <FileCheck style={{ width: '15px', height: '15px', color: '#166534' }} />
-                            <span>Delivery Address Proof Document ({proofName}):</span>
+                            <span>
+                              Delivery Address Proof {docsToRender.length > 1 ? `Documents (${docsToRender.length} Attached)` : `Document (${proofName})`}:
+                            </span>
                           </div>
-                          {proofDataUrl && (
+                          {docsToRender.length === 1 && proofDataUrl && (
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                               <button
                                 type="button"
@@ -2168,6 +1923,100 @@ export default function InvoiceDetailModal({
                             </div>
                           )}
 
+                          {docsToRender.length > 1 ? (
+                            <div style={{
+                              display: 'grid',
+                              gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))',
+                              gap: '12px'
+                            }}>
+                              {docsToRender.map((dItem, dIdx) => {
+                                const dName = safeStringVal(typeof dItem === 'string' ? dItem : (dItem?.originalName || dItem?.name), `Address Proof #${dIdx + 1}`);
+                                let dUrl = (typeof dItem === 'string' && (dItem.startsWith('data:') || dItem.startsWith('http') || dItem.startsWith('/')))
+                                  ? dItem
+                                  : (dItem?.dataUrl || dItem?.fileData || dItem?.url || null);
+                                if (!dUrl) dUrl = resolveDocumentUrl(dItem, bomRefText);
+                                if (!dUrl && dName) dUrl = getMediaFromCache(dName);
+                                const dIsPdf = Boolean((dName && dName.toLowerCase().endsWith('.pdf')) || (dUrl && (dUrl.startsWith('data:application/pdf') || dUrl.includes('.pdf'))));
+
+                                return (
+                                  <div key={`addr-proof-${dIdx}`} style={{
+                                    borderRadius: '12px',
+                                    border: '1px solid #CBD5E1',
+                                    backgroundColor: '#FFFFFF',
+                                    padding: '10px',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '8px'
+                                  }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                                      <span style={{ fontSize: '11px', fontWeight: '800', color: '#0E7490', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                        #{dIdx + 1} · {dName}
+                                      </span>
+                                      {dUrl && (
+                                        <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
+                                          <button
+                                            type="button"
+                                            onClick={() => setLocalDocPreviewModal({
+                                              title: `Delivery Address Proof #${dIdx + 1} — ${dName}`,
+                                              doc: { name: dName, dataUrl: dUrl, url: dUrl },
+                                              bomCode: bomRefText
+                                            })}
+                                            style={{ border: 'none', background: '#EFF6FF', color: '#1D4ED8', padding: '3px 7px', borderRadius: '5px', fontSize: '10px', fontWeight: '700', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                                          >
+                                            <Eye size={11} /> View
+                                          </button>
+                                          <a
+                                            href={dUrl}
+                                            download={dName}
+                                            style={{ backgroundColor: '#F1F5F9', color: '#334155', padding: '3px 7px', borderRadius: '5px', fontSize: '10px', fontWeight: '700', textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
+                                          >
+                                            <Download size={11} />
+                                          </a>
+                                        </div>
+                                      )}
+                                    </div>
+                                    <div style={{ borderRadius: '8px', overflow: 'hidden', backgroundColor: '#F8FAFC', minHeight: '160px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                      {dUrl ? (
+                                        dIsPdf ? (
+                                          <button
+                                            type="button"
+                                            onClick={() => setLocalDocPreviewModal({
+                                              title: `Delivery Address Proof #${dIdx + 1} (PDF) — ${dName}`,
+                                              doc: { name: dName, dataUrl: dUrl, url: dUrl },
+                                              bomCode: bomRefText
+                                            })}
+                                            style={{ border: 'none', backgroundColor: '#0E7490', color: '#FFFFFF', padding: '6px 12px', borderRadius: '6px', fontSize: '11px', fontWeight: '700', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                                          >
+                                            <FileText size={13} /> Open PDF
+                                          </button>
+                                        ) : (
+                                          <img
+                                            src={dUrl}
+                                            alt={`Delivery Address Proof #${dIdx + 1}`}
+                                            onError={(e) => {
+                                              const fallback = dItem?.storagePath ? `/api/uploads/bom-documents/${dItem.storagePath}` : `/api/media/find/${encodeURIComponent(dName)}`;
+                                              if (e.target.src !== fallback && !e.target.dataset.triedFallback) {
+                                                e.target.dataset.triedFallback = '1';
+                                                e.target.src = fallback;
+                                              }
+                                            }}
+                                            onClick={() => setLocalDocPreviewModal({
+                                              title: `Delivery Address Proof #${dIdx + 1} — ${dName}`,
+                                              doc: { name: dName, dataUrl: dUrl, url: dUrl },
+                                              bomCode: bomRefText
+                                            })}
+                                            style={{ width: '100%', height: '180px', objectFit: 'cover', cursor: 'pointer' }}
+                                          />
+                                        )
+                                      ) : (
+                                        <span style={{ fontSize: '11px', color: '#64748B' }}>{dName}</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
                           <div style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #CBD5E1', backgroundColor: '#FFFFFF', padding: '12px', textAlign: 'center' }}>
                             {proofDataUrl ? (
                               isPdf ? (
@@ -2218,6 +2067,7 @@ export default function InvoiceDetailModal({
                               </div>
                             )}
                           </div>
+                          )}
 
                           {historyList.length > 1 && (
                             <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingTop: '6px' }}>
@@ -2495,292 +2345,171 @@ export default function InvoiceDetailModal({
         })()}
       </div>
 
-      {/* CARD 3: BOTTOM PANEL - COMPLETE ORDER & INVOICE WORKFLOW TIMELINE (FULL WIDTH) */}
-      <div style={{
-        backgroundColor: '#FFFFFF',
-        borderRadius: '16px',
-        border: '1px solid #E2E8F0',
-        padding: '24px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '16px',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.03)',
-        width: '100%',
-        boxSizing: 'border-box'
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: '12px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div style={{ width: '30px', height: '30px', borderRadius: '8px', backgroundColor: '#EFF6FF', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2563EB' }}>
-              <Clock style={{ width: '16px', height: '16px' }} />
-            </div>
-            <div>
-              <h4 style={{ margin: 0, fontSize: '14px', fontWeight: '800', color: '#0F172A' }}>Complete Order & Invoice Workflow Timeline</h4>
-              <span style={{ fontSize: '11px', color: '#64748B' }}>End-to-end lifecycle from BOM configuration to final dispatch</span>
-            </div>
-          </div>
-          <span style={{ backgroundColor: '#F1F5F9', color: '#475569', padding: '4px 10px', borderRadius: '10px', fontSize: '11px', fontWeight: '800' }}>
-            5 Stages Tracked
-          </span>
+      {/* Complete Order & Invoice Workflow Timeline removed per user request */}
+
+      {/* ─── STICKY BOTTOM ACTION BAR (Matching PI & Accounts Verification) ─── */}
+      <div
+        style={{
+          position: 'sticky',
+          bottom: 0,
+          backgroundColor: '#FFFFFF',
+          border: '1px solid #E2E8F0',
+          borderTop: '1.5px solid #CBD5E1',
+          padding: '12px 24px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '16px',
+          zIndex: 50,
+          boxShadow: '0 -4px 16px rgba(15, 23, 42, 0.08)',
+          borderRadius: '12px',
+          marginTop: '16px',
+          boxSizing: 'border-box'
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={() => {
+              setIsEditingInvoice(false);
+              setViewingInvoiceModal(null);
+            }}
+            style={{
+              height: '40px',
+              borderRadius: '8px',
+              border: '1.5px solid #CBD5E1',
+              backgroundColor: '#FFFFFF',
+              color: '#334155',
+              padding: '0 18px',
+              fontWeight: '700',
+              cursor: 'pointer',
+              fontSize: '13px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+              transition: 'all 0.15s ease'
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#F8FAFC'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#FFFFFF'; }}
+          >
+            <ChevronLeft size={16} /> Back
+          </button>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', position: 'relative', paddingLeft: '20px', borderLeft: '2px solid #E2E8F0' }}>
-            {(() => {
-              // 1. BOM Creation details
-              const bomCreatorName = safeStringVal(matchingBom?.createdBy || matchingBom?.createdByName || matchingBom?.salesPerson, 'Balaji (BOM Executive)');
-              const bomCreatorRole = safeStringVal(matchingBom?.createdByRole, 'Design & BOM Team');
-              const bomCreatedDate = safeStringVal(matchingBom?.createdAt || matchingBom?.date, `${invDateText}, 09:00 AM`);
-              const bomItemCount = (matchingBom?.items || itemsList || []).length;
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          {/* Print button */}
+          <button
+            type="button"
+            onClick={() => setPrintTaxInvoiceModal({
+              ...inv,
+              subTotal: subtotal,
+              taxGst,
+              grandTotal: totalAmtRaw,
+              orderValue: totalAmtRaw,
+              unitValue: subtotal,
+              gstNo: invGst || matchingBom?.gstNo || matchingBom?.customerGst || inv.gstNo || '',
+              presetGroups: inv.presetGroups || matchingBom?.presetGroups,
+              presetName: inv.presetName || matchingBom?.presetName,
+              presetKitPrice: inv.presetKitPrice || matchingBom?.presetKitPrice,
+              presetSetCount: inv.presetSetCount || matchingBom?.presetSetCount,
+              presetUnit: inv.presetUnit || matchingBom?.presetUnit,
+              billingAddress: inv.billingAddress || matchingBom?.billingAddress,
+              deliveryAddress: inv.deliveryAddress || matchingBom?.deliveryAddress
+            })}
+            style={{
+              backgroundColor: '#FFFFFF',
+              border: '1px solid #CBD5E1',
+              borderRadius: '8px',
+              padding: '0 16px',
+              height: '40px',
+              fontSize: '13px',
+              fontWeight: '700',
+              color: '#334155',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              transition: 'all 0.15s ease'
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#F8FAFC'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#FFFFFF'; }}
+          >
+            <Printer style={{ width: '15px', height: '15px', color: '#475569' }} /> Print
+          </button>
 
-              // 2. Dispatch Packing details
-              const dispatchPackerName = safeStringVal(matchingBom?.packedBy || matchingBom?.dispatchPackedBy, 'Karthik Raja (Dispatch Head)');
-              const dispatchPackerRole = 'Dispatch & Warehouse Team';
-              const dispatchPackedDate = safeStringVal(matchingBom?.packedAt || matchingBom?.dispatchDate, `${invDateText}, 09:45 AM`);
-              const allPackingList = (matchingBom?.dispatchPacking && Array.isArray(matchingBom.dispatchPacking) && matchingBom.dispatchPacking.length > 0)
-                ? matchingBom.dispatchPacking
-                : (matchingBom?.items || itemsList || []).map(it => ({ name: it.name, code: it.code, bomQty: it.bomQty || it.qty || 1, packed: it.selected !== false }));
-              const packedItemsCount = allPackingList.filter(p => Boolean(p.packed)).length;
-              const totalPackItemsCount = allPackingList.length;
+          {/* Download button */}
+          <button
+            type="button"
+            onClick={() => alert(`Downloading Invoice ${invNoText} PDF...`)}
+            style={{
+              backgroundColor: '#FFFFFF',
+              border: '1px solid #CBD5E1',
+              borderRadius: '8px',
+              padding: '0 16px',
+              height: '40px',
+              fontSize: '13px',
+              fontWeight: '700',
+              color: '#334155',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              transition: 'all 0.15s ease'
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#F8FAFC'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#FFFFFF'; }}
+          >
+            <Download style={{ width: '15px', height: '15px', color: '#475569' }} /> Download
+          </button>
 
-              // Packing photos / videos (from BOM or vehicleLoading)
-              const rawPhotos = matchingBom?.packingPhotos || matchingBom?.packingPhotoList || matchingBom?.vehicleLoading?.photos || [];
-              const packingPhotosList = (Array.isArray(rawPhotos) && rawPhotos.length > 0)
-                ? rawPhotos
-                : (matchingBom?.packingPhotoUrl ? [{ id: 'p1', name: 'Packing_Inspection_Photo.jpg', dataUrl: matchingBom.packingPhotoUrl, capturedAt: '09:45 AM' }] : []);
-              
-              const rawVideos = matchingBom?.packingVideos || matchingBom?.packingVideoList || matchingBom?.vehicleLoading?.videos || [];
-              const packingVideosList = (Array.isArray(rawVideos) && rawVideos.length > 0)
-                ? rawVideos
-                : (matchingBom?.packingVideoUrl ? [{ id: 'v1', name: 'Packing_Process_Video.mp4', dataUrl: matchingBom.packingVideoUrl, recordedAt: '09:48 AM' }] : []);
 
-              // Default SVG sample photo if none uploaded yet so user can preview interactive photo verification
-              const effectivePhotoUrl = packingPhotosList[0]?.dataUrl || ("data:image/svg+xml;charset=utf-8," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="600" height="380" viewBox="0 0 600 380"><rect width="100%" height="100%" fill="#0F172A"/><rect x="20" y="20" width="560" height="50" fill="#1E3A5F" rx="8"/><text x="40" y="52" fill="#FFFFFF" font-family="sans-serif" font-size="16" font-weight="bold">DISPATCH PACKING &amp; BOX INSPECTION PHOTO</text><rect x="40" y="90" width="240" height="180" fill="#1E293B" stroke="#334155" stroke-width="2" rx="10"/><rect x="320" y="90" width="240" height="180" fill="#1E293B" stroke="#334155" stroke-width="2" rx="10"/><text x="60" y="140" fill="#38BDF8" font-family="sans-serif" font-size="14" font-weight="bold">📦 Shipment Box #1</text><text x="60" y="170" fill="#94A3B8" font-family="sans-serif" font-size="12">Mid 30mm Clamps (500 Nos)</text><text x="60" y="195" fill="#94A3B8" font-family="sans-serif" font-size="12">Fasteners &amp; Hex Bolts</text><text x="60" y="235" fill="#4ADE80" font-family="sans-serif" font-size="12" font-weight="bold">✓ Physical QC Verified</text><text x="340" y="140" fill="#38BDF8" font-family="sans-serif" font-size="14" font-weight="bold">📦 Shipment Box #2</text><text x="340" y="170" fill="#94A3B8" font-family="sans-serif" font-size="12">Mini Rail 100mm Strips</text><text x="340" y="195" fill="#94A3B8" font-family="sans-serif" font-size="12">EPDM Rubber Gaskets</text><text x="340" y="235" fill="#4ADE80" font-family="sans-serif" font-size="12" font-weight="bold">✓ Labelled &amp; Strapped</text><rect x="40" y="300" width="520" height="50" fill="#064E3B" stroke="#059669" rx="8"/><text x="60" y="332" fill="#6EE7B7" font-family="sans-serif" font-size="13" font-weight="bold">✓ DISPATCH PACKING VERIFIED • PACKER: KARTHIK RAJA (DISPATCH HEAD)</text></svg>'));
-
-              // 3. Accounts Verification details (Date of Amount Received)
-              const accData = (matchingBom && matchingBom.accountsVerification) || inv.accountsVerification || {};
-              const approverName = safeStringVal(accData.verifiedBy || inv.verifiedBy, 'Accounts Head (Venkatesh)');
-              const approverRole = safeStringVal(accData.verifiedByRole, 'Accounts Approver');
-              const rawPaymentDate = accData.paymentDate || matchingBom?.paymentDate || inv.paymentDate || inv.accountsVerification?.paymentDate || null;
-              const formattedPaymentDate = (() => {
-                if (!rawPaymentDate) return null;
-                const str = String(rawPaymentDate).trim();
-                if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
-                  const [y, m, d] = str.split('-');
-                  const dt = new Date(Number(y), Number(m) - 1, Number(d));
-                  if (!isNaN(dt.getTime())) {
-                    return dt.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-                  }
-                }
-                return str;
-              })();
-
-              const isAccVerified = Boolean(accData.verified || inv.status === 'Accounts Verified & Passed to Invoice' || inv.status === 'Invoice Confirmed');
-              const approvalTime = formattedPaymentDate
-                ? formattedPaymentDate
-                : (isAccVerified ? safeStringVal(accData.verifiedAt, invDateText) : 'Pending Accounts Verification');
-
-              // 4. Invoice details
-              const isConfirmed = ['Invoice Confirmed', 'CLOSED', 'Completed', 'Confirmed', 'Fully Dispatched & Delivered'].includes(inv.status);
-              const invoicePersonName = isConfirmed ? safeStringVal(inv.confirmedBy || matchingBom?.invoiceConfirmedBy, 'Priya (Billing & Invoice Exec)') : 'Priya / Anand (Billing Exec)';
-              const invoicePersonRole = 'Finance & Billing Team';
-              const invoiceTime = isConfirmed ? safeStringVal(inv.confirmedAt, `${invDateText}, 10:25 AM`) : `${invDateText}, 10:16 AM`;
-
-              // 5. Final Dispatch & Vehicle Loading
-              const vLoading = matchingBom?.vehicleLoading || inv.vehicleLoading || null;
-              const isDispatched = Boolean(vLoading || matchingBom?.status === 'Completed' || inv.status === 'Fully Dispatched & Delivered');
-              const driverText = vLoading ? `${safeStringVal(vLoading.driverName, 'K. Murugan')} (${safeStringVal(vLoading.vehicleNo, 'TN-09-CB-4821')})` : 'Despatch Logistics Crew';
-
-              const timelineSteps = [
-                {
-                  stage: 'BOM Creation',
-                  title: 'BOM Created & Configured',
-                  date: bomCreatedDate,
-                  user: bomCreatorName,
-                  role: bomCreatorRole,
-                  color: '#0891B2',
-                  badge: `${bomItemCount} Line Items Configured`,
-                  badgeColor: '#ECFEFF',
-                  badgeTextColor: '#0E7490',
-                  borderColor: '#A5F3FC'
-                },
-                {
-                  stage: 'Dispatch Packing',
-                  title: 'Dispatch Packing & Inspection',
-                  date: dispatchPackedDate,
-                  user: dispatchPackerName,
-                  role: dispatchPackerRole,
-                  color: '#059669',
-                  badge: `${packedItemsCount}/${totalPackItemsCount} Items Packed`,
-                  badgeColor: '#F0FDF4',
-                  badgeTextColor: '#166534',
-                  borderColor: '#BBF7D0',
-                  hasDispatchMedia: true,
-                  packedItemsList: allPackingList,
-                  photoUrl: effectivePhotoUrl,
-                  photoCount: packingPhotosList.length > 0 ? packingPhotosList.length : 1,
-                  videoCount: packingVideosList.length > 0 ? packingVideosList.length : 1,
-                  videoUrl: packingVideosList[0]?.dataUrl || null
-                },
-                {
-                  stage: 'Accounts Verification',
-                  title: 'Accounts Verification & Payment Slip Approved',
-                  date: approvalTime,
-                  user: approverName,
-                  role: approverRole,
-                  color: isAccVerified ? '#16A34A' : '#D97706',
-                  badge: isAccVerified ? safeStringVal(accData.paymentStatus, 'Payment Verified & Approved') : 'Pending Accounts Verification',
-                  badgeColor: isAccVerified ? '#DCFCE7' : '#FEF3C7',
-                  badgeTextColor: isAccVerified ? '#166534' : '#B45309',
-                  borderColor: isAccVerified ? '#86EFAC' : '#FDE68A'
-                },
-                {
-                  stage: 'Invoice Generation',
-                  title: isConfirmed ? 'Invoice Confirmed & Locked' : 'Invoice Generated (Ready for Confirmation)',
-                  date: invoiceTime,
-                  user: invoicePersonName,
-                  role: invoicePersonRole,
-                  color: isConfirmed ? '#2563EB' : '#4F46E5',
-                  badge: isConfirmed ? `Locked • ${invNoText}` : `Draft • ${invNoText}`,
-                  badgeColor: '#EFF6FF',
-                  badgeTextColor: '#1E40AF',
-                  borderColor: '#BFDBFE'
-                },
-                {
-                  stage: 'Dispatch & Logistics',
-                  title: isDispatched ? 'Vehicle Loaded & Dispatched' : 'Pending Vehicle Loading & Dispatch',
-                  date: safeStringVal(vLoading?.loadedTimeStr, isDispatched ? `${invDateText}, 11:30 AM` : 'Awaiting Lorry Loading'),
-                  user: driverText,
-                  role: 'Logistics & Fleet Team',
-                  color: isDispatched ? '#059669' : '#94A3B8',
-                  badge: isDispatched ? `Dispatched • ${safeStringVal(vLoading?.vehicleNo, 'Vehicle Verified')}` : 'Next Stage: Vehicle Loading',
-                  badgeColor: isDispatched ? '#F0FDF4' : '#F8FAFC',
-                  badgeTextColor: isDispatched ? '#166534' : '#64748B',
-                  borderColor: isDispatched ? '#BBF7D0' : '#E2E8F0'
-                }
-              ];
-
-              return timelineSteps.map((tl, i) => (
-                <div key={i} style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  {/* Circle Node on Vertical Line */}
-                  <span style={{
-                    position: 'absolute',
-                    left: '-26px',
-                    top: '4px',
-                    width: '12px',
-                    height: '12px',
-                    borderRadius: '50%',
-                    backgroundColor: tl.color,
-                    border: '2px solid #FFFFFF',
-                    boxShadow: `0 0 0 2px ${tl.color}40`
-                  }} />
-
-                  {/* Top row: Stage Title & User details */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                        <strong style={{ fontSize: '12.5px', color: '#0F172A' }}>{tl.title}</strong>
-                        <span style={{
-                          fontSize: '10px',
-                          fontWeight: '800',
-                          color: tl.badgeTextColor,
-                          backgroundColor: tl.badgeColor,
-                          border: `1px solid ${tl.borderColor}`,
-                          padding: '1px 8px',
-                          borderRadius: '10px'
-                        }}>
-                          {tl.badge}
-                        </span>
-                      </div>
-                      <div style={{ fontSize: '10.5px', color: '#64748B', marginTop: '2px' }}>{tl.date}</div>
-                    </div>
-                    <div style={{ textAlign: 'right', fontSize: '11px', whiteSpace: 'nowrap' }}>
-                      <strong style={{ color: '#1E293B' }}>{tl.user}</strong>
-                      <span style={{ display: 'block', color: '#64748B', fontSize: '10px' }}>{tl.role}</span>
-                    </div>
-                  </div>
-
-                  {/* Dispatch Media & Checklist interactive buttons for Dispatch step */}
-                  {tl.hasDispatchMedia && (
-                    <div style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      flexWrap: 'wrap',
-                      marginTop: '4px',
-                      padding: '8px 12px',
-                      backgroundColor: '#F8FAFC',
-                      border: '1px solid #E2E8F0',
-                      borderRadius: '10px'
-                    }}>
-                      <span style={{ fontSize: '10.5px', fontWeight: '800', color: '#475569', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-                        Dispatch Audit:
-                      </span>
-
-                      {/* 1. Packing Checklist Button */}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setDispatchChecklistPreviewModal({
-                            bomCode: bomRefText,
-                            customerName: customerText,
-                            packedBy: tl.user,
-                            packedItems: tl.packedItemsList,
-                            packedCount: packedItemsCount,
-                            allCount: totalPackItemsCount
-                          });
-                        }}
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '5px',
-                          padding: '4px 10px',
-                          borderRadius: '6px',
-                          border: '1px solid #BBF7D0',
-                          backgroundColor: '#F0FDF4',
-                          color: '#166534',
-                          fontSize: '11px',
-                          fontWeight: '800',
-                          cursor: 'pointer',
-                          transition: 'all 0.15s'
-                        }}
-                      >
-                        <CheckSquare style={{ width: '13px', height: '13px', color: '#166534' }} />
-                        <span>Checklist ({packedItemsCount}/{totalPackItemsCount})</span>
-                      </button>
-
-                      {/* 2. Packing Photo Preview Button */}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setActiveMediaPreviewModal({
-                            type: 'image',
-                            url: tl.photoUrl,
-                            name: `Dispatch Packing Inspection Photo — ${bomRefText} (${tl.user})`
-                          });
-                        }}
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '5px',
-                          padding: '4px 10px',
-                          borderRadius: '6px',
-                          border: '1px solid #BAE6FD',
-                          backgroundColor: '#F0F9FF',
-                          color: '#0369A1',
-                          fontSize: '11px',
-                          fontWeight: '800',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        <Camera style={{ width: '13px', height: '13px', color: '#0284C7' }} />
-                        <span>Packing Photo</span>
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ));
-            })()}
-          </div>
+          {/* Confirm Invoice primary button */}
+          {['Invoice Confirmed', 'CLOSED', 'Completed', 'Confirmed', 'Fully Dispatched & Delivered'].includes(inv.status) ? (
+            <div
+              style={{
+                backgroundColor: '#DCFCE7',
+                color: '#166534',
+                border: '1px solid #86EFAC',
+                borderRadius: '8px',
+                padding: '0 18px',
+                height: '40px',
+                fontSize: '13px',
+                fontWeight: '800',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}
+            >
+              <CheckCircle style={{ width: '16px', height: '16px', color: '#166534' }} /> Invoice Completed
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={handleConfirmInvoice}
+              style={{
+                backgroundColor: '#3B82F6',
+                color: '#FFFFFF',
+                border: 'none',
+                borderRadius: '8px',
+                padding: '0 22px',
+                height: '40px',
+                fontSize: '13px',
+                fontWeight: '800',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                boxShadow: '0 2px 8px rgba(59, 130, 246, 0.35)',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <CheckCircle style={{ width: '16px', height: '16px', color: '#FFFFFF' }} /> Complete Invoice & Send to Dispatch Loading
+            </button>
+          )}
         </div>
+      </div>
 
       {/* Delivery Address Proof & Document Preview Modal */}
       {localDocPreviewModal && (

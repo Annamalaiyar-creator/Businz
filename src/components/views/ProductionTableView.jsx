@@ -447,7 +447,7 @@ export default function ProductionTableView({
                       >
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                           <span>{safeText(row.c2 || row.name, '—')}</span>
-                          {(row.gstNo || row.customerGst || row.c2Sub) && (
+                          {(activeTab === 'Invoice Management' || String(activeTab || '').toLowerCase().includes('invoice')) && (row.gstNo || row.customerGst || row.c2Sub) && (
                             <span style={{
                               fontSize: '11px',
                               fontWeight: '700',

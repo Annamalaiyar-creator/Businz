@@ -465,12 +465,35 @@ export const getOrderLifecycle = (row) => {
 export const canonicalizeSalespersonCode = (rawCode, name) => {
   const c = String(rawCode || '').trim().toUpperCase();
   if (c.startsWith('TS-')) return c;
-  if (c === 'SE-015' || (c === 'SE-VRM002' && String(name || '').toLowerCase().includes('mohith'))) return 'SE-004';
+  const lowerName = String(name || '').toLowerCase().trim();
+
+  // 1. Dynamic lookup from live Employee Directory
+  try {
+    const empsList = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
+    const empsStore = JSON.parse(localStorage.getItem('controlroom_employees_store') || '[]');
+    const allEmps = [...(Array.isArray(empsList) ? empsList : []), ...(Array.isArray(empsStore) ? empsStore : [])].filter(Boolean);
+    if (lowerName) {
+      const byNameOrEmail = allEmps.find(e => {
+        const eName = String(e.employee_name || e.name || '').replace(/\s*\([^)]*\)/g, '').toLowerCase().trim();
+        const eEmail = String(e.email || '').toLowerCase().trim();
+        return (eName && (eName === lowerName || eName.includes(lowerName) || lowerName.includes(eName))) || (eEmail && eEmail === lowerName);
+      });
+      if (byNameOrEmail) {
+        const empCode = String(byNameOrEmail.employee_code || byNameOrEmail.code || byNameOrEmail.id || '').trim().toUpperCase();
+        if (empCode) return empCode;
+      }
+    }
+    if (/^SE-\d{3,4}$/.test(c)) {
+      const byCode = allEmps.find(e => String(e.employee_code || e.code || e.id || '').trim().toUpperCase() === c);
+      if (byCode) return c;
+    }
+  } catch (_) {}
+
+  if (c === 'SE-015' || (c === 'SE-VRM002' && lowerName.includes('mohith'))) return 'SE-004';
   if (c === 'SH-001' || c === 'SH-VRM001') return 'SE-001';
   if (c === 'SE-020') return 'SE-006';
   if (c === 'SE-010') return 'SE-008';
   if (c === 'SE-VRM090') return 'SE-009';
-  const lowerName = String(name || '').toLowerCase().trim();
   if (EMAIL_TO_SALES_CODE[lowerName]) return EMAIL_TO_SALES_CODE[lowerName];
   if (lowerName.includes('sales.s4')) return 'SE-004';
   if (lowerName.includes('sales.s1')) return 'SE-001';
@@ -479,7 +502,11 @@ export const canonicalizeSalespersonCode = (rawCode, name) => {
   if (lowerName.includes('mohith')) return 'SE-004';
   if (lowerName.includes('sanjai') || lowerName.includes('sanjay')) return 'SE-002';
   if (lowerName.includes('manoj')) return 'SE-001';
-  if (lowerName.includes('kumar') && lowerName.includes('vasanth')) return 'SE-003';
+  if (lowerName.includes('shanthi') || lowerName.includes('santhi')) return 'SE-005';
+  if (lowerName.includes('dhana')) return 'SE-006';
+  if (lowerName.includes('prashanth') || lowerName.includes('prasanth')) return 'SE-007';
+  if (lowerName.includes('pavithra') || lowerName.includes('pavitra')) return 'SE-008';
+  if (lowerName.includes('jawahar')) return 'SE-009';
   if (c === 'SE-003' || c === 'SE-VRM006') return 'SE-003';
   if (c === 'SE-004' || c === 'SE-015') return 'SE-004';
   return c || '';
@@ -503,9 +530,9 @@ export const CODE_TO_SALES_NAME = {
   'SE-007': 'PRASHANTH',
   'SE-008': 'Pavithra',
   'SE-010': 'Pavithra',
-  'SE-009': 'KALAISELVI T',
-  'SE-VRM090': 'KALAISELVI T',
-  'SE-VRM005': 'KALAISELVI T',
+  'SE-009': 'Jawahar',
+  'SE-VRM090': 'Jawahar',
+  'SE-VRM005': 'Kalai selvi',
   'SE-1000': 'Annamalaiyar'
 };
 
@@ -517,12 +544,11 @@ export const EMAIL_TO_SALES_NAME = {
   'sales.s4@vrmstructures.in': 'Mohith JV',
   'sanjaikumar3a@gmail.com': 'Sanjai kumar',
   'sanjay@vrmstructures.in': 'Sanjai kumar',
-  'vasanthkumarsaravanan.work@gmail.com': 'Vasanth Kumar S',
-  'vasanthkumar1234@gmail.com': 'Vasanth Kumar S',
   'dhanasekar@gmail.com': 'Dhana Sekar',
   'projectsales@jashsun.com': 'Pavithra',
   'velmuruganr@vrmstructures.in': 'Pavithra',
-  'mms@vrmstructures.in': 'KALAISELVI T',
+  'mms@vrmstructures.in': 'Kalai selvi',
+  'jawahar@vrmstructures.in': 'Jawahar',
   'kalpanaram17@vrmstructures.in': 'KalpanaRam',
   'vasanth.support@vrmstructures.in': 'Vasanth',
   'scm@vrmstructures.in': 'ARUN BOOPATHI M',
@@ -585,6 +611,26 @@ export const getCleanSalesPersonName = (rawName, code) => {
     return 'Annamalaiyar';
   }
 
+  // Prioritize live Employee Directory lookup before static fallbacks
+  try {
+    const emps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
+    if (cleanCode) {
+      const foundByCode = emps.find(e => {
+        const c = String(e.employee_code || e.code || e.id || '').trim().toUpperCase();
+        return c === cleanCode;
+      });
+      if (foundByCode && (foundByCode.employee_name || foundByCode.name)) {
+        return foundByCode.employee_name || foundByCode.name;
+      }
+    }
+    if (name && name.includes('@')) {
+      const foundByEmail = emps.find(e => (e.email || '').toLowerCase().trim() === name.toLowerCase());
+      if (foundByEmail && (foundByEmail.employee_name || foundByEmail.name)) {
+        return foundByEmail.employee_name || foundByEmail.name;
+      }
+    }
+  } catch (_) {}
+
   // If a sales code is provided that maps to a real sales executive,
   // and the record creator name is a non-sales user (e.g. KalpanaRam/Tech Support/Dispatch/Admin) or generic,
   // the true salesperson is the assigned sales executive!
@@ -599,7 +645,7 @@ export const getCleanSalesPersonName = (rawName, code) => {
   if (cleanCode === 'SE-002' || cleanCode === 'SE-VRM002') return 'Sanjai kumar';
   if (cleanCode === 'SE-020') return 'Dhana Sekar';
   if (cleanCode === 'SE-010') return 'Pavithra';
-  if (cleanCode === 'SE-VRM090') return 'KALAISELVI T';
+  if (cleanCode === 'SE-VRM090') return 'Jawahar';
 
   if (!name || name.includes('@') || nonSalesPersons.includes(name.toLowerCase())) {
     try {

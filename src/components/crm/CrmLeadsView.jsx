@@ -388,16 +388,26 @@ export default function CrmLeadsView({
       return r.includes('sales') || d.includes('sales') || code.startsWith('SE-');
     });
     if (list.length > 0) return list;
+    try {
+      const storedEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
+      const liveSales = (Array.isArray(storedEmps) ? storedEmps : []).filter(s => {
+        if (!s) return false;
+        const r = (s.role || '').trim().toLowerCase();
+        const code = (s.employee_code || s.code || '').trim().toUpperCase();
+        return r.includes('sales') || code.startsWith('SE-');
+      });
+      if (liveSales.length > 0) return liveSales;
+    } catch (_) {}
     return [
       { employee_code: 'SE-001', employee_name: 'Manojraj Selvaraj', role: 'Sales' },
       { employee_code: 'SE-002', employee_name: 'Sanjai kumar', role: 'Sales' },
-      { employee_code: 'SE-003', employee_name: 'Vasanth Kumar S', role: 'Sales' },
+      { employee_code: 'SE-003', employee_name: 'Kalai selvi', role: 'Sales' },
       { employee_code: 'SE-004', employee_name: 'Mohith JV', role: 'Sales' },
       { employee_code: 'SE-005', employee_name: 'Shanthi', role: 'Sales' },
       { employee_code: 'SE-006', employee_name: 'Dhana Sekar', role: 'Sales' },
       { employee_code: 'SE-007', employee_name: 'PRASHANTH', role: 'Sales' },
       { employee_code: 'SE-008', employee_name: 'Pavithra', role: 'Sales' },
-      { employee_code: 'SE-009', employee_name: 'KALAISELVI T', role: 'Sales' }
+      { employee_code: 'SE-009', employee_name: 'Jawahar', role: 'Sales' }
     ];
   }, [salespersons]);
 

@@ -60,8 +60,12 @@ router.get('/api/store/:key', async (req, res) => {
     return res.status(400).json({ success: false, error: '[Validation Error] Invalid store key.' });
   }
   const employeeFilter = req.query.employee;
-  if (!isDbConnected()) {
-    return res.status(500).json({ success: false, error: `[Database Disconnected] PostgreSQL database is not connected. Cannot read store "${key}".` });
+  if (!isDbConnected() && cleanKey !== 'employees_store') {
+    const diskPath = getStoreFilePath(cleanKey + '.json');
+    const hasLocalFallback = fs.existsSync(diskPath) || (supabaseMemoryStore[cleanKey] && (Array.isArray(supabaseMemoryStore[cleanKey]) ? supabaseMemoryStore[cleanKey].length > 0 : (supabaseMemoryStore[cleanKey] && typeof supabaseMemoryStore[cleanKey] === 'object' && Object.keys(supabaseMemoryStore[cleanKey]).length > 0)));
+    if (!hasLocalFallback) {
+      return res.status(500).json({ success: false, error: `[Database Disconnected] PostgreSQL database is not connected. Cannot read store "${key}".` });
+    }
   }
   try {
     if (key === 'leaves' && employeeFilter) {

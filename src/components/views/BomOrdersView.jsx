@@ -922,9 +922,9 @@ export default function BomOrdersView(props) {
 
   const visibleBomStore = React.useMemo(() => {
     const rawList = (bomStore || []).filter(b => {
-      if (!b) return false;
+      if (!b || b.archived) return false;
       const code = String(b.bomCode || b.code || b.id || '').trim();
-      if (/^BOM-(STAGING|USER|POST|DEV-TEST)/i.test(code)) return false;
+      if (/^BOM-(STAGING|USER|POST|DEV-TEST)/i.test(code) || code.toUpperCase() === 'VRM-BOM-2026-07') return false;
       return true;
     }).map(b => {
       if (b && b.status === 'Draft') {
@@ -972,18 +972,30 @@ export default function BomOrdersView(props) {
     const normA = (str) => String(str || '').toLowerCase().replace(/[^a-z0-9]/g, '');
     const cleanCurNorm = normA(curName);
 
-    // Canonical Sales Team Definitions with Name matchers
-    const SALES_TEAM = [
+    // Canonical Sales Team Definitions with live Employee Directory override
+    const BASE_SALES_TEAM = [
       { code: 'SE-001', name: 'Manojraj Selvaraj', matchNames: ['manoj', 'manojraj', 'manoj raj'], emails: ['sales.s1@'], oldCodes: ['SH-001'] },
       { code: 'SE-002', name: 'Sanjai kumar', matchNames: ['sanjai', 'sanjay', 'sanjai kumar'], emails: ['sanjaikumar', 'sales@gmail.com'], oldCodes: [] },
-      { code: 'SE-003', name: 'Vasanth Kumar S', matchNames: ['vasanth kumar s', 'vasanth kumar', 'vasanthkumar'], excludeNames: ['support', 'tech'], emails: ['vasanthkumar'], oldCodes: ['SE-VRM006'] },
+      { code: 'SE-003', name: 'Kalai selvi', matchNames: ['kalaiselvi', 'kalai selvi', 'kalai'], excludeNames: ['support', 'tech'], emails: ['mms@'], oldCodes: ['SE-VRM006'] },
       { code: 'SE-004', name: 'Mohith JV', matchNames: ['mohith', 'mohit'], emails: ['sales.s4@'], oldCodes: ['SE-015'] },
       { code: 'SE-005', name: 'Shanthi', matchNames: ['shanthi', 'santhi'], emails: ['sales.s3@'], oldCodes: [] },
       { code: 'SE-006', name: 'Dhana Sekar', matchNames: ['dhana', 'dhanasekar', 'dhana sekar'], emails: ['dhanasekar'], oldCodes: ['SE-020'] },
       { code: 'SE-007', name: 'PRASHANTH', matchNames: ['prashanth', 'prasanth'], emails: ['sales.s2@'], oldCodes: [] },
       { code: 'SE-008', name: 'Pavithra', matchNames: ['pavithra', 'pavitra'], emails: ['projectsales'], oldCodes: ['SE-010'] },
-      { code: 'SE-009', name: 'KALAISELVI T', matchNames: ['kalaiselvi', 'kalai'], emails: ['mms@'], oldCodes: ['SE-VRM090'] }
+      { code: 'SE-009', name: 'Jawahar', matchNames: ['jawahar'], emails: ['jawahar@'], oldCodes: ['SE-VRM090'] }
     ];
+    let liveEmpsList = [];
+    try { liveEmpsList = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]'); } catch (_) {}
+    const SALES_TEAM = BASE_SALES_TEAM.map(rep => {
+      const m = Array.isArray(liveEmpsList) ? liveEmpsList.find(s => s && (s.employee_code === rep.code || s.code === rep.code)) : null;
+      if (m && (m.employee_name || m.name)) {
+        const empName = (m.employee_name || m.name).trim();
+        const lowerEmpName = empName.toLowerCase();
+        const nameParts = lowerEmpName.split(/\s+/).filter(p => p.length >= 3);
+        return { ...rep, name: empName, matchNames: Array.from(new Set([lowerEmpName, ...nameParts])), emails: m.email ? [String(m.email).toLowerCase().trim()] : rep.emails };
+      }
+      return rep;
+    });
 
     // Detect which sales rep is currently logged in (Name-First, then Code)
     const activeRep = SALES_TEAM.find(rep => 

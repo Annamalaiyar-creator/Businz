@@ -1862,15 +1862,15 @@ export default function ProductionViewsEngine(props) {
             );
           }
 
-          // Render Accounts Team Payment & Document Verification Screen (Full Size Page)
-          if (accountsVerificationModal) {
+          // Render Accounts Team Payment & Document Verification Screen (Full Size Page for active verification)
+          if (accountsVerificationModal && !isAccountsViewOnly) {
             return (
               <>
                 <Suspense fallback={null}>
                   <AccountsVerificationModal
                     accountsVerificationModal={accountsVerificationModal}
                     setAccountsVerificationModal={setAccountsVerificationModal}
-                    isAccountsViewOnly={isAccountsViewOnly}
+                    isAccountsViewOnly={false}
                     setIsAccountsViewOnly={setIsAccountsViewOnly}
                     bomStore={bomStore}
                     setBomStore={setBomStore}
@@ -2545,6 +2545,27 @@ export default function ProductionViewsEngine(props) {
           onClose={() => setViewingProofDocModal(null)}
           bomStore={bomStore}
         />
+      )}
+
+      {/* ─── ACCOUNTS VERIFICATION POPUP MODAL (VIEW MODE) ─── */}
+      {accountsVerificationModal && isAccountsViewOnly && (
+        <Suspense fallback={null}>
+          <AccountsVerificationModal
+            accountsVerificationModal={accountsVerificationModal}
+            setAccountsVerificationModal={setAccountsVerificationModal}
+            isAccountsViewOnly={true}
+            setIsAccountsViewOnly={setIsAccountsViewOnly}
+            bomStore={bomStore}
+            setBomStore={setBomStore}
+            userRole={userRole}
+            setPreviewDocModal={setPreviewDocModal}
+            canCancelBom={canCancelBom}
+            handleCancelBomOrder={handleCancelBomOrder}
+            invoiceList={invoiceList}
+            setInvoiceList={setInvoiceList}
+            showCustomAlert={showCustomAlert}
+          />
+        </Suspense>
       )}
 
       {/* ─── CUSTOM TOAST NOTIFICATION POPUP (MATCHES DESIGN SYSTEM) ─── */}

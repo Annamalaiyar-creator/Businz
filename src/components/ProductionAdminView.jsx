@@ -40,7 +40,8 @@ export default function ProductionAdminView({ activeTab, userRole }) {
         }
 
         if (Array.isArray(boms) && boms.length > 0) {
-          const sorted = [...boms].sort(compareBomDescending);
+          const active = boms.filter(b => b && !b.archived && String(b.bomCode || b.code || b.id || '').trim().toUpperCase() !== 'VRM-BOM-2026-07');
+          const sorted = [...active].sort(compareBomDescending);
           setBomStore(sorted);
         }
       } catch (_) {}

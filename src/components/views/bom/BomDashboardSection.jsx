@@ -1005,6 +1005,38 @@ export default function BomDashboardSection({ ctx }) {
                           </span>
                         )}
                       </span>
+                      {!isCancelled && Boolean((Array.isArray(row.paymentProofDocs) && row.paymentProofDocs.length > 0) || row.paymentProofDoc || row.proofDoc || row.accountsVerification?.paymentProofDoc) && (
+                        <span style={{
+                          backgroundColor: '#DCFCE7',
+                          color: '#166534',
+                          border: '1px solid #86EFAC',
+                          padding: '2px 8px',
+                          borderRadius: '12px',
+                          fontSize: '10.5px',
+                          fontWeight: '700',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}>
+                          <Check size={11} strokeWidth={3} /> Payment Slip Attached
+                        </span>
+                      )}
+                      {!isCancelled && Boolean((Array.isArray(row.deliveryAddressProofDocs) && row.deliveryAddressProofDocs.length > 0) || row.deliveryAddressProofDoc || row.deliveryProofDoc) && (
+                        <span style={{
+                          backgroundColor: '#ECFEFF',
+                          color: '#0E7490',
+                          border: '1px solid #A5F3FC',
+                          padding: '2px 8px',
+                          borderRadius: '12px',
+                          fontSize: '10.5px',
+                          fontWeight: '700',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}>
+                          <Check size={11} strokeWidth={3} /> Address Proof Attached
+                        </span>
+                      )}
                     </div>
 
                     {/* Amber Action Alert for Packed BOM Awaiting Sales Payment Proof */}

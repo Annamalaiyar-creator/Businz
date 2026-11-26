@@ -72,9 +72,9 @@ export const CODE_TO_SALES_NAME = {
   'SE-007': 'PRASHANTH',
   'SE-008': 'Pavithra',
   'SE-010': 'Pavithra',
-  'SE-009': 'KALAISELVI T',
-  'SE-VRM090': 'KALAISELVI T',
-  'SE-VRM005': 'KALAISELVI T',
+  'SE-009': 'Jawahar',
+  'SE-VRM090': 'Jawahar',
+  'SE-VRM005': 'Kalai selvi',
   'SE-1000': 'Annamalaiyar'
 };
 
@@ -86,12 +86,11 @@ export const EMAIL_TO_SALES_NAME = {
   'sales.s4@vrmstructures.in': 'Mohith JV',
   'sanjaikumar3a@gmail.com': 'Sanjai kumar',
   'sanjay@vrmstructures.in': 'Sanjai kumar',
-  'vasanthkumarsaravanan.work@gmail.com': 'Vasanth Kumar S',
-  'vasanthkumar1234@gmail.com': 'Vasanth Kumar S',
   'dhanasekar@gmail.com': 'Dhana Sekar',
   'projectsales@jashsun.com': 'Pavithra',
   'velmuruganr@vrmstructures.in': 'Pavithra',
-  'mms@vrmstructures.in': 'KALAISELVI T',
+  'mms@vrmstructures.in': 'Kalai selvi',
+  'jawahar@vrmstructures.in': 'Jawahar',
   'kalpanaram17@vrmstructures.in': 'KalpanaRam',
   'vasanth.support@vrmstructures.in': 'Vasanth',
   'scm@vrmstructures.in': 'ARUN BOOPATHI M',
@@ -118,7 +117,7 @@ export const EMAIL_TO_SALES_CODE = {
   'dhanasekar@gmail.com': 'SE-006',
   'projectsales@jashsun.com': 'SE-008',
   'velmuruganr@vrmstructures.in': 'SE-008',
-  'mms@vrmstructures.in': 'SE-009',
+  'jawahar@vrmstructures.in': 'SE-009',
   'kalpanaram17@vrmstructures.in': 'TS-001',
   'vasanth.support@vrmstructures.in': 'TS-002',
   'scm@vrmstructures.in': 'PR-001',
@@ -132,25 +131,47 @@ export const EMAIL_TO_SALES_CODE = {
 export const canonicalizeSalespersonCode = (rawCode, name) => {
   const c = String(rawCode || '').trim().toUpperCase();
   if (c.startsWith('TS-')) return c;
-  // If already a valid SE code, preserve it directly
-  if (/^SE-\d{3,4}$/.test(c)) return c;
-  if (c === 'SE-015' || (c === 'SE-VRM002' && String(name || '').toLowerCase().includes('mohith'))) return 'SE-004';
+  const lowerName = String(name || '').toLowerCase().trim();
+
+  // 1. Dynamic lookup from live Employee Directory (reflects renamed users & updated emails immediately)
+  try {
+    const empsList = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
+    const empsStore = JSON.parse(localStorage.getItem('controlroom_employees_store') || '[]');
+    const allEmps = [...(Array.isArray(empsList) ? empsList : []), ...(Array.isArray(empsStore) ? empsStore : [])].filter(Boolean);
+    if (lowerName) {
+      const byNameOrEmail = allEmps.find(e => {
+        const eName = String(e.employee_name || e.name || '').replace(/\s*\([^)]*\)/g, '').toLowerCase().trim();
+        const eEmail = String(e.email || '').toLowerCase().trim();
+        return (eName && (eName === lowerName || eName.includes(lowerName) || lowerName.includes(eName))) || (eEmail && eEmail === lowerName);
+      });
+      if (byNameOrEmail) {
+        const empCode = String(byNameOrEmail.employee_code || byNameOrEmail.code || byNameOrEmail.id || '').trim().toUpperCase();
+        if (empCode) return empCode;
+      }
+    }
+    if (/^SE-\d{3,4}$/.test(c)) {
+      const byCode = allEmps.find(e => String(e.employee_code || e.code || e.id || '').trim().toUpperCase() === c);
+      if (byCode) return c;
+    }
+  } catch (_) {}
+
+  if (EMAIL_TO_SALES_CODE[lowerName]) return EMAIL_TO_SALES_CODE[lowerName];
+  if (lowerName.includes('sales.s4') || lowerName.includes('mohith')) return 'SE-004';
+  if (lowerName.includes('sales.s1') || lowerName.includes('manoj')) return 'SE-001';
+  if (lowerName.includes('sales.s2') || lowerName.includes('prashanth') || lowerName.includes('prasanth')) return 'SE-007';
+  if (lowerName.includes('sales.s3') || lowerName.includes('shanthi') || lowerName.includes('santhi')) return 'SE-005';
+  if (lowerName.includes('sanjai') || lowerName.includes('sanjay')) return 'SE-002';
+  if (lowerName.includes('dhana')) return 'SE-006';
+  if (lowerName.includes('pavithra') || lowerName.includes('pavitra')) return 'SE-008';
+  if (lowerName.includes('jawahar')) return 'SE-009';
+  if (c === 'SE-015' || c === 'SE-VRM004') return 'SE-004';
+  if (c === 'SE-VRM002' && lowerName.includes('mohith')) return 'SE-004';
   if (c === 'SH-001' || c === 'SH-VRM001') return 'SE-001';
   if (c === 'SE-020') return 'SE-006';
   if (c === 'SE-010') return 'SE-008';
   if (c === 'SE-VRM090') return 'SE-009';
   if (c === 'SE-VRM006') return 'SE-003';
-  if (c === 'SE-VRM004') return 'SE-004';
-  const lowerName = String(name || '').toLowerCase().trim();
-  if (EMAIL_TO_SALES_CODE[lowerName]) return EMAIL_TO_SALES_CODE[lowerName];
-  if (lowerName.includes('sales.s4')) return 'SE-004';
-  if (lowerName.includes('sales.s1')) return 'SE-001';
-  if (lowerName.includes('sales.s2')) return 'SE-007';
-  if (lowerName.includes('sales.s3')) return 'SE-005';
-  if (lowerName.includes('mohith')) return 'SE-004';
-  if (lowerName.includes('sanjai') || lowerName.includes('sanjay')) return 'SE-002';
-  if (lowerName.includes('manoj')) return 'SE-001';
-  if (lowerName.includes('kumar') && lowerName.includes('vasanth')) return 'SE-003';
+  if (/^SE-\d{3,4}$/.test(c)) return c;
   return c || '';
 };
 

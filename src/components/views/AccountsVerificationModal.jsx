@@ -2,7 +2,8 @@ import React, { useState, useEffect } from "react";
 import {
   Eye, FileText, X, CheckCircle, Clock, XCircle, Calendar,
   UploadCloud, Download, Upload, Printer, Layers, Receipt, IndianRupee, Image,
-  Loader2, ExternalLink, AlertTriangle, User, Truck, Package, ShieldCheck, BellRing
+  Loader2, ExternalLink, AlertTriangle, User, Truck, Package, ShieldCheck, BellRing,
+  ChevronLeft
 } from "lucide-react";
 import { getMediaFromCache, getMediaFromCacheAsync, saveMediaToCache, formatCurrency, cleanNum, compressAndSaveFile, stripDataUrlsFromRecord } from "../../utils/otherViewsShared";
 import { resolveDocumentUrl, resolveDocumentUrlAsync } from "../../utils/documentResolver";
@@ -88,9 +89,7 @@ export default function AccountsVerificationModal({
 }) {
   const [viewingProofDocModal, setViewingProofDocModal] = useState(null);
   const [resolvedProofDataUrl, setResolvedProofDataUrl] = useState(null);
-  const [resolvedAddressProofDataUrl, setResolvedAddressProofDataUrl] = useState(null);
   const [isResolvingProof, setIsResolvingProof] = useState(false);
-  const [isResolvingAddressProof, setIsResolvingAddressProof] = useState(false);
   const [showAdjustPayment, setShowAdjustPayment] = useState(false);
 
   // Dynamic mobile viewport detection
@@ -108,9 +107,7 @@ export default function AccountsVerificationModal({
     let active = true;
     if (!accountsVerificationModal) {
       setResolvedProofDataUrl(null);
-      setResolvedAddressProofDataUrl(null);
       setIsResolvingProof(false);
-      setIsResolvingAddressProof(false);
       return;
     }
 
@@ -192,53 +189,6 @@ export default function AccountsVerificationModal({
       });
     } else {
       setIsResolvingProof(false);
-    }
-
-    // 2. Resolve Delivery Address Proof
-    const rawAddressProof = accountsVerificationModal.deliveryAddressProofDoc ||
-      accountsVerificationModal.addressProofDoc ||
-      accountsVerificationModal.deliveryProofDoc ||
-      null;
-
-    let addrDocName = null;
-    if (rawAddressProof) {
-      if (typeof rawAddressProof === 'string' && !rawAddressProof.startsWith('data:')) {
-        addrDocName = rawAddressProof;
-      } else if (rawAddressProof.name) {
-        addrDocName = rawAddressProof.name;
-      } else if (rawAddressProof.originalName) {
-        addrDocName = rawAddressProof.originalName;
-      }
-    }
-
-    let immediateAddr = resolveDocumentUrl(rawAddressProof) ||
-      ((typeof rawAddressProof === 'string' && rawAddressProof.startsWith('data:')) ? rawAddressProof : null) ||
-      (rawAddressProof?.dataUrl || rawAddressProof?.fileData || rawAddressProof?.url || null);
-
-    if (!immediateAddr && addrDocName) {
-      immediateAddr = getMediaFromCache(addrDocName);
-    }
-
-    if (immediateAddr && !immediateAddr.startsWith('blob:')) {
-      if (immediateAddr.startsWith('/uploads/')) immediateAddr = `/api${immediateAddr}`;
-      setResolvedAddressProofDataUrl(immediateAddr);
-      setIsResolvingAddressProof(false);
-    } else if (rawAddressProof || addrDocName) {
-      setIsResolvingAddressProof(true);
-      resolveDocumentUrlAsync(rawAddressProof || addrDocName, bCode).then(aUrl => {
-        if (active) {
-          if (aUrl) {
-            const cleanUrl = aUrl.startsWith('/uploads/') ? `/api${aUrl}` : aUrl;
-            setResolvedAddressProofDataUrl(cleanUrl);
-            if (addrDocName) saveMediaToCache(addrDocName, cleanUrl);
-          }
-          setIsResolvingAddressProof(false);
-        }
-      }).catch(() => {
-        if (active) setIsResolvingAddressProof(false);
-      });
-    } else {
-      setIsResolvingAddressProof(false);
     }
 
     return () => { active = false; };
@@ -553,6 +503,14 @@ export default function AccountsVerificationModal({
     }
 
     const targetCode = accountsVerificationModal.bomCode || accountsVerificationModal.code;
+    const targetOrderAmt = orderValue > 0 ? orderValue : cleanNum(accountsVerificationModal?.grandTotal, 0);
+    const balanceDue = isCreditTerms ? targetOrderAmt : Math.max(0, targetOrderAmt - effectiveTotalAmountNum);
+    const verifiedPayStatus = isCreditTerms
+      ? (currentPayStatus || 'Credit Payment')
+      : (balanceDue <= 0
+          ? '100% Received • Fully Settled'
+          : `Partial Payment (₹ ${balanceDue.toLocaleString('en-IN', { minimumFractionDigits: 2 })} Due)`);
+
     let finalInvNo = assignedInvoiceNo;
     const isTaken = (no) => {
       if (!no || no === 'Pending Confirmation' || no === 'Assigned upon Clearance' || no === 'Auto-Assign') return true;
@@ -585,21 +543,21 @@ export default function AccountsVerificationModal({
     const updatedBomData = {
       ...verifiedBOM,
       invoiceNo: finalInvNo,
-      grandTotal: cleanNum(accountsVerificationModal?.grandTotal, 0) > 0
-        ? cleanNum(accountsVerificationModal.grandTotal, 0)
-        : (orderValue > 0 ? orderValue : effectiveTotalAmountNum),
+      grandTotal: targetOrderAmt > 0 ? targetOrderAmt : effectiveTotalAmountNum,
       paymentDate: isCreditTerms ? '' : currentPayDate,
       isAccountsDone: true,
       invoiceConfirmed: false,
       accountsVerification: {
         ...(verifiedBOM.accountsVerification || {}),
-        paymentStatus: currentPayStatus,
+        paymentStatus: verifiedPayStatus,
         paymentDate: isCreditTerms ? '' : currentPayDate,
         totalAmount: isCreditTerms ? verifiedOrderTotal : effectiveTotalAmountNum,
         verifiedSlipAmount: verifiedSlipAmountNum,
         adjustedAmount: adjustedAmountNum,
         adjustedFromRef: String(adjustedFromRef || '').trim(),
         adjustedNote: String(adjustedNote || '').trim(),
+        orderTotal: targetOrderAmt,
+        balanceAmount: balanceDue,
         hardCopyReceived: true,
         verified: true,
         verifiedBy: verifiedBOM.accountsVerification?.verifiedBy || 'Accounts Executive (Venkatesh)',
@@ -693,13 +651,15 @@ export default function AccountsVerificationModal({
       deliveryAddressProofDoc: verifiedBOM.deliveryAddressProofDoc || null,
       sameAsBilling: verifiedBOM.sameAsBilling,
       accountsVerification: {
-        paymentStatus: currentPayStatus,
+        paymentStatus: verifiedPayStatus,
         paymentDate: isCreditTerms ? '' : currentPayDate,
         totalAmount: isCreditTerms ? verifiedOrderTotal : effectiveTotalAmountNum,
         verifiedSlipAmount: verifiedSlipAmountNum,
         adjustedAmount: adjustedAmountNum,
         adjustedFromRef: String(adjustedFromRef || '').trim(),
         adjustedNote: String(adjustedNote || '').trim(),
+        orderTotal: targetOrderAmt,
+        balanceAmount: balanceDue,
         hardCopyReceived: hardCopy,
         verified: true
       },
@@ -743,7 +703,7 @@ export default function AccountsVerificationModal({
     }
   };
 
-  return (
+  const modalContent = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%', fontFamily: "'DM Sans', sans-serif" }}>
 
       {/* ─── GRADIENT HEADER BANNER ─── */}
@@ -752,178 +712,212 @@ export default function AccountsVerificationModal({
           ? 'linear-gradient(135deg, #064E3B 0%, #065F46 100%)'
           : 'linear-gradient(135deg, #0E7490 0%, #0369A1 100%)',
         borderRadius: '16px',
-        padding: '24px 28px',
+        padding: '16px 24px',
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        boxShadow: isAlreadyCompleted ? '0 8px 24px rgba(6,78,59,0.35)' : '0 8px 24px rgba(14,116,144,0.35)'
+        gap: '16px',
+        flexWrap: 'wrap',
+        boxShadow: isAlreadyCompleted ? '0 8px 24px rgba(6,78,59,0.35)' : '0 8px 24px rgba(14,116,144,0.35)',
+        boxSizing: 'border-box',
+        width: '100%'
       }}>
-        <div className="dispatch-banner-main-wrapper" style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-          <div>
-            <div className="dispatch-banner-heading-row" style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-              <h1 className="dispatch-banner-title" style={{ fontSize: '20px', fontWeight: '900', color: '#FFFFFF', margin: 0, letterSpacing: '-0.2px' }}>
-                Accounts Payment & Document Verification
-              </h1>
-              <div className="dispatch-banner-tags" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                <span style={{
-                  backgroundColor: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.35)',
-                  color: '#FFFFFF', padding: '3px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '800'
-                }}>
-                  {bomCodeText}
-                </span>
-                {accountsVerificationModal?.docType === 'DC' ? (
-                  <span style={{
-                    backgroundColor: '#FEF3C7',
-                    border: '1px solid #FCD34D',
-                    color: '#92400E',
-                    padding: '3px 12px',
-                    borderRadius: '20px',
-                    fontSize: '11px',
-                    fontWeight: '900',
-                    letterSpacing: '0.5px',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '5px'
-                  }}>
-                    <Truck size={13} strokeWidth={2.2} />
-                    <span>DC (DELIVERY CHALLAN)</span>
-                  </span>
-                ) : (
-                  <span style={{
-                    backgroundColor: '#EFF6FF',
-                    border: '1px solid #BFDBFE',
-                    color: '#1E40AF',
-                    padding: '3px 12px',
-                    borderRadius: '20px',
-                    fontSize: '11px',
-                    fontWeight: '900',
-                    letterSpacing: '0.5px',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '5px'
-                  }}>
-                    <FileText size={13} strokeWidth={2.2} />
-                    <span>TAX INVOICE</span>
-                  </span>
-                )}
-                <span style={{
-                  backgroundColor: 'rgba(14, 165, 233, 0.25)', border: '1px solid rgba(56, 189, 248, 0.5)',
-                  color: '#E0F2FE', padding: '3px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '800',
-                  display: 'inline-flex', alignItems: 'center', gap: '6px'
-                }}>
-                  <Receipt style={{ width: '13px', height: '13px', color: '#38BDF8' }} />
-                  Tax Invoice No: <strong style={{ color: '#FFFFFF' }}>{assignedInvoiceNo || (isAlreadyCompleted ? 'Assigned' : 'Assigned upon Clearance')}</strong>
-                </span>
-                <StatusBadge
-                  status={isAlreadyCompleted ? 'ACCOUNTS VERIFIED' : (isMissingRequiredPaymentProof ? 'PAYMENT PROOF PENDING' : (payType.includes('100%') ? '100% PAID • READY FOR CLEARANCE' : 'AWAITING ACCOUNTS CLEARANCE'))}
-                  size="sm"
-                />
-                {isPartialPackingOrder && (
-                  <span style={{
-                    backgroundColor: '#FEF3C7',
-                    color: '#92400E',
-                    border: '1px solid #FCD34D',
-                    padding: '3px 12px',
-                    borderRadius: '20px',
-                    fontSize: '11px',
-                    fontWeight: '800',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '5px'
-                  }}>
-                    <Package style={{ width: '13px', height: '13px', color: '#D97706' }} />
-                    PARTIAL SHIPMENT
-                  </span>
-                )}
-              </div>
-            </div>
-            <div className="dispatch-banner-meta" style={{ fontSize: '13px', color: 'rgba(255,255,255,0.75)', marginTop: '6px', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-              <span>Customer: <strong style={{ color: '#FFFFFF' }}>{custNameText}</strong></span>
-              <span className="dispatch-banner-bullet">•</span>
-              <span>Sales Creator: <strong style={{ color: '#FFFFFF', backgroundColor: 'rgba(14, 116, 144, 0.45)', padding: '2px 8px', borderRadius: '6px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}><User style={{ width: '13px', height: '13px', color: '#67E8F9' }} /> {((accountsVerificationModal.salesPerson || accountsVerificationModal.createdBy || 'Sales Department')).replace(/\s*\([^)]*\)/g, '').trim()}</strong></span>
-              <span className="dispatch-banner-bullet">•</span>
-              <span>Payment Terms: <strong style={{ color: '#FFFFFF' }}>{payTypeText}</strong></span>
-              {dispatchReceivedText && (
-                <>
-                  <span className="dispatch-banner-bullet">•</span>
-                  <span>Received from Dispatch: <strong style={{ color: '#FFFFFF', backgroundColor: 'rgba(255, 255, 255, 0.15)', padding: '2px 8px', borderRadius: '6px' }}>{dispatchReceivedText}</strong></span>
-                </>
-              )}
-            </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          <h1 style={{ fontSize: '20px', fontWeight: '900', color: '#FFFFFF', margin: 0, letterSpacing: '-0.2px' }}>
+            Accounts Payment & Document Verification
+          </h1>
+          <span style={{
+            backgroundColor: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.35)',
+            color: '#FFFFFF', padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '800'
+          }}>
+            {bomCodeText}
+          </span>
+          <StatusBadge
+            status={isAlreadyCompleted ? 'ACCOUNTS VERIFIED' : (isMissingRequiredPaymentProof ? 'PAYMENT PROOF PENDING' : (payType.includes('100%') ? '100% PAID • READY FOR CLEARANCE' : 'AWAITING ACCOUNTS CLEARANCE'))}
+            size="sm"
+          />
+          {isPartialPackingOrder && (
+            <span style={{
+              backgroundColor: '#FEF3C7',
+              color: '#92400E',
+              border: '1px solid #FCD34D',
+              padding: '3px 12px',
+              borderRadius: '20px',
+              fontSize: '11px',
+              fontWeight: '800',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '5px'
+            }}>
+              <Package style={{ width: '13px', height: '13px', color: '#D97706' }} />
+              PARTIAL SHIPMENT
+            </span>
+          )}
+        </div>
+        {isAccountsViewOnly && (
+          <button
+            type="button"
+            onClick={() => {
+              setAccountsVerificationModal(null);
+              if (setIsAccountsViewOnly) setIsAccountsViewOnly(false);
+            }}
+            style={{
+              backgroundColor: 'rgba(255,255,255,0.2)',
+              border: '1px solid rgba(255,255,255,0.3)',
+              borderRadius: '8px',
+              padding: '6px 14px',
+              color: '#FFFFFF',
+              fontSize: '12.5px',
+              fontWeight: '800',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              transition: 'all 0.15s ease'
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.3)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.2)'; }}
+          >
+            <X size={15} /> Close Viewer
+          </button>
+        )}
+      </div>
+
+      {/* ─── DEDICATED ORDER & DISPATCH DETAILS SECTION ─── */}
+      <div style={{
+        backgroundColor: '#FFFFFF',
+        borderRadius: '14px',
+        border: '1px solid #E2E8F0',
+        padding: '16px 20px',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+        display: 'grid',
+        gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(5, 1fr)',
+        gap: '16px',
+        alignItems: 'center',
+        boxSizing: 'border-box',
+        width: '100%'
+      }}>
+        {/* Customer Name */}
+        <div>
+          <div style={{ fontSize: '11px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+            Customer Name
+          </div>
+          <div style={{ fontSize: '13.5px', fontWeight: '800', color: '#0F172A', marginTop: '3px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={custNameText}>
+            {custNameText}
           </div>
         </div>
 
-        <div className="dispatch-banner-actions" style={{ display: 'flex', gap: '10px', flexShrink: 0 }}>
-          <button
-            onClick={() => setAccountsVerificationModal(null)}
-            style={{
-              border: '1px solid rgba(255,255,255,0.3)', backgroundColor: 'rgba(255,255,255,0.1)',
-              color: '#FFFFFF', height: '42px', padding: '0 20px', borderRadius: '10px',
-              fontSize: '13px', fontWeight: '700', cursor: 'pointer', backdropFilter: 'blur(4px)'
-            }}
-          >
-            Close
-          </button>
-          {!isAlreadyCompleted && (
-            <button
-              onClick={completeVerification}
-              style={{
-                border: (isWhileDispatch && !hasUploadedPaymentProof) ? '1px solid #FECACA' : 'none',
-                backgroundColor: (isWhileDispatch && !hasUploadedPaymentProof) ? '#FEF2F2' : '#FFFFFF',
-                color: (isWhileDispatch && !hasUploadedPaymentProof) ? '#DC2626' : (isVerified ? '#065F46' : isPartialVerified ? '#92400E' : '#1E40AF'),
-                height: '42px', padding: '0 22px', borderRadius: '10px',
-                fontSize: '13px', fontWeight: '900', cursor: 'pointer',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
-                display: 'flex', alignItems: 'center', gap: '8px'
-              }}
-              title={isWhileDispatch && !hasUploadedPaymentProof ? "Locked: Awaiting payment proof upload from Sales person" : ""}
-            >
-              {isWhileDispatch && !hasUploadedPaymentProof ? (
-                <>
-                  <Clock style={{ width: '16px', height: '16px', color: '#DC2626' }} />
-                  Hold in Accounts (Awaiting Payment Slip)
-                </>
-              ) : (
-                <>
-                  <CheckCircle style={{ width: '16px', height: '16px' }} />
-                  Complete Verification
-                </>
-              )}
-            </button>
-          )}
+        {/* Sales Creator */}
+        <div>
+          <div style={{ fontSize: '11px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+            Sales Creator
+          </div>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', marginTop: '3px', backgroundColor: '#F0FDFA', border: '1px solid #CCFBF1', padding: '2px 8px', borderRadius: '6px' }}>
+            <User size={13} style={{ color: '#0D9488' }} />
+            <span style={{ fontSize: '12.5px', fontWeight: '800', color: '#0F766E' }}>
+              {((accountsVerificationModal.salesPerson || accountsVerificationModal.createdBy || 'Sales Department')).replace(/\s*\([^)]*\)/g, '').trim()}
+            </span>
+          </div>
+        </div>
+
+        {/* Document Type */}
+        <div>
+          <div style={{ fontSize: '11px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+            Document Type
+          </div>
+          <div style={{ marginTop: '3px' }}>
+            {accountsVerificationModal?.docType === 'DC' ? (
+              <span style={{
+                backgroundColor: '#FEF3C7',
+                border: '1px solid #FCD34D',
+                color: '#92400E',
+                padding: '2px 10px',
+                borderRadius: '6px',
+                fontSize: '12px',
+                fontWeight: '800',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px'
+              }}>
+                <Truck size={13} strokeWidth={2.2} />
+                <span>DC (Delivery Challan)</span>
+              </span>
+            ) : (
+              <span style={{
+                backgroundColor: '#EFF6FF',
+                border: '1px solid #BFDBFE',
+                color: '#1E40AF',
+                padding: '2px 10px',
+                borderRadius: '6px',
+                fontSize: '12px',
+                fontWeight: '800',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px'
+              }}>
+                <FileText size={13} strokeWidth={2.2} />
+                <span>Tax Invoice</span>
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Received from Dispatch */}
+        <div>
+          <div style={{ fontSize: '11px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+            Received from Dispatch
+          </div>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', marginTop: '3px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', padding: '2px 8px', borderRadius: '6px' }}>
+            <Clock size={13} style={{ color: '#64748B' }} />
+            <span style={{ fontSize: '12.5px', fontWeight: '700', color: '#334155' }}>
+              {dispatchReceivedText || '—'}
+            </span>
+          </div>
+        </div>
+
+        {/* Official Invoice Number */}
+        <div>
+          <div style={{ fontSize: '11px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+            Official Invoice No
+          </div>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', marginTop: '3px', backgroundColor: '#ECFEFF', border: '1px solid #A5F3FC', padding: '2px 8px', borderRadius: '6px' }}>
+            <Receipt size={13} style={{ color: '#0E7490' }} />
+            <span style={{ fontSize: '12.5px', fontWeight: '800', color: '#0E7490' }}>
+              {assignedInvoiceNo || (isAlreadyCompleted ? 'Assigned' : 'Assigned upon Clearance')}
+            </span>
+          </div>
         </div>
       </div>
 
-      {/* ─── 3 STAT CARDS (Payment Type, Total Amount, Payment Date) ─── */}
+      {/* ─── 4 STAT CARDS (Payment Terms, Order Total Value, Amount Received, Pending Balance) ─── */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)',
+        gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
         gap: isMobile ? '10px' : '14px',
         width: '100%',
         boxSizing: 'border-box'
       }}>
-        {/* Payment Status Card */}
+        {/* 1. Payment Terms Card */}
         <div style={{
-          gridColumn: 'span 1',
           backgroundColor: '#FFFFFF', borderRadius: '14px', border: '1px solid #E2E8F0',
-          padding: isMobile ? '12px 14px' : '18px 20px', boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
-          display: 'flex', alignItems: 'center', gap: isMobile ? '10px' : '14px',
+          padding: isMobile ? '12px 14px' : '16px 18px', boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+          display: 'flex', alignItems: 'center', gap: isMobile ? '10px' : '12px',
           boxSizing: 'border-box'
         }}>
           <div style={{
-            width: isMobile ? '38px' : '44px', height: isMobile ? '38px' : '44px', borderRadius: '12px', flexShrink: 0,
+            width: isMobile ? '38px' : '42px', height: isMobile ? '38px' : '42px', borderRadius: '12px', flexShrink: 0,
             background: 'linear-gradient(135deg, #2563EB, #3B82F6)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             boxShadow: '0 4px 10px rgba(37,99,235,0.25)'
           }}>
-            <Receipt style={{ width: isMobile ? '18px' : '22px', height: isMobile ? '18px' : '22px', color: '#FFFFFF' }} />
+            <Receipt style={{ width: isMobile ? '18px' : '20px', height: isMobile ? '18px' : '20px', color: '#FFFFFF' }} />
           </div>
-          <div>
-            <div style={{ fontSize: '11px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Payment Type & Status</div>
-            <div style={{ fontSize: isMobile ? '13px' : '14px', fontWeight: '900', color: '#0F172A', lineHeight: 1.3 }}>{payTypeText || '100% Paid'}</div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: '11px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Payment Terms</div>
+            <div style={{ fontSize: isMobile ? '13px' : '13.5px', fontWeight: '900', color: '#0F172A', lineHeight: 1.3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{payTypeText || '100% Paid'}</div>
             <div style={{ marginTop: '3px' }}>
               <span style={{
-                fontSize: '11px',
+                fontSize: '10.5px',
                 fontWeight: '700',
                 color: (currentPayStatus.includes('Received') || currentPayStatus.includes('Settled') || currentPayStatus.includes('100%')) ? '#15803D' : (currentPayStatus.includes('Credit') ? '#1D4ED8' : '#B45309'),
                 backgroundColor: (currentPayStatus.includes('Received') || currentPayStatus.includes('Settled') || currentPayStatus.includes('100%')) ? '#DCFCE7' : (currentPayStatus.includes('Credit') ? '#EFF6FF' : '#FEF3C7'),
@@ -938,70 +932,94 @@ export default function AccountsVerificationModal({
           </div>
         </div>
 
-        {/* Total Amount Card */}
+        {/* 2. Order Total Value Card */}
         <div style={{
-          gridColumn: 'span 1',
           backgroundColor: '#FFFFFF', borderRadius: '14px', border: '1px solid #E2E8F0',
-          padding: isMobile ? '12px 14px' : '18px 20px', boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
-          display: 'flex', alignItems: 'center', gap: isMobile ? '10px' : '14px',
+          padding: isMobile ? '12px 14px' : '16px 18px', boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+          display: 'flex', alignItems: 'center', gap: isMobile ? '10px' : '12px',
           boxSizing: 'border-box'
         }}>
           <div style={{
-            width: isMobile ? '38px' : '44px', height: isMobile ? '38px' : '44px', borderRadius: '12px', flexShrink: 0,
-            background: 'linear-gradient(135deg, #166534, #16A34A)',
+            width: isMobile ? '38px' : '42px', height: isMobile ? '38px' : '42px', borderRadius: '12px', flexShrink: 0,
+            background: 'linear-gradient(135deg, #0F172A, #334155)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 4px 10px rgba(22,101,52,0.25)'
+            boxShadow: '0 4px 10px rgba(15,23,42,0.2)'
           }}>
-            <IndianRupee style={{ width: isMobile ? '18px' : '22px', height: isMobile ? '18px' : '22px', color: '#FFFFFF' }} />
+            <IndianRupee style={{ width: isMobile ? '18px' : '20px', height: isMobile ? '18px' : '20px', color: '#FFFFFF' }} />
           </div>
           <div>
             <div style={{ fontSize: '11px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              {isCreditTerms ? 'Order Value (Credit)' : 'Total Amount'}
+              Order Total Value
             </div>
-            <div style={{ fontSize: isMobile ? '16px' : '18px', fontWeight: '900', color: (isCreditTerms || (currentTotalAmount !== '' && parseFloat(currentTotalAmount) > 0)) ? '#0F172A' : '#94A3B8', lineHeight: 1.2 }}>
-              {isCreditTerms
-                ? `₹ ${verifiedOrderTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
-                : (currentTotalAmount !== '' && parseFloat(currentTotalAmount) > 0 ? `₹ ${parseFloat(currentTotalAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : 'Pending Entry')}
+            <div style={{ fontSize: isMobile ? '15px' : '17px', fontWeight: '900', color: '#0F172A', lineHeight: 1.2 }}>
+              ₹ {verifiedOrderTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
             </div>
           </div>
         </div>
 
-        {/* Payment Date Card */}
+        {/* 3. Received from Slip Card */}
         <div style={{
-          gridColumn: isMobile ? 'span 2' : 'span 1',
-          width: '100%',
           backgroundColor: '#FFFFFF', borderRadius: '14px', border: '1px solid #E2E8F0',
-          padding: isMobile ? '12px 14px' : '18px 20px', boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
-          display: 'flex', alignItems: 'center', gap: isMobile ? '10px' : '14px',
+          padding: isMobile ? '12px 14px' : '16px 18px', boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+          display: 'flex', alignItems: 'center', gap: isMobile ? '10px' : '12px',
           boxSizing: 'border-box'
         }}>
           <div style={{
-            width: isMobile ? '38px' : '44px', height: isMobile ? '38px' : '44px', borderRadius: '12px', flexShrink: 0,
+            width: isMobile ? '38px' : '42px', height: isMobile ? '38px' : '42px', borderRadius: '12px', flexShrink: 0,
             background: 'linear-gradient(135deg, #0E7490, #06B6D4)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             boxShadow: '0 4px 10px rgba(14,116,144,0.25)'
           }}>
-            <Calendar style={{ width: isMobile ? '18px' : '22px', height: isMobile ? '18px' : '22px', color: '#FFFFFF' }} />
+            <IndianRupee style={{ width: isMobile ? '18px' : '20px', height: isMobile ? '18px' : '20px', color: '#FFFFFF' }} />
           </div>
           <div>
-            <div style={{ fontSize: '11px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              {isCreditTerms ? 'Credit Terms' : 'Payment Date'}
+            <div style={{ fontSize: '11px', fontWeight: '700', color: '#0E7490', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              {isCreditTerms ? 'Credit Amount' : 'Amount Received'}
             </div>
-            <div style={{ fontSize: isMobile ? '13px' : '14px', fontWeight: '900', color: (isCreditTerms || currentPayDate) ? '#0F172A' : '#94A3B8', lineHeight: 1.3 }}>
+            <div style={{ fontSize: isMobile ? '15px' : '17px', fontWeight: '900', color: '#0E7490', lineHeight: 1.2 }}>
               {isCreditTerms
-                ? `${creditDays || 30} Days Credit`
-                : (() => {
-                    if (!currentPayDate) return 'Pending Entry';
-                    try {
-                      const d = new Date(currentPayDate);
-                      return !isNaN(d.getTime()) ? d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : currentPayDate;
-                    } catch (e) {
-                      return currentPayDate;
-                    }
-                  })()}
+                ? `₹ ${verifiedOrderTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
+                : (effectiveTotalAmountNum > 0 ? `₹ ${effectiveTotalAmountNum.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : 'Pending Entry')}
             </div>
           </div>
         </div>
+
+        {/* 4. Pending Balance Card */}
+        {(() => {
+          const targetAmt = verifiedOrderTotal;
+          const currentBal = isCreditTerms ? 0 : Math.max(0, targetAmt - effectiveTotalAmountNum);
+          const isBalZero = targetAmt > 0 && currentBal <= 0;
+          return (
+            <div style={{
+              backgroundColor: isCreditTerms ? '#EFF6FF' : (isBalZero ? '#F0FDF4' : '#FFFBEB'),
+              borderRadius: '14px',
+              border: isCreditTerms ? '1px solid #BFDBFE' : (isBalZero ? '1.5px solid #86EFAC' : '1.5px solid #FCD34D'),
+              padding: isMobile ? '12px 14px' : '16px 18px',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+              display: 'flex', alignItems: 'center', gap: isMobile ? '10px' : '12px',
+              boxSizing: 'border-box'
+            }}>
+              <div style={{
+                width: isMobile ? '38px' : '42px', height: isMobile ? '38px' : '42px', borderRadius: '12px', flexShrink: 0,
+                background: isCreditTerms
+                  ? 'linear-gradient(135deg, #1D4ED8, #3B82F6)'
+                  : (isBalZero ? 'linear-gradient(135deg, #166534, #16A34A)' : 'linear-gradient(135deg, #B45309, #D97706)'),
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: isBalZero ? '0 4px 10px rgba(22,101,52,0.25)' : '0 4px 10px rgba(217,119,6,0.25)'
+              }}>
+                <IndianRupee style={{ width: isMobile ? '18px' : '20px', height: isMobile ? '18px' : '20px', color: '#FFFFFF' }} />
+              </div>
+              <div>
+                <div style={{ fontSize: '11px', fontWeight: '700', color: isCreditTerms ? '#1D4ED8' : (isBalZero ? '#15803D' : '#B45309'), textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  {isCreditTerms ? 'Credit Tenor' : 'Pending Balance'}
+                </div>
+                <div style={{ fontSize: isMobile ? '15px' : '17px', fontWeight: '900', color: isCreditTerms ? '#1D4ED8' : (isBalZero ? '#166534' : '#DC2626'), lineHeight: 1.2 }}>
+                  {isCreditTerms ? `${creditDays || 30} Days Due` : `₹ ${currentBal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* ─── PARTIAL PACKING NOTICE BANNER ─── */}
@@ -1196,12 +1214,12 @@ export default function AccountsVerificationModal({
 
                 <div>
                   <label style={{ fontSize: '12px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '6px' }}>
-                    Total Amount (₹) <span style={{ color: '#EF4444' }}>*</span> {isAlreadyCompleted ? <span style={{ fontSize: '10px', color: '#166534', fontWeight: '700' }}>(Verified)</span> : <span style={{ fontSize: '11px', color: '#B45309', fontWeight: '600' }}>— Enter amount verified from slip</span>}
+                    Amount Received from Slip (₹) <span style={{ color: '#EF4444' }}>*</span> {isAlreadyCompleted ? <span style={{ fontSize: '10px', color: '#166534', fontWeight: '700' }}>(Verified)</span> : <span style={{ fontSize: '11px', color: '#B45309', fontWeight: '600' }}>— Enter actual payment verified from slip</span>}
                   </label>
-                  <input id="accounts-verification-current-total-amount" name="currentTotalAmount" aria-label="Enter verified amount received ( 793800)"
+                  <input id="accounts-verification-current-total-amount" name="currentTotalAmount" aria-label="Enter verified amount received from slip (e.g. 10000)"
                     type="number"
                     step="0.01"
-                    placeholder="Enter verified amount received (e.g. 793800)"
+                    placeholder="Enter verified amount received from slip (e.g. 10000)"
                     disabled={isAlreadyCompleted}
                     value={currentTotalAmount}
                     onChange={(e) => {
@@ -1225,46 +1243,84 @@ export default function AccountsVerificationModal({
                 </div>
               </div>
 
-              {/* Adjust Payment (Accounts Only — Always visible in both Verification & View modes) */}
-              <div style={{ marginTop: '14px' }}>
-                {!showAdjustPayment && adjustedAmountNum <= 0 && !isAlreadyCompleted && !isAccountsViewOnly ? (
-                  <button
-                    type="button"
-                    onClick={() => setShowAdjustPayment(true)}
-                    style={{
-                      display: 'inline-flex', alignItems: 'center', gap: '6px',
-                      padding: '8px 14px', borderRadius: '8px',
-                      border: '1px solid #0E7490', backgroundColor: '#ECFEFF',
-                      color: '#0E7490', fontSize: '12px', fontWeight: '800', cursor: 'pointer'
-                    }}
-                  >
-                    + Adjust Payment
-                  </button>
-                ) : (
-                  <div style={{
-                    backgroundColor: '#F0F9FF', border: '1px solid #BAE6FD',
-                    borderRadius: '12px', padding: '14px',
-                    display: 'flex', flexDirection: 'column', gap: '12px'
-                  }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              {/* Adjust Payment (Accounts Only — Only visible if enabled by Accounts person or if an amount was entered) */}
+              {(() => {
+                const isReadOnly = isAlreadyCompleted || isAccountsViewOnly;
+                // In View/Completed mode: ONLY show if an adjustment was actually entered/recorded
+                if (isReadOnly) {
+                  if (adjustedAmountNum <= 0) return null;
+                  return (
+                    <div style={{ marginTop: '14px' }}>
+                      <div style={{
+                        backgroundColor: '#F0F9FF', border: '1px solid #BAE6FD',
+                        borderRadius: '12px', padding: '14px',
+                        display: 'flex', flexDirection: 'column', gap: '10px'
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                          <span style={{ fontSize: '12.5px', fontWeight: '800', color: '#0369A1' }}>
+                            Adjusted Payment (From Previous Payment / Advance)
+                          </span>
+                          <span style={{
+                            fontSize: '11px', fontWeight: '800', padding: '2px 9px', borderRadius: '999px',
+                            backgroundColor: '#DCFCE7', color: '#166534', border: '1px solid #BBF7D0'
+                          }}>
+                            Adjusted: ₹ {adjustedAmountNum.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: '10px' }}>
+                          <div>
+                            <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '2px' }}>Adjusted Amount</div>
+                            <div style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A' }}>₹ {adjustedAmountNum.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+                          </div>
+                          {adjustedFromRef && (
+                            <div>
+                              <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '2px' }}>Reference</div>
+                              <div style={{ fontSize: '13px', fontWeight: '700', color: '#0F172A' }}>{adjustedFromRef}</div>
+                            </div>
+                          )}
+                          {adjustedNote && (
+                            <div>
+                              <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', marginBottom: '2px' }}>Note</div>
+                              <div style={{ fontSize: '13px', fontWeight: '600', color: '#0F172A' }}>{adjustedNote}</div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
+                // In active Verification mode: show button or form
+                if (!showAdjustPayment && adjustedAmountNum <= 0) {
+                  return (
+                    <div style={{ marginTop: '14px' }}>
+                      <button
+                        type="button"
+                        onClick={() => setShowAdjustPayment(true)}
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', gap: '6px',
+                          padding: '8px 14px', borderRadius: '8px',
+                          border: '1px solid #0E7490', backgroundColor: '#ECFEFF',
+                          color: '#0E7490', fontSize: '12px', fontWeight: '800', cursor: 'pointer'
+                        }}
+                      >
+                        + Adjust Payment
+                      </button>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div style={{ marginTop: '14px' }}>
+                    <div style={{
+                      backgroundColor: '#F0F9FF', border: '1px solid #BAE6FD',
+                      borderRadius: '12px', padding: '14px',
+                      display: 'flex', flexDirection: 'column', gap: '12px'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                         <span style={{ fontSize: '12.5px', fontWeight: '800', color: '#0369A1' }}>
                           Adjust Payment (From Previous Payment / Advance)
                         </span>
-                        {(isAlreadyCompleted || isAccountsViewOnly) && (
-                          <span style={{
-                            fontSize: '11px', fontWeight: '800', padding: '2px 9px', borderRadius: '999px',
-                            backgroundColor: adjustedAmountNum > 0 ? '#DCFCE7' : '#F1F5F9',
-                            color: adjustedAmountNum > 0 ? '#166534' : '#64748B',
-                            border: adjustedAmountNum > 0 ? '1px solid #BBF7D0' : '1px solid #CBD5E1'
-                          }}>
-                            {adjustedAmountNum > 0
-                              ? `Adjusted: ₹ ${adjustedAmountNum.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
-                              : 'No Adjustment Applied (₹ 0.00)'}
-                          </span>
-                        )}
-                      </div>
-                      {!isAlreadyCompleted && !isAccountsViewOnly && (
                         <button
                           type="button"
                           onClick={() => {
@@ -1287,115 +1343,112 @@ export default function AccountsVerificationModal({
                         >
                           Remove Adjustment
                         </button>
-                      )}
-                    </div>
-
-                    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: '10px' }}>
-                      <div>
-                        <label style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '4px' }}>
-                          Adjusted Amount (₹)
-                        </label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          placeholder="e.g. 40000"
-                          disabled={isAlreadyCompleted || isAccountsViewOnly}
-                          value={adjustedAmountRaw}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setAccountsVerificationModal(prev => prev ? ({
-                              ...prev,
-                              accountsVerification: { ...(prev.accountsVerification || {}), adjustedAmount: val }
-                            }) : null);
-                          }}
-                          style={{
-                            width: '100%', height: '38px', borderRadius: '8px',
-                            border: '1px solid #93C5FD', padding: '0 10px',
-                            fontSize: '13px', fontWeight: '700', color: '#0F172A',
-                            backgroundColor: (isAlreadyCompleted || isAccountsViewOnly) ? '#F1F5F9' : '#FFFFFF',
-                            boxSizing: 'border-box', outline: 'none'
-                          }}
-                        />
                       </div>
 
-                      <div>
-                        <label style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '4px' }}>
-                          Previous Order / Receipt Ref (Optional)
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="Optional — e.g. PI-00045 / UTR-XXXX"
-                          disabled={isAlreadyCompleted || isAccountsViewOnly}
-                          value={adjustedFromRef}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setAccountsVerificationModal(prev => prev ? ({
-                              ...prev,
-                              accountsVerification: { ...(prev.accountsVerification || {}), adjustedFromRef: val }
-                            }) : null);
-                          }}
-                          style={{
-                            width: '100%', height: '38px', borderRadius: '8px',
-                            border: '1px solid #93C5FD', padding: '0 10px',
-                            fontSize: '12.5px', fontWeight: '600', color: '#0F172A',
-                            backgroundColor: (isAlreadyCompleted || isAccountsViewOnly) ? '#F1F5F9' : '#FFFFFF',
-                            boxSizing: 'border-box', outline: 'none'
-                          }}
-                        />
-                      </div>
-
-                      <div>
-                        <label style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '4px' }}>
-                          Note (Optional)
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="e.g. Excess from old order"
-                          disabled={isAlreadyCompleted || isAccountsViewOnly}
-                          value={adjustedNote}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setAccountsVerificationModal(prev => prev ? ({
-                              ...prev,
-                              accountsVerification: { ...(prev.accountsVerification || {}), adjustedNote: val }
-                            }) : null);
-                          }}
-                          style={{
-                            width: '100%', height: '38px', borderRadius: '8px',
-                            border: '1px solid #93C5FD', padding: '0 10px',
-                            fontSize: '12.5px', fontWeight: '600', color: '#0F172A',
-                            backgroundColor: (isAlreadyCompleted || isAccountsViewOnly) ? '#F1F5F9' : '#FFFFFF',
-                            boxSizing: 'border-box', outline: 'none'
-                          }}
-                        />
-                      </div>
-                    </div>
-
-                    {(() => {
-                      const targetOrderAmt = orderValue > 0 ? orderValue : cleanNum(accountsVerificationModal?.grandTotal, 0);
-                      const remainingBal = Math.max(0, targetOrderAmt - effectiveTotalAmountNum);
-                      return (
-                        <div style={{
-                          display: 'flex', flexWrap: 'wrap', gap: '14px', alignItems: 'center',
-                          padding: '8px 12px', borderRadius: '8px', backgroundColor: '#FFFFFF',
-                          border: '1px solid #E0F2FE', fontSize: '12px', fontWeight: '700'
-                        }}>
-                          <span style={{ color: '#475569' }}>Order Total: <strong style={{ color: '#0F172A' }}>₹ {targetOrderAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></span>
-                          <span style={{ color: '#475569' }}>Paid Now: <strong style={{ color: '#0E7490' }}>₹ {verifiedSlipAmountNum.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></span>
-                          <span style={{ color: '#475569' }}>Adjusted: <strong style={{ color: '#0369A1' }}>₹ {adjustedAmountNum.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></span>
-                          <span style={{ color: '#475569' }}>Total Settled: <strong style={{ color: '#059669' }}>₹ {effectiveTotalAmountNum.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></span>
-                          {targetOrderAmt > 0 && (
-                            <span style={{ color: remainingBal <= 0 ? '#059669' : '#B45309' }}>
-                              Balance: <strong>₹ {remainingBal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
-                            </span>
-                          )}
+                      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: '10px' }}>
+                        <div>
+                          <label style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '4px' }}>
+                            Adjusted Amount (₹)
+                          </label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            placeholder="e.g. 40000"
+                            value={adjustedAmountRaw}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setAccountsVerificationModal(prev => prev ? ({
+                                ...prev,
+                                accountsVerification: { ...(prev.accountsVerification || {}), adjustedAmount: val }
+                              }) : null);
+                            }}
+                            style={{
+                              width: '100%', height: '38px', borderRadius: '8px',
+                              border: '1px solid #93C5FD', padding: '0 10px',
+                              fontSize: '13px', fontWeight: '700', color: '#0F172A',
+                              backgroundColor: '#FFFFFF',
+                              boxSizing: 'border-box', outline: 'none'
+                            }}
+                          />
                         </div>
-                      );
-                    })()}
+
+                        <div>
+                          <label style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '4px' }}>
+                            Previous Order / Receipt Ref (Optional)
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="Optional — e.g. PI-00045 / UTR-XXXX"
+                            value={adjustedFromRef}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setAccountsVerificationModal(prev => prev ? ({
+                                ...prev,
+                                accountsVerification: { ...(prev.accountsVerification || {}), adjustedFromRef: val }
+                              }) : null);
+                            }}
+                            style={{
+                              width: '100%', height: '38px', borderRadius: '8px',
+                              border: '1px solid #93C5FD', padding: '0 10px',
+                              fontSize: '12.5px', fontWeight: '600', color: '#0F172A',
+                              backgroundColor: '#FFFFFF',
+                              boxSizing: 'border-box', outline: 'none'
+                            }}
+                          />
+                        </div>
+
+                        <div>
+                          <label style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'block', marginBottom: '4px' }}>
+                            Note (Optional)
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Excess from old order"
+                            value={adjustedNote}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setAccountsVerificationModal(prev => prev ? ({
+                                ...prev,
+                                accountsVerification: { ...(prev.accountsVerification || {}), adjustedNote: val }
+                              }) : null);
+                            }}
+                            style={{
+                              width: '100%', height: '38px', borderRadius: '8px',
+                              border: '1px solid #93C5FD', padding: '0 10px',
+                              fontSize: '12.5px', fontWeight: '600', color: '#0F172A',
+                              backgroundColor: '#FFFFFF',
+                              boxSizing: 'border-box', outline: 'none'
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      {(() => {
+                        const targetOrderAmt = orderValue > 0 ? orderValue : cleanNum(accountsVerificationModal?.grandTotal, 0);
+                        const remainingBal = Math.max(0, targetOrderAmt - effectiveTotalAmountNum);
+                        return (
+                          <div style={{
+                            display: 'flex', flexWrap: 'wrap', gap: '14px', alignItems: 'center',
+                            padding: '8px 12px', borderRadius: '8px', backgroundColor: '#FFFFFF',
+                            border: '1px solid #E0F2FE', fontSize: '12px', fontWeight: '700'
+                          }}>
+                            <span style={{ color: '#475569' }}>Order Total: <strong style={{ color: '#0F172A' }}>₹ {targetOrderAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></span>
+                            <span style={{ color: '#475569' }}>Paid Now: <strong style={{ color: '#0E7490' }}>₹ {verifiedSlipAmountNum.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></span>
+                            <span style={{ color: '#475569' }}>Adjusted: <strong style={{ color: '#0369A1' }}>₹ {adjustedAmountNum.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></span>
+                            <span style={{ color: '#475569' }}>Total Settled: <strong style={{ color: '#059669' }}>₹ {effectiveTotalAmountNum.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></span>
+                            {targetOrderAmt > 0 && (
+                              <span style={{ color: remainingBal <= 0 ? '#059669' : '#B45309' }}>
+                                Balance: <strong>₹ {remainingBal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </div>
                   </div>
-                )}
-              </div>
+                );
+              })()}
             </>
           )}
 
@@ -2013,208 +2066,6 @@ export default function AccountsVerificationModal({
               </div>
             );
           })()}
-
-          {/* Delivery Address Proof Document & Destination Verification Card */}
-          {(() => {
-            const rawAddressProof = accountsVerificationModal.deliveryAddressProofDoc ||
-              accountsVerificationModal.addressProofDoc ||
-              accountsVerificationModal.deliveryProofDoc ||
-              null;
-
-            const bAddr = (accountsVerificationModal.billingAddress || '').trim();
-            const dAddr = (accountsVerificationModal.deliveryAddress || bAddr).trim();
-            const isSameAddress = Boolean(
-              accountsVerificationModal.sameAsBilling ||
-              (bAddr && dAddr && bAddr.toLowerCase() === dAddr.toLowerCase())
-            );
-
-            let addrDocName = null;
-            if (rawAddressProof) {
-              if (typeof rawAddressProof === 'string' && !rawAddressProof.startsWith('data:')) {
-                addrDocName = rawAddressProof;
-              } else if (rawAddressProof.name) {
-                addrDocName = rawAddressProof.name;
-              } else if (rawAddressProof.originalName) {
-                addrDocName = rawAddressProof.originalName;
-              }
-            }
-
-            let aDocDataUrl = resolvedAddressProofDataUrl ||
-              resolveDocumentUrl(rawAddressProof) ||
-              ((typeof rawAddressProof === 'string' && rawAddressProof.startsWith('data:')) ? rawAddressProof : null) ||
-              (rawAddressProof?.dataUrl || rawAddressProof?.fileData || rawAddressProof?.url || null);
-
-            if (!aDocDataUrl && addrDocName) {
-              aDocDataUrl = getMediaFromCache(addrDocName);
-            }
-
-            if (aDocDataUrl && aDocDataUrl.startsWith('/uploads/')) {
-              aDocDataUrl = `/api${aDocDataUrl}`;
-            }
-
-            const isAddrDocPdf = Boolean(
-              (addrDocName && addrDocName.toLowerCase().endsWith('.pdf')) ||
-              (rawAddressProof && (rawAddressProof.type === 'application/pdf' || rawAddressProof.mimeType === 'application/pdf')) ||
-              (aDocDataUrl && (aDocDataUrl.toLowerCase().includes('.pdf') || aDocDataUrl.startsWith('data:application/pdf')))
-            );
-
-            return (
-              <div style={{
-                marginTop: '16px',
-                paddingTop: '16px',
-                borderTop: '1px solid #F1F5F9'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
-                  <label style={{ fontSize: '12px', fontWeight: '800', color: '#0F172A', display: 'flex', alignItems: 'center', gap: '6px', margin: 0 }}>
-                    <Truck size={15} style={{ color: '#0E7490' }} /> Delivery Address Proof Document & Destination Verification
-                  </label>
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    {(aDocDataUrl || addrDocName) && (
-                      <button
-                        type="button"
-                        onClick={() => setViewingProofDocModal({
-                          ...accountsVerificationModal,
-                          targetDoc: rawAddressProof,
-                          docTitle: 'Delivery Address Proof Document'
-                        })}
-                        style={{
-                          backgroundColor: '#ECFEFF',
-                          border: '1px solid #A5F3FC',
-                          color: '#0E7490',
-                          fontSize: '11px',
-                          fontWeight: '700',
-                          padding: '4px 12px',
-                          borderRadius: '6px',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '4px'
-                        }}
-                      >
-                        <Eye size={12} /> View Document
-                      </button>
-                    )}
-                    {(aDocDataUrl || addrDocName) && (
-                      <a
-                        href={aDocDataUrl || (addrDocName ? `/api/uploads/${encodeURIComponent(addrDocName)}` : '#')}
-                        download={addrDocName || 'address_proof.jpg'}
-                        target="_blank"
-                        rel="noreferrer"
-                        style={{
-                          backgroundColor: '#F8FAFC',
-                          border: '1px solid #CBD5E1',
-                          color: '#334155',
-                          fontSize: '11px',
-                          fontWeight: '700',
-                          padding: '4px 10px',
-                          borderRadius: '6px',
-                          textDecoration: 'none',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '4px'
-                        }}
-                      >
-                        <Download size={12} /> Download
-                      </a>
-                    )}
-                  </div>
-                </div>
-
-                {/* Address match status or proof preview */}
-                {isSameAddress ? (
-                  <div style={{
-                    backgroundColor: '#F0FDF4',
-                    border: '1px solid #BBF7D0',
-                    borderRadius: '10px',
-                    padding: '12px 16px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '10px',
-                    fontSize: '12px',
-                    color: '#166534'
-                  }}>
-                    <CheckCircle size={18} style={{ color: '#16A34A', flexShrink: 0 }} />
-                    <div>
-                      <div style={{ fontWeight: '800' }}>Delivery address matches registered billing address</div>
-                      <div style={{ fontSize: '11px', color: '#15803D', marginTop: '2px' }}>
-                        Goods destination is identical to registered billing office ({dAddr || bAddr}). No separate consignee address proof required.
-                      </div>
-                    </div>
-                  </div>
-                ) : (aDocDataUrl || rawAddressProof) ? (
-                  <div style={{
-                    backgroundColor: '#F8FAFC',
-                    border: '1.5px dashed #CBD5E1',
-                    borderRadius: '12px',
-                    padding: '14px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '16px',
-                    flexWrap: 'wrap'
-                  }}>
-                    <div
-                      onClick={() => setViewingProofDocModal({
-                        ...accountsVerificationModal,
-                        targetDoc: rawAddressProof,
-                        docTitle: 'Delivery Address Proof Document'
-                      })}
-                      style={{
-                        cursor: 'pointer',
-                        width: '140px',
-                        height: '95px',
-                        borderRadius: '8px',
-                        overflow: 'hidden',
-                        border: '1px solid #E2E8F0',
-                        backgroundColor: '#FFFFFF',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
-                        flexShrink: 0,
-                        padding: '4px'
-                      }}
-                      title="Click to view full address proof"
-                    >
-                      <ResilientDocThumbnail
-                        docUrl={aDocDataUrl}
-                        docName={addrDocName}
-                        isPdf={isAddrDocPdf}
-                        fallbackColor="#0E7490"
-                        alt="Address Proof"
-                      />
-                    </div>
-
-                    <div style={{ flex: 1, minWidth: '220px' }}>
-                      <div style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                        <span>{addrDocName || 'Delivery Address Proof Document'}</span>
-                        <span style={{ fontSize: '10px', fontWeight: '800', color: '#166534', backgroundColor: '#DCFCE7', padding: '2px 8px', borderRadius: '4px', border: '1px solid #BBF7D0' }}>
-                          ✓ Address Proof Attached
-                        </span>
-                      </div>
-                      <div style={{ fontSize: '11px', color: '#64748B', marginTop: '4px', lineHeight: '1.4' }}>
-                        Delivery address differs from billing address. Address proof verified by Sales team for consignee destination: <strong>{dAddr}</strong>.
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div style={{
-                    backgroundColor: '#FFFBEB',
-                    border: '1px solid #FDE68A',
-                    borderRadius: '10px',
-                    padding: '12px 16px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '10px'
-                  }}>
-                    <AlertTriangle size={18} style={{ color: '#D97706', flexShrink: 0 }} />
-                    <div style={{ fontSize: '11.5px', color: '#92400E' }}>
-                      <strong>Alternate Destination Alert:</strong> Delivery address ({dAddr}) is different from billing address ({bAddr}), but no address proof document was attached by Sales.
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })()}
         </div>
       </div>
 
@@ -2498,406 +2349,496 @@ export default function AccountsVerificationModal({
             backgroundColor: '#FFFFFF',
             borderRadius: '16px',
             border: '1px solid #E2E8F0',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+            boxShadow: '0 2px 12px rgba(0,0,0,0.06)',
             overflow: 'hidden'
           }}>
-            {/* Toolbar & View Switcher */}
+            {/* ── Section Header ── */}
             <div style={{
-              padding: '16px 24px',
-              borderBottom: '2px solid #F1F5F9',
-              background: 'linear-gradient(135deg, #FAFBFC 0%, #F8FAFC 100%)',
+              padding: '18px 24px',
+              background: 'linear-gradient(135deg, #0F172A 0%, #1E293B 100%)',
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
               flexWrap: 'wrap',
-              gap: '14px'
+              gap: '12px'
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <div style={{
-                  width: '36px', height: '36px', borderRadius: '10px',
-                  background: 'linear-gradient(135deg, #1E40AF, #3B82F6)',
+                  width: '38px', height: '38px', borderRadius: '10px',
+                  background: 'linear-gradient(135deg, #0E7490, #0891B2)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  boxShadow: '0 2px 8px rgba(30,64,175,0.25)'
+                  boxShadow: '0 2px 8px rgba(14,116,144,0.4)'
                 }}>
                   <FileText style={{ width: '18px', height: '18px', color: '#FFFFFF' }} />
                 </div>
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <h3 style={{ fontSize: '15px', fontWeight: '800', color: '#0F172A', margin: 0 }}>
+                    <h3 style={{ fontSize: '15px', fontWeight: '800', color: '#FFFFFF', margin: 0 }}>
                       BOM Items & Pricing Verification
                     </h3>
                     <span style={{
-                      padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: '800',
-                      backgroundColor: '#DCFCE7',
-                      color: '#166534',
-                      border: '1px solid #BBF7D0'
+                      padding: '2px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '700',
+                      backgroundColor: 'rgba(14,116,144,0.3)', color: '#67E8F9',
+                      border: '1px solid rgba(103,232,249,0.3)'
                     }}>
                       Official Pricing & Quantities
                     </span>
                   </div>
-                  <p style={{ fontSize: '12px', color: '#64748B', margin: '2px 0 0 0' }}>
-                    Verify individual product prices, kit package prices, ordered BOM quantities, and dispatch packed quantities.
+                  <p style={{ fontSize: '12px', color: '#94A3B8', margin: '3px 0 0 0' }}>
+                    {dynamicAccItems.length} line item{dynamicAccItems.length !== 1 ? 's' : ''} · Verify prices, quantities and pack status before clearance
                   </p>
+                </div>
+              </div>
+              {/* Grand Total Pill in Header */}
+              <div style={{
+                backgroundColor: 'rgba(14,116,144,0.2)',
+                border: '1px solid rgba(14,116,144,0.4)',
+                borderRadius: '12px',
+                padding: '8px 18px',
+                textAlign: 'right'
+              }}>
+                <div style={{ fontSize: '11px', color: '#94A3B8', fontWeight: '600', marginBottom: '2px' }}>ORDER VALUE (incl. GST)</div>
+                <div style={{ fontSize: '18px', fontWeight: '900', color: '#67E8F9' }}>
+                  ₹ {(orderValue > 0 ? orderValue : accGrandTotal).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </div>
               </div>
             </div>
 
-            {/* ─── INTERACTIVE BOM TABLE VIEW WITH KIT PRICING IN CENTER & PRODUCT PRICES ─── */}
-            <div style={{ overflowX: 'auto', width: '100%' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-                  <thead>
-                    <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
-                      <th style={{ padding: '13px 16px', width: '55px', textAlign: 'center', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>S.NO</th>
-                      <th style={{ padding: '13px 16px', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Product Code</th>
-                      <th style={{ padding: '13px 16px', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Product Description</th>
-                      <th style={{ padding: '13px 16px', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>BOM Qty</th>
-                      <th style={{ padding: '13px 16px', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>Packed Qty</th>
-                      <th style={{ padding: '13px 16px', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'right' }}>Unit Rate (₹)</th>
-                      <th style={{ padding: '13px 16px', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'right' }}>Line Total (₹)</th>
-                      <th style={{ padding: '13px 20px', fontSize: '11px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>Physical Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {/* Render Kit / Preset Groups if present */}
-                    {pGroups.length > 0 && pGroups.map((grp, gIdx) => {
-                      const theme = PRESET_THEMES[gIdx % PRESET_THEMES.length];
-                      const sCount = parseFloat(grp.setCount) || 1;
-                      const kPrice = cleanNum(grp.kitPrice) || 0;
-                      const kTotal = sCount * kPrice;
-                      const unitType = grp.unit || grp.unitType || (grp.isKwBased || String(grp.presetName || '').toLowerCase().includes('kw') ? 'kW' : 'Sets');
+            {/* ── Summary Strip ── */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(3, 1fr)',
+              borderBottom: '1px solid #E2E8F0',
+              backgroundColor: '#F8FAFC'
+            }}>
+              {[
+                { label: 'Taxable Amount', value: `₹ ${accSubTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`, color: '#0F172A' },
+                { label: `GST Amount`, value: `₹ ${accTotalGst.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`, color: '#D97706' },
+                { label: 'Total with GST', value: `₹ ${accGrandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`, color: '#0E7490' }
+              ].map((s, i) => (
+                <div key={i} style={{
+                  padding: '12px 20px',
+                  borderRight: i < 2 ? '1px solid #E2E8F0' : 'none',
+                  textAlign: 'center'
+                }}>
+                  <div style={{ fontSize: '11px', color: '#64748B', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>{s.label}</div>
+                  <div style={{ fontSize: '15px', fontWeight: '800', color: s.color }}>{s.value}</div>
+                </div>
+              ))}
+            </div>
 
-                      const kitItems = kitItemsByGroup[gIdx] || [];
+            {/* ── Kit / Preset Groups ── */}
+            {pGroups.length > 0 && pGroups.map((grp, gIdx) => {
+              const theme = PRESET_THEMES[gIdx % PRESET_THEMES.length];
+              const sCount = parseFloat(grp.setCount) || 1;
+              const kPrice = cleanNum(grp.kitPrice) || 0;
+              const kTotal = sCount * kPrice;
+              const unitType = grp.unit || grp.unitType || (grp.isKwBased || String(grp.presetName || '').toLowerCase().includes('kw') ? 'kW' : 'Sets');
+              const kitItems = kitItemsByGroup[gIdx] || [];
+              const rawGst = grp.gstRate || kitItems[0]?.gstRate || (pGroups.length === 1 && Number(accountsVerificationModal.subTotal) > 0 && Number(accountsVerificationModal.gstAmount) >= 0
+                ? Math.round((Number(accountsVerificationModal.gstAmount) / Number(accountsVerificationModal.subTotal)) * 100)
+                : null) || (String(grp.presetName || '').toLowerCase().includes('bos') && String(grp.presetName || '').toLowerCase().includes('dcr') ? 5 : 18);
+              const kitGstPct = parseFloat(String(rawGst).replace('%', ''));
+              const safeKitGstPct = Number.isFinite(kitGstPct) ? kitGstPct : 18;
+              const kitGstAmt = kTotal * (safeKitGstPct / 100);
+              const kitGrandTotal = kTotal + kitGstAmt;
 
-                      const rawGst = grp.gstRate || kitItems[0]?.gstRate || (pGroups.length === 1 && Number(accountsVerificationModal.subTotal) > 0 && Number(accountsVerificationModal.gstAmount) >= 0
-                        ? Math.round((Number(accountsVerificationModal.gstAmount) / Number(accountsVerificationModal.subTotal)) * 100)
-                        : null) || (String(grp.presetName || '').toLowerCase().includes('bos') && String(grp.presetName || '').toLowerCase().includes('dcr') ? 5 : 18);
-                      const kitGstPct = parseFloat(String(rawGst).replace('%', ''));
-                      const safeKitGstPct = Number.isFinite(kitGstPct) ? kitGstPct : 18;
-                      const kitGstAmt = kTotal * (safeKitGstPct / 100);
-                      const kitGrandTotal = kTotal + kitGstAmt;
+              return (
+                <div key={`acc-kit-${gIdx}`} style={{ borderBottom: '1px solid #E2E8F0' }}>
+                  {/* Kit Group Header Card */}
+                  <div style={{
+                    background: `linear-gradient(135deg, ${theme.bg} 0%, #FFFFFF 100%)`,
+                    borderLeft: `4px solid ${theme.primary}`,
+                    padding: '14px 24px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: '12px',
+                    borderBottom: `1px solid ${theme.border}`
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <span style={{
+                        backgroundColor: theme.primary, color: '#FFFFFF',
+                        fontSize: '10px', fontWeight: '900', padding: '3px 10px',
+                        borderRadius: '6px', letterSpacing: '0.6px'
+                      }}>
+                        {theme.badge}
+                      </span>
+                      <span style={{ fontSize: '14px', fontWeight: '800', color: '#0F172A' }}>
+                        {grp.presetName || 'Pre-Engineered Structure Kit'}
+                      </span>
+                      <span style={{
+                        backgroundColor: theme.tagBg || theme.bg, color: theme.primary,
+                        fontSize: '11px', fontWeight: '700', padding: '2px 10px',
+                        borderRadius: '20px', border: `1px solid ${theme.border}`
+                      }}>
+                        {sCount} {unitType}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '24px', flexWrap: 'wrap' }}>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: '10px', color: '#64748B', fontWeight: '600', textTransform: 'uppercase' }}>Kit Rate</div>
+                        <div style={{ fontSize: '14px', fontWeight: '800', color: theme.primary }}>₹ {kPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })} / {unitType}</div>
+                      </div>
+                      <div style={{ width: '1px', height: '32px', backgroundColor: theme.border }} />
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: '10px', color: '#64748B', fontWeight: '600', textTransform: 'uppercase' }}>GST ({safeKitGstPct}%)</div>
+                        <div style={{ fontSize: '14px', fontWeight: '800', color: '#D97706' }}>₹ {kitGstAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+                      </div>
+                      <div style={{ width: '1px', height: '32px', backgroundColor: theme.border }} />
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: '10px', color: '#64748B', fontWeight: '600', textTransform: 'uppercase' }}>Total incl. GST</div>
+                        <div style={{ fontSize: '15px', fontWeight: '900', color: '#0E7490' }}>₹ {kitGrandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+                      </div>
+                    </div>
+                  </div>
 
-                      return (
-                        <React.Fragment key={`acc-kit-${gIdx}`}>
-                          {/* Centered Kit Header Row with GST Value */}
-                          <tr style={{ backgroundColor: theme.bg, borderTop: `2px solid ${theme.primary}`, borderBottom: `1.5px solid ${theme.border}` }}>
-                            <td colSpan={8} style={{ padding: '10px 20px', textAlign: 'center' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px', flexWrap: 'wrap' }}>
-                                <span style={{
-                                  backgroundColor: theme.primary,
-                                  color: '#FFFFFF',
-                                  fontSize: '11px',
-                                  fontWeight: '900',
-                                  padding: '3px 10px',
-                                  borderRadius: '6px',
-                                  letterSpacing: '0.5px'
-                                }}>
-                                  {theme.badge}
-                                </span>
-                                <span style={{ fontSize: '13.5px', fontWeight: '800', color: '#0F172A' }}>
-                                  {grp.presetName || 'Pre-Engineered Structure Kit'} ({sCount} {unitType})
-                                </span>
-                                <span style={{ fontSize: '12px', fontWeight: '700', color: '#475569' }}>
-                                  Kit Rate: <strong style={{ color: theme.primary }}>₹ {kPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong> / {unitType}
-                                </span>
-                                <span style={{ fontSize: '12px', fontWeight: '700', color: '#166534' }}>
-                                  GST ({safeKitGstPct}%): <strong>₹ {kitGstAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
-                                </span>
-                                <span style={{ fontSize: '12px', fontWeight: '800', color: '#0E7490' }}>
-                                  Total with GST: <strong>₹ {(kTotal + kitGstAmt).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
-                                </span>
-                              </div>
-                            </td>
-                          </tr>
-
-                          {/* Kit Components with Vertically Centered Kit Price & GST Value */}
-                          {kitItems.map((it, kIdx) => (
-                            <tr key={`kit-item-${gIdx}-${kIdx}`} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: theme.bg }}>
-                              <td style={{ padding: '12px 16px', textAlign: 'center', color: theme.primary, fontWeight: '700' }}>{`${gIdx + 1}.${kIdx + 1}`}</td>
-                              <td style={{ padding: '12px 16px', fontWeight: '800', color: '#2563EB' }}>{it.code}</td>
+                  {/* Kit Components Table */}
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                      <thead>
+                        <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
+                          <th style={{ padding: '10px 16px', width: '55px', textAlign: 'center', fontSize: '10px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>#</th>
+                          <th style={{ padding: '10px 16px', fontSize: '10px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Code</th>
+                          <th style={{ padding: '10px 16px', fontSize: '10px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Description</th>
+                          <th style={{ padding: '10px 16px', fontSize: '10px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>BOM Qty</th>
+                          <th style={{ padding: '10px 16px', fontSize: '10px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>Packed</th>
+                          <th style={{ padding: '10px 16px', fontSize: '10px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>Pack Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {kitItems.map((it, kIdx) => {
+                          const isFullyPacked = it.packedQty >= it.qty;
+                          const isPartial = !isFullyPacked && it.packedQty > 0;
+                          return (
+                            <tr key={`kit-item-${gIdx}-${kIdx}`} style={{
+                              borderBottom: '1px solid #F1F5F9',
+                              backgroundColor: kIdx % 2 === 0 ? '#FFFFFF' : theme.bg
+                            }}>
+                              <td style={{ padding: '12px 16px', textAlign: 'center', color: theme.primary, fontWeight: '700', fontSize: '12px' }}>{`${gIdx + 1}.${kIdx + 1}`}</td>
                               <td style={{ padding: '12px 16px' }}>
-                                <div style={{ fontWeight: '700', color: '#0F172A' }}>{it.name}</div>
-                                <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>{it.desc}</div>
-                              </td>
-                              <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: '800', color: '#0F172A' }}>
-                                {it.qty} <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '600' }}>{it.uom}</span>
-                              </td>
-                              <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: '800' }}>
                                 <span style={{
-                                  backgroundColor: it.packedQty >= it.qty ? '#DCFCE7' : it.packedQty > 0 ? '#FEF3C7' : '#F1F5F9',
-                                  color: it.packedQty >= it.qty ? '#166534' : it.packedQty > 0 ? '#B45309' : '#64748B',
-                                  padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: '800'
-                                }}>
-                                  {it.packedQty} {it.uom}
-                                </span>
+                                  fontFamily: 'monospace', fontSize: '12px', fontWeight: '800', color: '#2563EB',
+                                  backgroundColor: '#EFF6FF', padding: '2px 8px', borderRadius: '6px'
+                                }}>{it.code}</span>
                               </td>
-                              {kIdx === 0 && (
-                                <>
-                                  <td
-                                    rowSpan={kitItems.length}
-                                    style={{
-                                      padding: '12px 16px',
-                                      textAlign: 'center',
-                                      verticalAlign: 'middle',
-                                      backgroundColor: '#FFFFFF',
-                                      borderLeft: `1px solid ${theme.border}`,
-                                      borderRight: `1px solid ${theme.border}`
-                                    }}
-                                  >
-                                    <div style={{ fontSize: '13px', fontWeight: '800', color: theme.primary }}>
-                                      ₹ {kPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                                    </div>
-                                    <div style={{ fontSize: '10.5px', color: '#64748B', fontWeight: '600' }}>
-                                      per {unitType}
-                                    </div>
-                                  </td>
-                                  <td
-                                    rowSpan={kitItems.length}
-                                    style={{
-                                      padding: '12px 16px',
-                                      textAlign: 'center',
-                                      verticalAlign: 'middle',
-                                      backgroundColor: '#FFFFFF',
-                                      borderRight: `1px solid ${theme.border}`
-                                    }}
-                                  >
-                                    <div style={{ fontSize: '13px', fontWeight: '900', color: '#0F172A' }}>
-                                      ₹ {kTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                                    </div>
-                                    <div style={{ fontSize: '10.5px', color: '#166534', fontWeight: '700', marginTop: '3px' }}>
-                                      + {safeKitGstPct}% GST: ₹ {kitGstAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                                    </div>
-                                    <div style={{ fontSize: '11px', color: '#0E7490', fontWeight: '800', marginTop: '2px', borderTop: '1px dashed #CBD5E1', paddingTop: '2px' }}>
-                                      Total: ₹ {kitGrandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                                    </div>
-                                  </td>
-                                </>
-                              )}
-                              <td style={{ padding: '12px 20px', textAlign: 'center' }}>
-                                {it.packed ? (
+                              <td style={{ padding: '12px 16px' }}>
+                                <div style={{ fontWeight: '700', color: '#0F172A', fontSize: '13px' }}>{it.name}</div>
+                                {it.desc && <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>{it.desc}</div>}
+                              </td>
+                              <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                                <span style={{ fontWeight: '800', color: '#0F172A', fontSize: '14px' }}>{it.qty}</span>
+                                <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '600', marginLeft: '4px' }}>{it.uom}</span>
+                              </td>
+                              <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                                <span style={{
+                                  fontWeight: '800', fontSize: '14px',
+                                  color: isFullyPacked ? '#166534' : isPartial ? '#B45309' : '#64748B'
+                                }}>{it.packedQty}</span>
+                                <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '600', marginLeft: '4px' }}>{it.uom}</span>
+                              </td>
+                              <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                                {isFullyPacked ? (
                                   <span style={{
                                     display: 'inline-flex', alignItems: 'center', gap: '4px',
                                     padding: '4px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: '800',
                                     backgroundColor: '#DCFCE7', color: '#166534', border: '1px solid #BBF7D0'
                                   }}>
-                                    <CheckCircle style={{ width: '12px', height: '12px' }} />
-                                    Packed
+                                    <CheckCircle style={{ width: '11px', height: '11px' }} /> Packed
                                   </span>
-                                ) : (
+                                ) : isPartial ? (
                                   <span style={{
                                     display: 'inline-flex', alignItems: 'center', gap: '4px',
                                     padding: '4px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: '800',
                                     backgroundColor: '#FEF3C7', color: '#B45309', border: '1px solid #FDE68A'
                                   }}>
-                                    <Clock style={{ width: '12px', height: '12px' }} />
-                                    Pending
+                                    <Clock style={{ width: '11px', height: '11px' }} /> Partial
+                                  </span>
+                                ) : (
+                                  <span style={{
+                                    display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                    padding: '4px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: '800',
+                                    backgroundColor: '#F1F5F9', color: '#64748B', border: '1px solid #E2E8F0'
+                                  }}>
+                                    <Clock style={{ width: '11px', height: '11px' }} /> Pending
                                   </span>
                                 )}
                               </td>
                             </tr>
-                          ))}
-                        </React.Fragment>
-                      );
-                    })}
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              );
+            })}
 
-                    {/* Loose / Individual Products */}
-                    {(() => {
-                      const looseItems = looseAccItems;
+            {/* ── Loose / Individual Products ── */}
+            {(() => {
+              const looseItems = looseAccItems;
+              if (looseItems.length === 0 && pGroups.length > 0) return null;
 
-                      if (looseItems.length === 0 && pGroups.length > 0) return null;
+              return (
+                <div>
+                  {/* Section separator label if mixed */}
+                  {pGroups.length > 0 && looseItems.length > 0 && (
+                    <div style={{
+                      padding: '10px 24px',
+                      backgroundColor: '#F8FAFC',
+                      borderTop: '2px solid #E2E8F0',
+                      borderBottom: '1px solid #E2E8F0',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px'
+                    }}>
+                      <span style={{
+                        padding: '3px 12px', borderRadius: '6px',
+                        backgroundColor: '#475569', color: '#FFFFFF',
+                        fontSize: '11px', fontWeight: '900', letterSpacing: '0.5px'
+                      }}>
+                        INDIVIDUAL / STANDALONE PRODUCTS
+                      </span>
+                      <span style={{ fontSize: '12px', color: '#64748B' }}>{looseItems.length} item{looseItems.length !== 1 ? 's' : ''}</span>
+                    </div>
+                  )}
 
-                      return (
-                        <>
-                          {pGroups.length > 0 && looseItems.length > 0 && (
-                            <tr style={{ backgroundColor: '#F8FAFC', borderTop: '2px solid #64748B', borderBottom: '1px solid #CBD5E1' }}>
-                              <td colSpan={8} style={{ padding: '10px 18px' }}>
-                                <span style={{ padding: '3px 10px', borderRadius: '6px', backgroundColor: '#475569', color: '#FFFFFF', fontSize: '11px', fontWeight: '900', letterSpacing: '0.5px' }}>
-                                  INDIVIDUAL / STANDALONE PRODUCTS
-                                </span>
-                              </td>
-                            </tr>
-                          )}
-
-                          {looseItems.map((it, idx) => (
-                            <tr key={`loose-${idx}`} style={{ borderBottom: '1px solid #F1F5F9', backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAFBFC' }}>
-                              <td style={{ padding: '14px 16px', textAlign: 'center', color: '#64748B', fontWeight: '700' }}>{idx + 1}</td>
-                              <td style={{ padding: '14px 16px', fontWeight: '800', color: '#2563EB' }}>{it.code}</td>
+                  {/* Standalone Items Table */}
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                      <thead>
+                        <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
+                          <th style={{ padding: '11px 16px', width: '50px', textAlign: 'center', fontSize: '10px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>#</th>
+                          <th style={{ padding: '11px 16px', fontSize: '10px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Code</th>
+                          <th style={{ padding: '11px 16px', fontSize: '10px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Description</th>
+                          <th style={{ padding: '11px 16px', fontSize: '10px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>BOM Qty</th>
+                          <th style={{ padding: '11px 16px', fontSize: '10px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>Packed</th>
+                          <th style={{ padding: '11px 16px', fontSize: '10px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'right' }}>Unit Rate</th>
+                          <th style={{ padding: '11px 16px', fontSize: '10px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'right' }}>Line Total</th>
+                          <th style={{ padding: '11px 16px', fontSize: '10px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'center' }}>Pack Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {looseItems.map((it, idx) => {
+                          const isFullyPacked = it.packedQty >= it.qty;
+                          const isPartial = !isFullyPacked && it.packedQty > 0;
+                          return (
+                            <tr key={`loose-${idx}`} style={{
+                              borderBottom: '1px solid #F1F5F9',
+                              backgroundColor: idx % 2 === 0 ? '#FFFFFF' : '#FAFBFC'
+                            }}>
+                              <td style={{ padding: '14px 16px', textAlign: 'center', color: '#94A3B8', fontWeight: '700', fontSize: '12px' }}>{idx + 1}</td>
                               <td style={{ padding: '14px 16px' }}>
-                                <div style={{ fontWeight: '700', color: '#0F172A' }}>{it.name}</div>
-                                <div style={{ fontSize: '11px', color: '#64748B' }}>{it.desc}</div>
-                              </td>
-                              <td style={{ padding: '14px 16px', textAlign: 'center', fontWeight: '800', color: '#0F172A' }}>
-                                {it.qty} <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '600' }}>{it.uom}</span>
-                              </td>
-                              <td style={{ padding: '14px 16px', textAlign: 'center', fontWeight: '800' }}>
                                 <span style={{
-                                  backgroundColor: it.packedQty >= it.qty ? '#DCFCE7' : it.packedQty > 0 ? '#FEF3C7' : '#F1F5F9',
-                                  color: it.packedQty >= it.qty ? '#166534' : it.packedQty > 0 ? '#B45309' : '#64748B',
-                                  padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: '800'
-                                }}>
-                                  {it.packedQty} {it.uom}
-                                </span>
+                                  fontFamily: 'monospace', fontSize: '12px', fontWeight: '800', color: '#2563EB',
+                                  backgroundColor: '#EFF6FF', padding: '2px 8px', borderRadius: '6px'
+                                }}>{it.code}</span>
                               </td>
-                              <td style={{ padding: '14px 16px', textAlign: 'right', fontWeight: '700', color: '#0F172A' }}>
+                              <td style={{ padding: '14px 16px' }}>
+                                <div style={{ fontWeight: '700', color: '#0F172A', fontSize: '13px' }}>{it.name}</div>
+                                {it.desc && <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>{it.desc}</div>}
+                              </td>
+                              <td style={{ padding: '14px 16px', textAlign: 'center' }}>
+                                <span style={{ fontWeight: '800', color: '#0F172A', fontSize: '14px' }}>{it.qty}</span>
+                                <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '600', marginLeft: '4px' }}>{it.uom}</span>
+                              </td>
+                              <td style={{ padding: '14px 16px', textAlign: 'center' }}>
+                                <span style={{
+                                  fontWeight: '800', fontSize: '14px',
+                                  color: isFullyPacked ? '#166534' : isPartial ? '#B45309' : '#64748B'
+                                }}>{it.packedQty}</span>
+                                <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '600', marginLeft: '4px' }}>{it.uom}</span>
+                              </td>
+                              <td style={{ padding: '14px 16px', textAlign: 'right', fontWeight: '700', color: '#475569', fontSize: '13px' }}>
                                 ₹ {it.rate.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                               </td>
-                              <td style={{ padding: '14px 16px', textAlign: 'right', fontWeight: '800', color: '#0E7490' }}>
+                              <td style={{ padding: '14px 16px', textAlign: 'right', fontWeight: '900', color: '#0E7490', fontSize: '14px' }}>
                                 ₹ {it.amt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                               </td>
-                              <td style={{ padding: '14px 20px', textAlign: 'center' }}>
-                                {it.packed ? (
+                              <td style={{ padding: '14px 16px', textAlign: 'center' }}>
+                                {isFullyPacked ? (
                                   <span style={{
                                     display: 'inline-flex', alignItems: 'center', gap: '4px',
                                     padding: '4px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: '800',
                                     backgroundColor: '#DCFCE7', color: '#166534', border: '1px solid #BBF7D0'
                                   }}>
-                                    <CheckCircle style={{ width: '12px', height: '12px' }} />
-                                    Packed
+                                    <CheckCircle style={{ width: '11px', height: '11px' }} /> Packed
                                   </span>
-                                ) : (
+                                ) : isPartial ? (
                                   <span style={{
                                     display: 'inline-flex', alignItems: 'center', gap: '4px',
                                     padding: '4px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: '800',
                                     backgroundColor: '#FEF3C7', color: '#B45309', border: '1px solid #FDE68A'
                                   }}>
-                                    <Clock style={{ width: '12px', height: '12px' }} />
-                                    Pending
+                                    <Clock style={{ width: '11px', height: '11px' }} /> Partial
+                                  </span>
+                                ) : (
+                                  <span style={{
+                                    display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                    padding: '4px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: '800',
+                                    backgroundColor: '#F1F5F9', color: '#64748B', border: '1px solid #E2E8F0'
+                                  }}>
+                                    <Clock style={{ width: '11px', height: '11px' }} /> Pending
                                   </span>
                                 )}
                               </td>
                             </tr>
-                          ))}
-                        </>
-                      );
-                    })()}
-                  </tbody>
-                </table>
-              </div>
-
-            {/* Document Section Footer */}
-            <div style={{
-              padding: '14px 24px',
-              borderTop: '1px solid #F1F5F9',
-              backgroundColor: '#FAFBFC',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center'
-            }}>
-              <span style={{ fontSize: '13px', color: '#64748B' }}>
-                Showing {dynamicAccItems.length} verified BOM line items
-              </span>
-              <span style={{ fontSize: '13px', color: '#475569' }}>
-                Total Verified Order Value: <strong style={{ color: '#0F172A', fontSize: '14px', fontWeight: '900' }}>₹ {(orderValue > 0 ? orderValue : accGrandTotal).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
-              </span>
-            </div>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         );
       })()}
 
-      {/* ─── FOOTER SAVE BAR (Only in Verification Mode) ─── */}
-      {!isAlreadyCompleted && (
-        <div style={{
-          backgroundColor: '#FFFFFF', borderRadius: '14px', border: '1px solid #E2E8F0',
-          padding: '16px 24px', boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center'
-        }}>
-          <span style={{ fontSize: '13px', color: '#64748B' }}>
-            Confirm verified payment date and total amount to complete accounts clearance.
-          </span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            {canCancelBom && (
-              <button
-                type="button"
-                onClick={() => {
-                  setAccountsVerificationModal(null);
-                  handleCancelBomOrder(accountsVerificationModal);
-                }}
-                style={{
-                  height: '42px',
-                  padding: '0 18px',
-                  borderRadius: '10px',
-                  backgroundColor: '#FEF2F2',
-                  border: '1.5px solid #FECACA',
-                  color: '#DC2626',
-                  fontSize: '13px',
-                  fontWeight: '800',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  boxShadow: '0 1px 3px rgba(220, 38, 38, 0.1)',
-                  transition: 'all 0.15s ease'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FEE2E2'}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FEF2F2'}
-                title="Cancel this BOM and restore reserved stock"
-              >
-                <XCircle style={{ width: '16px', height: '16px', color: '#DC2626' }} />
-                Cancel BOM
-              </button>
-            )}
-            {isMissingRequiredPaymentProof && (
-              <button
-                type="button"
-                onClick={() => notifySalesForMissingPaymentProof({
-                  ...accountsVerificationModal,
-                  effectiveTotalAmountNum,
-                  payType
-                })}
-                style={{
-                  height: '42px',
-                  padding: '0 20px',
-                  borderRadius: '10px',
-                  backgroundColor: '#FEF3C7',
-                  border: '1.5px solid #F59E0B',
-                  color: '#92400E',
-                  fontSize: '13px',
-                  fontWeight: '800',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  boxShadow: '0 2px 8px rgba(245, 158, 11, 0.2)',
-                  transition: 'all 0.15s ease'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FDE68A'}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FEF3C7'}
-                title="Send alert to assigned Salesperson via WhatsApp & In-App Notification"
-              >
-                <BellRing style={{ width: '16px', height: '16px', color: '#D97706' }} />
-                Notify Sales / Send Alert
-              </button>
-            )}
-            <button
-              onClick={completeVerification}
-              style={{
-                border: isMissingRequiredPaymentProof ? '1px solid #FECACA' : 'none',
-                background: isMissingRequiredPaymentProof
-                  ? '#FEF2F2'
-                  : 'linear-gradient(135deg, #064E3B, #166534)',
-                color: isMissingRequiredPaymentProof ? '#DC2626' : '#FFFFFF',
-                height: '42px', padding: '0 28px',
-                borderRadius: '10px', fontSize: '13px', fontWeight: '800',
-                cursor: 'pointer',
-                boxShadow: isMissingRequiredPaymentProof ? 'none' : '0 4px 12px rgba(6,78,59,0.3)',
-                display: 'flex', alignItems: 'center', gap: '8px'
-              }}
-              title={isMissingRequiredPaymentProof ? "Locked: Payment Proof Pending from Sales person" : ""}
-            >
-              {isMissingRequiredPaymentProof ? (
-                <>
-                  <Clock style={{ width: '15px', height: '15px', color: '#DC2626' }} />
-                  Payment Proof Pending (Locked)
-                </>
-              ) : (
-                <>
-                  <CheckCircle style={{ width: '15px', height: '15px' }} />
-                  Complete Verification
-                </>
-              )}
-            </button>
-          </div>
+      {/* ─── STICKY BOTTOM ACTION BAR (Matching PI & Invoice Management) ─── */}
+      <div
+        style={{
+          position: 'sticky',
+          bottom: 0,
+          backgroundColor: '#FFFFFF',
+          border: '1px solid #E2E8F0',
+          borderTop: '1.5px solid #CBD5E1',
+          padding: '12px 24px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '16px',
+          zIndex: 50,
+          boxShadow: '0 -4px 16px rgba(15, 23, 42, 0.08)',
+          borderRadius: '12px',
+          marginTop: '16px',
+          boxSizing: 'border-box'
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={() => {
+              setAccountsVerificationModal(null);
+              if (setIsAccountsViewOnly) setIsAccountsViewOnly(false);
+            }}
+            style={{
+              height: '40px',
+              borderRadius: '8px',
+              border: '1.5px solid #CBD5E1',
+              backgroundColor: '#FFFFFF',
+              color: '#334155',
+              padding: '0 18px',
+              fontWeight: '700',
+              cursor: 'pointer',
+              fontSize: '13px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+              transition: 'all 0.15s ease'
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#F8FAFC'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#FFFFFF'; }}
+          >
+            <ChevronLeft size={16} /> {isAccountsViewOnly ? 'Close Viewer' : 'Back'}
+          </button>
         </div>
-      )}
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          {!isAlreadyCompleted && !isAccountsViewOnly ? (
+            <>
+              {isMissingRequiredPaymentProof && (
+                <button
+                  type="button"
+                  onClick={() => notifySalesForMissingPaymentProof({
+                    ...accountsVerificationModal,
+                    effectiveTotalAmountNum,
+                    payType
+                  })}
+                  style={{
+                    height: '40px',
+                    padding: '0 18px',
+                    borderRadius: '8px',
+                    backgroundColor: '#FEF3C7',
+                    border: '1.5px solid #F59E0B',
+                    color: '#92400E',
+                    fontSize: '13px',
+                    fontWeight: '800',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    boxShadow: '0 2px 8px rgba(245, 158, 11, 0.2)',
+                    transition: 'all 0.15s ease'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FDE68A'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#FEF3C7'}
+                  title="Send alert to assigned Salesperson via WhatsApp & In-App Notification"
+                >
+                  <BellRing style={{ width: '16px', height: '16px', color: '#D97706' }} />
+                  Notify Sales / Send Alert
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={completeVerification}
+                style={{
+                  height: '40px',
+                  borderRadius: '8px',
+                  border: isMissingRequiredPaymentProof ? '1.5px solid #FECACA' : 'none',
+                  backgroundColor: isMissingRequiredPaymentProof ? '#FEF2F2' : '#0E7490',
+                  color: isMissingRequiredPaymentProof ? '#DC2626' : '#FFFFFF',
+                  padding: '0 24px',
+                  fontWeight: '800',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  boxShadow: isMissingRequiredPaymentProof ? 'none' : '0 2px 8px rgba(14, 116, 144, 0.35)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  transition: 'all 0.15s ease'
+                }}
+                onMouseEnter={(e) => { if (!isMissingRequiredPaymentProof) e.currentTarget.style.backgroundColor = '#0891B2'; }}
+                onMouseLeave={(e) => { if (!isMissingRequiredPaymentProof) e.currentTarget.style.backgroundColor = '#0E7490'; }}
+                title={isMissingRequiredPaymentProof ? "Locked: Payment Proof Pending from Sales person" : ""}
+              >
+                {isMissingRequiredPaymentProof ? (
+                  <>
+                    <Clock style={{ width: '15px', height: '15px', color: '#DC2626' }} />
+                    Payment Proof Pending (Locked)
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle style={{ width: '15px', height: '15px' }} />
+                    Complete Verification
+                  </>
+                )}
+              </button>
+            </>
+          ) : (
+            <div
+              style={{
+                backgroundColor: '#DCFCE7',
+                color: '#166534',
+                border: '1px solid #86EFAC',
+                borderRadius: '8px',
+                padding: '0 18px',
+                height: '40px',
+                fontSize: '13px',
+                fontWeight: '800',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}
+            >
+              <CheckCircle style={{ width: '16px', height: '16px', color: '#166534' }} /> {isAccountsViewOnly ? 'Accounts Verification Details' : 'Accounts Verified & Passed to Invoice'}
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* ─── RECORDED PAYMENT PROOF DOCUMENT VIEWER MODAL ─── */}
       {viewingProofDocModal && (
@@ -2905,8 +2846,7 @@ export default function AccountsVerificationModal({
           viewingProofDocModal={viewingProofDocModal}
           onClose={() => setViewingProofDocModal(null)}
           initialResolvedUrl={
-            viewingProofDocModal.targetDocUrl ||
-            (viewingProofDocModal.docTitle?.includes('Address') ? resolvedAddressProofDataUrl : resolvedProofDataUrl)
+            viewingProofDocModal.targetDocUrl || resolvedProofDataUrl
           }
           custNameText={custNameText}
           orderValue={orderValue}
@@ -2915,6 +2855,51 @@ export default function AccountsVerificationModal({
       )}
     </div>
   );
+
+  if (isAccountsViewOnly) {
+    return (
+      <div
+        onClick={(e) => {
+          if (e.target === e.currentTarget) {
+            setAccountsVerificationModal(null);
+            if (setIsAccountsViewOnly) setIsAccountsViewOnly(false);
+          }
+        }}
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.65)',
+          backdropFilter: 'blur(4px)',
+          zIndex: 10000,
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          padding: '24px',
+          boxSizing: 'border-box'
+        }}
+      >
+        <div style={{
+          backgroundColor: '#FFFFFF',
+          borderRadius: '20px',
+          maxWidth: '1240px',
+          width: '100%',
+          maxHeight: '92vh',
+          overflowY: 'auto',
+          boxShadow: '0 25px 50px -12px rgba(0,0,0,0.35)',
+          padding: '24px',
+          boxSizing: 'border-box',
+          position: 'relative'
+        }}>
+          {modalContent}
+        </div>
+      </div>
+    );
+  }
+
+  return modalContent;
 }
 
 function RecordedProofViewerModal({

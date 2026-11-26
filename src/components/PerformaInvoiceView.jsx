@@ -696,16 +696,16 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
     const BASE_SALES_TEAM = [
       { code: 'SE-001', name: 'Manojraj Selvaraj', matchNames: ['manoj', 'manojraj', 'manoj raj'], emails: ['sales.s1@'], oldCodes: ['SH-001'] },
       { code: 'SE-002', name: 'Sanjai kumar', matchNames: ['sanjai', 'sanjay', 'sanjai kumar'], emails: ['sanjaikumar', 'sales@gmail.com'], oldCodes: [] },
-      { code: 'SE-003', name: 'Vasanth Kumar S', matchNames: ['vasanth kumar s', 'vasanth kumar', 'vasanthkumar'], excludeNames: ['support', 'tech'], emails: ['vasanthkumar'], oldCodes: ['SE-VRM006'] },
+      { code: 'SE-003', name: 'Kalai selvi', matchNames: ['kalaiselvi', 'kalai selvi', 'kalai'], excludeNames: ['support', 'tech'], emails: ['mms@'], oldCodes: ['SE-VRM006'] },
       { code: 'SE-004', name: 'Mohith JV', matchNames: ['mohith', 'mohit'], emails: ['sales.s4@'], oldCodes: ['SE-015'] },
       { code: 'SE-005', name: 'Shanthi', matchNames: ['shanthi', 'santhi'], emails: ['sales.s3@'], oldCodes: [] },
       { code: 'SE-006', name: 'Dhana Sekar', matchNames: ['dhana', 'dhanasekar', 'dhana sekar'], emails: ['dhanasekar'], oldCodes: ['SE-020'] },
       { code: 'SE-007', name: 'PRASHANTH', matchNames: ['prashanth', 'prasanth'], emails: ['sales.s2@'], oldCodes: [] },
       { code: 'SE-008', name: 'Pavithra', matchNames: ['pavithra', 'pavitra'], emails: ['projectsales'], oldCodes: ['SE-010'] },
-      { code: 'SE-009', name: 'KALAISELVI T', matchNames: ['kalaiselvi', 'kalai'], emails: ['mms@'], oldCodes: ['SE-VRM090'] }
+      { code: 'SE-009', name: 'Jawahar', matchNames: ['jawahar'], emails: ['jawahar@'], oldCodes: ['SE-VRM090'] }
     ];
 
-    // Augment with dynamic employee names from server / localStorage so profile edits reflect immediately
+    // Augment with dynamic employee names from server / localStorage (replacing stale matchers on rename)
     const SALES_TEAM = BASE_SALES_TEAM.map(rep => {
       let matchedEmp = null;
       if (Array.isArray(salespersonsList)) {
@@ -721,8 +721,8 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
         const empName = (matchedEmp.employee_name || matchedEmp.name).trim();
         const lowerEmpName = empName.toLowerCase();
         const nameParts = lowerEmpName.split(/\s+/).filter(p => p.length >= 3);
-        const matchNames = Array.from(new Set([...rep.matchNames, lowerEmpName, ...nameParts]));
-        return { ...rep, name: empName, matchNames };
+        const liveEmails = matchedEmp.email ? [String(matchedEmp.email).toLowerCase().trim()] : rep.emails;
+        return { ...rep, name: empName, matchNames: Array.from(new Set([lowerEmpName, ...nameParts])), emails: liveEmails };
       }
       return rep;
     });

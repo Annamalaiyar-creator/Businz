@@ -373,51 +373,91 @@ export default function QuickPreviewDrawer({
             <span style={{ color: '#64748B', display: 'block', marginBottom: '2px' }}>Order Date</span>
             <strong style={{ color: '#0F172A' }}>{quickPreviewRecord.date || quickPreviewRecord.c3 || quickPreviewRecord.date1 || '—'}</strong>
           </div>
-          <div>
-            <span style={{ color: '#64748B', display: 'block', marginBottom: '2px' }}>Mode of Transport</span>
-            <strong style={{ color: '#0F172A' }}>{quickPreviewRecord.transportMode || quickPreviewRecord.c4 || '—'}</strong>
-          </div>
-          {(() => {
-            const vl = quickPreviewRecord.vehicleLoading || {};
-            const transporter = quickPreviewRecord.transporterName || quickPreviewRecord.transporter || vl.transporter || vl.transporterName || quickPreviewRecord.c5 || '—';
-            const destination = quickPreviewRecord.destination || vl.destination || quickPreviewRecord.deliveryCity || '—';
-            const vNo = quickPreviewRecord.vehicleNo || vl.vehicleNo;
-            const lNo = quickPreviewRecord.lrNo || quickPreviewRecord.lrNumber || vl.lrNo;
-            return (
-              <>
+          {activeTab === 'Accounts Verification' ? (
+            <>
+              <div>
+                <span style={{ color: '#64748B', display: 'block', marginBottom: '2px' }}>Payment Terms</span>
+                <strong style={{ color: '#0E7490' }}>{quickPreviewRecord.paymentType || quickPreviewRecord.paymentTerms || quickPreviewRecord.c5 || '100% Paid'}</strong>
+              </div>
+              <div>
+                <span style={{ color: '#64748B', display: 'block', marginBottom: '2px' }}>Payment Date</span>
+                <strong style={{ color: '#0F172A' }}>{quickPreviewRecord.accountsVerification?.paymentDate || quickPreviewRecord.paymentDate || '—'}</strong>
+              </div>
+              <div>
+                <span style={{ color: '#64748B', display: 'block', marginBottom: '2px' }}>Verified Amount</span>
+                <strong style={{ color: '#166534', fontSize: '13px', fontWeight: '800' }}>
+                  {quickPreviewRecord.accountsVerification?.totalAmount
+                    ? `₹ ${Number(quickPreviewRecord.accountsVerification.totalAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
+                    : (quickPreviewRecord.c6 || quickPreviewRecord.grandTotal ? `₹ ${Number(quickPreviewRecord.grandTotal).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '—')}
+                </strong>
+              </div>
+              <div>
+                <span style={{ color: '#64748B', display: 'block', marginBottom: '2px' }}>Accounts Status</span>
+                <span style={{
+                  backgroundColor: quickPreviewRecord.isAccountsDone || quickPreviewRecord.accountsVerification?.verified ? '#DCFCE7' : '#FEF3C7',
+                  color: quickPreviewRecord.isAccountsDone || quickPreviewRecord.accountsVerification?.verified ? '#166534' : '#92400E',
+                  border: quickPreviewRecord.isAccountsDone || quickPreviewRecord.accountsVerification?.verified ? '1px solid #BBF7D0' : '1px solid #FCD34D',
+                  padding: '2px 8px', borderRadius: '10px', fontSize: '10.5px', fontWeight: '800'
+                }}>
+                  • {quickPreviewRecord.isAccountsDone || quickPreviewRecord.accountsVerification?.verified ? 'Verified' : (quickPreviewRecord.status || 'Pending Verification')}
+                </span>
+              </div>
+              {Number(quickPreviewRecord.accountsVerification?.adjustedAmount || 0) > 0 && (
                 <div>
-                  <span style={{ color: '#64748B', display: 'block', marginBottom: '2px' }}>Transport Name</span>
-                  <strong style={{ color: '#0F172A' }}>{transporter}</strong>
+                  <span style={{ color: '#64748B', display: 'block', marginBottom: '2px' }}>Adjusted Amount</span>
+                  <strong style={{ color: '#0369A1' }}>₹ {Number(quickPreviewRecord.accountsVerification.adjustedAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
                 </div>
-                <div>
-                  <span style={{ color: '#64748B', display: 'block', marginBottom: '2px' }}>Destination</span>
-                  <strong style={{ color: '#0E7490' }}>{destination}</strong>
-                </div>
-                {vNo ? (
-                  <div>
-                    <span style={{ color: '#64748B', display: 'block', marginBottom: '2px' }}>Vehicle Number</span>
-                    <strong style={{ color: '#0284C7' }}>{vNo}</strong>
-                  </div>
-                ) : null}
-                {lNo ? (
-                  <div>
-                    <span style={{ color: '#64748B', display: 'block', marginBottom: '2px' }}>LR / Docket No.</span>
-                    <strong style={{ color: '#0284C7' }}>{lNo}</strong>
-                  </div>
-                ) : null}
-              </>
-            );
-          })()}
-          <div>
-            <span style={{ color: '#64748B', display: 'block', marginBottom: '2px' }}>Accounts Approval</span>
-            <span style={{ backgroundColor: '#DCFCE7', color: '#166534', border: '1px solid #BBF7D0', padding: '2px 8px', borderRadius: '10px', fontSize: '10.5px', fontWeight: '800' }}>
-              • {quickPreviewRecord.isAccountsDone ? 'Verified' : (quickPreviewRecord.status || 'Pending Verification')}
-            </span>
-          </div>
-          <div>
-            <span style={{ color: '#64748B', display: 'block', marginBottom: '2px' }}>Shipping Address</span>
-            <strong style={{ color: '#0F172A' }}>{quickPreviewRecord.deliveryAddress || quickPreviewRecord.shippingAddress || quickPreviewRecord.billingAddress || '—'}</strong>
-          </div>
+              )}
+            </>
+          ) : (
+            <>
+              <div>
+                <span style={{ color: '#64748B', display: 'block', marginBottom: '2px' }}>Mode of Transport</span>
+                <strong style={{ color: '#0F172A' }}>{quickPreviewRecord.transportMode || quickPreviewRecord.c4 || '—'}</strong>
+              </div>
+              {(() => {
+                const vl = quickPreviewRecord.vehicleLoading || {};
+                const transporter = quickPreviewRecord.transporterName || quickPreviewRecord.transporter || vl.transporter || vl.transporterName || quickPreviewRecord.c5 || '—';
+                const destination = quickPreviewRecord.destination || vl.destination || quickPreviewRecord.deliveryCity || '—';
+                const vNo = quickPreviewRecord.vehicleNo || vl.vehicleNo;
+                const lNo = quickPreviewRecord.lrNo || quickPreviewRecord.lrNumber || vl.lrNo;
+                return (
+                  <>
+                    <div>
+                      <span style={{ color: '#64748B', display: 'block', marginBottom: '2px' }}>Transport Name</span>
+                      <strong style={{ color: '#0F172A' }}>{transporter}</strong>
+                    </div>
+                    <div>
+                      <span style={{ color: '#64748B', display: 'block', marginBottom: '2px' }}>Destination</span>
+                      <strong style={{ color: '#0E7490' }}>{destination}</strong>
+                    </div>
+                    {vNo ? (
+                      <div>
+                        <span style={{ color: '#64748B', display: 'block', marginBottom: '2px' }}>Vehicle Number</span>
+                        <strong style={{ color: '#0284C7' }}>{vNo}</strong>
+                      </div>
+                    ) : null}
+                    {lNo ? (
+                      <div>
+                        <span style={{ color: '#64748B', display: 'block', marginBottom: '2px' }}>LR / Docket No.</span>
+                        <strong style={{ color: '#0284C7' }}>{lNo}</strong>
+                      </div>
+                    ) : null}
+                  </>
+                );
+              })()}
+              <div>
+                <span style={{ color: '#64748B', display: 'block', marginBottom: '2px' }}>Accounts Approval</span>
+                <span style={{ backgroundColor: '#DCFCE7', color: '#166534', border: '1px solid #BBF7D0', padding: '2px 8px', borderRadius: '10px', fontSize: '10.5px', fontWeight: '800' }}>
+                  • {quickPreviewRecord.isAccountsDone ? 'Verified' : (quickPreviewRecord.status || 'Pending Verification')}
+                </span>
+              </div>
+              <div>
+                <span style={{ color: '#64748B', display: 'block', marginBottom: '2px' }}>Shipping Address</span>
+                <strong style={{ color: '#0F172A' }}>{quickPreviewRecord.deliveryAddress || quickPreviewRecord.shippingAddress || quickPreviewRecord.billingAddress || '—'}</strong>
+              </div>
+            </>
+          )}
         </div>
       </div>
 

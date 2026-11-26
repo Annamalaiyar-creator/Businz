@@ -1101,7 +1101,9 @@ export function VRMProformaInvoicePrintSheet({
                     ? `Schedule p.${row.scheduleEntry.pageNum} | `
                     : '';
                   const gstSubText = isIntra
-                    ? `CGST / SGST: ${halfRate}% each | ₹${fmtMoney(halfGstAmt)} each`
+                    ? (cfg.showCombinedGstPct
+                      ? `GST: ${row.gRate}% (CGST ${halfRate}% + SGST ${halfRate}%) | ₹${fmtMoney(row.gstAmt)}`
+                      : `CGST / SGST: ${halfRate}% each | ₹${fmtMoney(halfGstAmt)} each`)
                     : `IGST: ${row.gRate}% | ₹${fmtMoney(row.gstAmt)}`;
 
                   return (
