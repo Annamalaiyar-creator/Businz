@@ -1353,6 +1353,46 @@ export default function ConfirmingBomModal({
                 )}
               </div>
 
+              {/* Official Tax Invoice Attachments (Uploaded by Billing / Invoice Team) */}
+              {Array.isArray(confirmingBomModal.attachedInvoiceDocs) && confirmingBomModal.attachedInvoiceDocs.length > 0 && (
+                <div style={{ backgroundColor: '#ECFEFF', border: '1px solid #A5F3FC', padding: '12px 14px', borderRadius: '10px', marginBottom: '10px' }}>
+                  <div style={{ fontSize: '12px', fontWeight: '800', color: '#0E7490', marginBottom: '8px' }}>
+                    Official Tax Invoice Attachments ({confirmingBomModal.attachedInvoiceDocs.length})
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                    {confirmingBomModal.attachedInvoiceDocs.map((invDoc, iIdx) => {
+                      const invDocUrl = invDoc?.storagePath
+                        ? `/api/uploads/bom-documents/${String(invDoc.storagePath).replace(/^\/+/, '').replace(/^bom-documents\//, '')}`
+                        : (invDoc?.url || invDoc?.dataUrl || '');
+                      return (
+                        <a
+                          key={invDoc?.id || iIdx}
+                          href={invDocUrl || '#'}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '6px 12px',
+                            borderRadius: '8px',
+                            backgroundColor: '#FFFFFF',
+                            border: '1px solid #67E8F9',
+                            color: '#0E7490',
+                            fontSize: '11.5px',
+                            fontWeight: '700',
+                            textDecoration: 'none'
+                          }}
+                        >
+                          <FileText size={13} />
+                          <span>{invDoc?.name || `Invoice File ${iIdx + 1}`}</span>
+                        </a>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {/* LR Document & Loading Photos Row */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 {lrDoc && (

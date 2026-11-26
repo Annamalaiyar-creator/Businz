@@ -166,6 +166,22 @@ export default function InvoiceDetailModal({
   };
 
   const isConfirmed = inv.status === 'Invoice Confirmed' || inv.status === 'Completed' || inv.invoiceConfirmed || Boolean(matchingBom?.invoiceConfirmed) || Boolean(matchingBom?.status === 'Invoice Confirmed');
+
+  // Attach Invoice (Mandatory — up to 5 files: Image, PDF, etc.)
+  const initialAttachedInvoiceDocs = Array.isArray(inv.attachedInvoiceDocs) && inv.attachedInvoiceDocs.length > 0
+    ? inv.attachedInvoiceDocs
+    : (Array.isArray(matchingBom?.attachedInvoiceDocs) ? matchingBom.attachedInvoiceDocs : []);
+  const [attachedInvoiceDocs, setAttachedInvoiceDocs] = useState(initialAttachedInvoiceDocs);
+  const [uploadingInvoiceDocs, setUploadingInvoiceDocs] = useState(false);
+
+  useEffect(() => {
+    const incoming = Array.isArray(inv.attachedInvoiceDocs) && inv.attachedInvoiceDocs.length > 0
+      ? inv.attachedInvoiceDocs
+      : (Array.isArray(matchingBom?.attachedInvoiceDocs) ? matchingBom.attachedInvoiceDocs : []);
+    if (incoming.length > 0) {
+      setAttachedInvoiceDocs(incoming);
+    }
+  }, [inv.invNo, inv.code, bomRefText]);
   const confirmedFallbackNo = (inv.code && inv.code !== 'Pending Confirmation') ? inv.code : (matchingBom?.invoiceNo && matchingBom.invoiceNo !== 'Pending Confirmation' ? matchingBom.invoiceNo : (inv.invNo && inv.invNo !== 'Pending Confirmation' ? inv.invNo : 'VRM-INV-2026-01'));
   const rawInvNo = isEditingInvoice
     ? (invoiceEditForm.invNo || inv.invoiceNo || (inv.invNo && inv.invNo !== 'Pending Confirmation' ? inv.invNo : null) || (matchingBom?.invoiceNo && matchingBom.invoiceNo !== 'Pending Confirmation' ? matchingBom.invoiceNo : null) || (isConfirmed ? confirmedFallbackNo : 'Pending Confirmation'))
@@ -625,6 +641,17 @@ export default function InvoiceDetailModal({
       return;
     }
 
+    // 3. Check mandatory "Attach Invoice" files (at least 1, max 5)
+    if (!Array.isArray(attachedInvoiceDocs) || attachedInvoiceDocs.length === 0) {
+      const msg = 'Please attach at least 1 Official Tax Invoice file (Image, PDF, etc.) in the "Attach Invoice" section before confirming.';
+      if (typeof showCustomAlert === 'function') {
+        showCustomAlert(msg, 'Attach Invoice Mandatory', 'warning');
+      } else {
+        alert(`⚠️ ${msg}`);
+      }
+      return;
+    }
+
     // 1. Identify items to deduct (if any selected, use selected, otherwise deduct ALL invoice items)
     const hasExplicitSelection = (itemsList || []).some(item => item.selected === true);
     const packedItemsToDeduct = hasExplicitSelection
@@ -711,6 +738,7 @@ export default function InvoiceDetailModal({
       confirmedBy: 'Priya (Billing & Invoice Exec)',
       confirmedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short', year: 'numeric' }),
       deliveryAddressProofDoc: hasAddressProof ? (inv.deliveryAddressProofDoc || matchingBom?.deliveryAddressProofDoc || foundBom?.deliveryAddressProofDoc) : null,
+      attachedInvoiceDocs: attachedInvoiceDocs,
       addressProofWaivedWithDisclaimer: waiveProofDisclaimer,
       addressProofDisclaimerClause: waiveProofDisclaimer ? 'The Invoice is processed without the Address Proof so if any problem happens means VRM Structures India Private Limited will not take any responsibility.' : null,
       termsAndConditions: waiveProofDisclaimer
@@ -746,6 +774,7 @@ export default function InvoiceDetailModal({
       stockDeducted: true,
       stockDeductionDate: new Date().toISOString(),
       deliveryAddressProofDoc: hasAddressProof ? (inv.deliveryAddressProofDoc || matchingBom?.deliveryAddressProofDoc || foundBom?.deliveryAddressProofDoc) : null,
+      attachedInvoiceDocs: attachedInvoiceDocs,
       addressProofWaivedWithDisclaimer: waiveProofDisclaimer,
       addressProofDisclaimerClause: waiveProofDisclaimer ? 'The Invoice is processed without the Address Proof so if any problem happens means VRM Structures India Private Limited will not take any responsibility.' : null
     };
@@ -763,6 +792,7 @@ export default function InvoiceDetailModal({
         stockDeducted: true,
         stockDeductionDate: new Date().toISOString(),
         deliveryAddressProofDoc: hasAddressProof ? (inv.deliveryAddressProofDoc || matchingBom?.deliveryAddressProofDoc || foundBom?.deliveryAddressProofDoc) : null,
+        attachedInvoiceDocs: attachedInvoiceDocs,
         addressProofWaivedWithDisclaimer: waiveProofDisclaimer,
         addressProofDisclaimerClause: waiveProofDisclaimer ? 'The Invoice is processed without the Address Proof so if any problem happens means VRM Structures India Private Limited will not take any responsibility.' : null
       } : b);
@@ -2346,6 +2376,176 @@ export default function InvoiceDetailModal({
       </div>
 
       {/* Complete Order & Invoice Workflow Timeline removed per user request */}
+
+      {/* ─── ATTACH INVOICE (MANDATORY — UP TO 5 FILES: IMAGE / PDF) ─── */}
+      <div
+        style={{
+          backgroundColor: '#FFFFFF',
+          border: attachedInvoiceDocs.length > 0 ? '1.5px solid #A7F3D0' : '1.5px solid #FCD34D',
+          borderRadius: '14px',
+          padding: '18px 22px',
+          marginTop: '16px',
+          boxShadow: '0 2px 8px rgba(15, 23, 42, 0.04)'
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '12px' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '14.5px', fontWeight: '800', color: '#0F172A' }}>
+                Attach Invoice
+              </span>
+              <span style={{
+                fontSize: '11px',
+                fontWeight: '800',
+                padding: '2px 8px',
+                borderRadius: '9999px',
+                backgroundColor: attachedInvoiceDocs.length > 0 ? '#ECFDF5' : '#FEF3C7',
+                color: attachedInvoiceDocs.length > 0 ? '#059669' : '#B45309'
+              }}>
+                {attachedInvoiceDocs.length > 0 ? `${attachedInvoiceDocs.length}/5 Attached` : 'Mandatory (Max 5)'}
+              </span>
+            </div>
+            <div style={{ fontSize: '12px', color: '#64748B', marginTop: '2px' }}>
+              Upload up to 5 Official Tax Invoice files (Images, PDF, etc.). Shared automatically with Salesperson &amp; Live Customer Tracking.
+            </div>
+          </div>
+
+          {attachedInvoiceDocs.length < 5 && (
+            <label style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '8px 14px',
+              borderRadius: '8px',
+              backgroundColor: uploadingInvoiceDocs ? '#94A3B8' : '#0E7490',
+              color: '#FFFFFF',
+              fontSize: '12.5px',
+              fontWeight: '700',
+              cursor: uploadingInvoiceDocs ? 'not-allowed' : 'pointer'
+            }}>
+              <span>{uploadingInvoiceDocs ? 'Uploading...' : '+ Attach Invoice File'}</span>
+              <input
+                type="file"
+                multiple
+                accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"
+                disabled={uploadingInvoiceDocs}
+                style={{ display: 'none' }}
+                onChange={async (e) => {
+                  const files = Array.from(e.target.files || []);
+                  e.target.value = '';
+                  if (files.length === 0) return;
+                  const remaining = 5 - attachedInvoiceDocs.length;
+                  const toUpload = files.slice(0, remaining);
+                  if (files.length > remaining) {
+                    alert(`You can attach up to 5 files total. Uploading first ${remaining} file(s).`);
+                  }
+                  setUploadingInvoiceDocs(true);
+                  try {
+                    const uploadedResults = [];
+                    const targetCode = bomRefText || invNoText || inv.code || 'INVOICE';
+                    for (const file of toUpload) {
+                      const check = validateClientFile(file);
+                      if (!check.valid) {
+                        alert(check.error || `Invalid file: ${file.name}`);
+                        continue;
+                      }
+                      const res = await uploadBomDocumentFile(file, targetCode, 'tax-invoice');
+                      if (res && (res.url || res.storagePath)) {
+                        uploadedResults.push({
+                          id: `INV-DOC-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                          name: res.name || file.name,
+                          originalName: file.name,
+                          type: res.type || file.type || 'application/octet-stream',
+                          size: res.size || file.size,
+                          url: res.url,
+                          storagePath: res.storagePath || '',
+                          uploadedAt: new Date().toISOString()
+                        });
+                      }
+                    }
+                    if (uploadedResults.length > 0) {
+                      const nextDocs = [...attachedInvoiceDocs, ...uploadedResults].slice(0, 5);
+                      setAttachedInvoiceDocs(nextDocs);
+                      setViewingInvoiceModal(prev => prev ? { ...prev, attachedInvoiceDocs: nextDocs } : prev);
+                      setInvoiceList(prev => {
+                        const updated = (prev || []).map(item => (
+                          item.invNo === inv.invNo || item.code === inv.code || item.bomCode === inv.bomCode
+                        ) ? { ...item, attachedInvoiceDocs: nextDocs } : item);
+                        try { saveCloudInvoiceRow({ ...inv, attachedInvoiceDocs: nextDocs }); } catch (_) {}
+                        return updated;
+                      });
+                      if (matchingBom) {
+                        const nextBom = { ...matchingBom, attachedInvoiceDocs: nextDocs };
+                        setBomStore(prev => (prev || []).map(b => (b.id === matchingBom.id || b.bomCode === matchingBom.bomCode) ? nextBom : b));
+                        try { saveCloudBomRow(nextBom); } catch (_) {}
+                      }
+                    }
+                  } catch (err) {
+                    alert(err?.message || 'Failed to upload invoice attachment.');
+                  } finally {
+                    setUploadingInvoiceDocs(false);
+                  }
+                }}
+              />
+            </label>
+          )}
+        </div>
+
+        {attachedInvoiceDocs.length > 0 && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '10px', marginTop: '8px' }}>
+            {attachedInvoiceDocs.map((doc, idx) => {
+              const docUrl = doc.storagePath
+                ? `/api/uploads/bom-documents/${String(doc.storagePath).replace(/^\/+/, '').replace(/^bom-documents\//, '')}`
+                : (doc.url || doc.dataUrl || '');
+              const isPdf = String(doc.type || '').includes('pdf') || String(doc.name || '').toLowerCase().endsWith('.pdf');
+              return (
+                <div key={doc.id || idx} style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '8px',
+                  padding: '9px 12px',
+                  borderRadius: '10px',
+                  backgroundColor: '#F8FAFC',
+                  border: '1px solid #E2E8F0'
+                }}>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontSize: '12px', fontWeight: '700', color: '#0F172A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {isPdf ? '📄' : '🖼️'} {doc.name || `Attachment ${idx + 1}`}
+                    </div>
+                    <div style={{ fontSize: '10.5px', color: '#64748B' }}>
+                      {doc.size ? `${Math.round(doc.size / 1024)} KB` : 'Attached'}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+                    {docUrl && (
+                      <a
+                        href={docUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ padding: '4px 8px', borderRadius: '6px', backgroundColor: '#ECFEFF', color: '#0E7490', fontSize: '11px', fontWeight: '700', textDecoration: 'none' }}
+                      >
+                        View
+                      </a>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const nextDocs = attachedInvoiceDocs.filter((_, i) => i !== idx);
+                        setAttachedInvoiceDocs(nextDocs);
+                        setViewingInvoiceModal(prev => prev ? { ...prev, attachedInvoiceDocs: nextDocs } : prev);
+                      }}
+                      style={{ border: 'none', backgroundColor: '#FEE2E2', color: '#DC2626', borderRadius: '6px', padding: '4px 7px', fontSize: '11px', fontWeight: '700', cursor: 'pointer' }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       {/* ─── STICKY BOTTOM ACTION BAR (Matching PI & Accounts Verification) ─── */}
       <div

@@ -736,6 +736,9 @@ export function mergeBomRecords(existing, incoming) {
       ...(incoming.accountsVerification || {})
     },
     vehicleLoading: incoming.vehicleLoading || existing.vehicleLoading || null,
+    attachedInvoiceDocs: (Array.isArray(incoming.attachedInvoiceDocs) && incoming.attachedInvoiceDocs.length > 0)
+      ? incoming.attachedInvoiceDocs
+      : (Array.isArray(existing.attachedInvoiceDocs) ? existing.attachedInvoiceDocs : []),
     lrCopyDoc: incoming.lrCopyDoc || existing.lrCopyDoc || null,
     dispatchPackingMedia: (incoming.dispatchPackingMedia?.photos?.length > 0 || incoming.dispatchPackingMedia?.videos?.length > 0)
       ? incoming.dispatchPackingMedia

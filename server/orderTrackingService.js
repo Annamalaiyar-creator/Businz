@@ -520,11 +520,14 @@ export async function resolveCustomerDocuments(bom, tracking = {}) {
   });
 
   // 2. Tax Invoice
-  const isInvoiceReady = Boolean(invNo && (bom.invoice_confirmed || bom.invoiceConfirmed || bom.status?.includes('Dispatched')));
+  const attachedInvoiceDocs = Array.isArray(bom.attachedInvoiceDocs)
+    ? bom.attachedInvoiceDocs
+    : (Array.isArray(bom.accounts_verification?._extra_data?.attachedInvoiceDocs) ? bom.accounts_verification._extra_data.attachedInvoiceDocs : []);
+  const isInvoiceReady = Boolean((invNo && (bom.invoice_confirmed || bom.invoiceConfirmed || bom.status?.includes('Dispatched'))) || attachedInvoiceDocs.length > 0);
   documents.push({
     type: 'TAX_INVOICE',
     title: 'Official Tax Invoice',
-    docNumber: invNo || 'Awaiting Billing',
+    docNumber: invNo || (attachedInvoiceDocs.length > 0 ? 'Attached' : 'Awaiting Billing'),
     status: isInvoiceReady ? 'AVAILABLE' : 'NOT_YET_GENERATED',
     available: isInvoiceReady,
     date: bom.accounts_verification?._extra_data?.invoiceConfirmedAt || null,
@@ -1762,8 +1765,31 @@ export async function resolveTrackingDocumentPayload(rawToken, docType) {
     const resolved = await resolveUploadedDoc(lrDoc);
     if (resolved) return resolved;
   }
+  if (cleanType === 'tax-invoice') {
+    const attachedInvoiceDocs = Array.isArray(safeBom.attachedInvoiceDocs)
+      ? safeBom.attachedInvoiceDocs
+      : (Array.isArray(safeBom.accounts_verification?._extra_data?.attachedInvoiceDocs) ? safeBom.accounts_verification._extra_data.attachedInvoiceDocs : []);
+    if (attachedInvoiceDocs.length === 1) {
+      const resolved = await resolveUploadedDoc(attachedInvoiceDocs[0]);
+      if (resolved) return resolved;
+    } else if (attachedInvoiceDocs.length > 1) {
+      const linksHtml = attachedInvoiceDocs.map((d, idx) => {
+        const docUrl = d?.storagePath
+          ? `/api/uploads/bom-documents/${String(d.storagePath).replace(/^\/+/, '').replace(/^bom-documents\//, '')}`
+          : (d?.url || d?.dataUrl || '#');
+        return `<a class="inv-card" href="${escapeHtml(docUrl)}" target="_blank" rel="noopener noreferrer">
+          <div><strong>${escapeHtml(d?.name || `Tax Invoice File ${idx + 1}`)}</strong><div style="font-size:12px;color:#64748B;margin-top:2px;">Click to view or download</div></div>
+          <span class="btn" style="padding:7px 14px;font-size:12px;">Open</span>
+        </a>`;
+      }).join('');
+      return {
+        type: 'html',
+        html: `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width,initial-scale=1.0" /><title>Official Tax Invoice — ${escapeHtml(bomCode)}</title><style>body{font-family:'Inter',-apple-system,sans-serif;background:#F1F5F9;margin:0;padding:32px 16px;color:#0F172A}.wrap{max-width:680px;margin:0 auto;background:#FFF;border:1px solid #E2E8F0;border-radius:16px;padding:28px;box-shadow:0 8px 24px rgba(15,23,42,.06)}.inv-card{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 16px;border:1px solid #E2E8F0;border-radius:12px;text-decoration:none;color:inherit;margin-top:12px;background:#F8FAFC}.inv-card:hover{border-color:#0E7490;background:#ECFEFF}.btn{background:#0E7490;color:#FFF;border-radius:8px;font-weight:700}</style></head><body><div class="wrap"><div style="font-size:12px;font-weight:700;color:#0E7490;text-transform:uppercase;">VRM Structures India Private Limited</div><h2 style="margin:4px 0 4px;">Official Tax Invoice (${escapeHtml(invNo)})</h2><div style="font-size:13px;color:#64748B;margin-bottom:18px;">BOM: <strong>${escapeHtml(bomCode)}</strong> • Customer: <strong>${escapeHtml(customerName)}</strong></div>${linksHtml}</div></body></html>`
+      };
+    }
+  }
 
-  // Generate clean customer-safe printable HTML for structured documents
+  // Generate premium, client-ready printable HTML for structured documents
   const packingProgress = calculatePackingProgress(safeBom);
   const rows = packingProgress.products || [];
   const docTitleMap = {
@@ -1776,26 +1802,30 @@ export async function resolveTrackingDocumentPayload(rawToken, docType) {
   };
   const docTitle = docTitleMap[cleanType] || 'Order Document';
   const vehicleLoading = safeBom.vehicleLoading || safeBom.accounts_verification?._extra_data?.vehicleLoading || {};
-  const lrNo = safeBom.lr_no || safeBom.lrNo || vehicleLoading.lrNumber || vehicleLoading.lrNo || 'N/A';
-  const transporter = safeBom.transporter_name || vehicleLoading.transporterName || 'Pending';
+  const lrNo = safeBom.lr_no || safeBom.lrNo || vehicleLoading.lrNumber || vehicleLoading.lrNo || '';
+  const transporter = safeBom.transporter_name || vehicleLoading.transporterName || '';
+  const vehicleNo = safeBom.vehicle_no || vehicleLoading.vehicleNumber || vehicleLoading.vehicleNo || '';
+  const deliveryAddress = safeBom.delivery_address || safeBom.deliveryAddress || safeBom.address || '';
+  const packedPct = packingProgress.percentage || 0;
+  const docDateStr = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 
   const tableRowsHtml = rows.length > 0
     ? rows.map((p, idx) => {
-      const statusLabel = p.isFullyPacked
-        ? '<span style="color:#059669;font-weight:700">Fully Packed</span>'
+      const statusBadge = p.isFullyPacked
+        ? '<span class="badge badge-green">✓ Fully Packed</span>'
         : p.packedQty > 0
-          ? `<span style="color:#B45309;font-weight:700">Partially Packed (${escapeHtml(p.packedQty)} of ${escapeHtml(p.orderedQty)})</span>`
-          : '<span style="color:#64748B">Pending</span>';
+          ? `<span class="badge badge-amber">◐ Partial (${escapeHtml(p.packedQty)}/${escapeHtml(p.orderedQty)})</span>`
+          : '<span class="badge badge-slate">○ Pending</span>';
       return `
       <tr>
-        <td>${idx + 1}</td>
-        <td><strong>${escapeHtml(p.code)}</strong></td>
-        <td>${escapeHtml(p.name)}</td>
-        <td style="text-align:right">${escapeHtml(p.orderedQty)} ${escapeHtml(p.uom)}</td>
-        ${cleanType === 'packing-list' ? `<td style="text-align:right"><strong>${escapeHtml(p.packedQty)}</strong> / ${escapeHtml(p.orderedQty)} ${escapeHtml(p.uom)}</td><td style="text-align:right">${escapeHtml(p.pendingQty)} ${escapeHtml(p.uom)}</td><td>${statusLabel}</td>` : ''}
+        <td style="color:#64748B;font-weight:600;">${idx + 1}</td>
+        <td><span class="code-pill">${escapeHtml(p.code)}</span></td>
+        <td style="font-weight:600;color:#0F172A;">${escapeHtml(p.name)}</td>
+        <td class="num">${escapeHtml(p.orderedQty)} <span class="uom">${escapeHtml(p.uom)}</span></td>
+        ${cleanType === 'packing-list' ? `<td class="num"><strong>${escapeHtml(p.packedQty)}</strong> <span class="uom">/ ${escapeHtml(p.orderedQty)} ${escapeHtml(p.uom)}</span></td><td class="num" style="color:${p.pendingQty > 0 ? '#B45309' : '#64748B'}">${escapeHtml(p.pendingQty)} <span class="uom">${escapeHtml(p.uom)}</span></td><td>${statusBadge}</td>` : ''}
       </tr>`;
     }).join('')
-    : `<tr><td colspan="${cleanType === 'packing-list' ? 7 : 4}" style="text-align:center;color:#64748B;padding:24px;">No line items available.</td></tr>`;
+    : `<tr><td colspan="${cleanType === 'packing-list' ? 7 : 4}" style="text-align:center;color:#64748B;padding:28px;">No line items available.</td></tr>`;
 
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -1804,55 +1834,120 @@ export async function resolveTrackingDocumentPayload(rawToken, docType) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>${escapeHtml(docTitle)} — ${escapeHtml(bomCode)}</title>
   <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #0F172A; margin: 0; padding: 32px; background: #F8FAFC; }
-    .sheet { max-width: 900px; margin: 0 auto; background: #FFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 32px; box-shadow: 0 4px 16px rgba(15,23,42,0.06); }
-    .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0E7490; padding-bottom: 16px; margin-bottom: 24px; }
-    .brand { font-size: 18px; font-weight: 800; color: #0E7490; }
-    .sub { font-size: 12px; color: #64748B; margin-top: 4px; }
-    .meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; background: #F8FAFC; padding: 16px; border-radius: 8px; margin-bottom: 24px; font-size: 13px; }
-    .meta-label { font-size: 11px; color: #64748B; text-transform: uppercase; font-weight: 700; }
-    .meta-val { font-weight: 700; color: #0F172A; margin-top: 2px; }
-    table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    th { background: #F1F5F9; color: #334155; text-align: left; padding: 10px 12px; border-bottom: 1px solid #CBD5E1; font-weight: 700; }
-    td { padding: 10px 12px; border-bottom: 1px solid #E2E8F0; }
-    .actions { display: flex; justify-content: flex-end; gap: 10px; margin-bottom: 16px; }
-    .btn { background: #0E7490; color: #FFF; border: none; padding: 9px 16px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 13px; }
-    @media print { body { background: #FFF; padding: 0; } .sheet { border: none; box-shadow: none; } .actions { display: none; } }
+    * { box-sizing: border-box; }
+    body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #0F172A; margin: 0; padding: 28px 16px; background: #F1F5F9; }
+    .toolbar { max-width: 960px; margin: 0 auto 14px; display: flex; justify-content: space-between; align-items: center; }
+    .toolbar-note { font-size: 12px; color: #64748B; font-weight: 600; }
+    .btn { background: #0E7490; color: #FFF; border: none; padding: 10px 18px; border-radius: 10px; font-weight: 700; cursor: pointer; font-size: 13px; box-shadow: 0 2px 8px rgba(14,116,144,0.25); }
+    .btn:hover { background: #0C637A; }
+    .sheet { max-width: 960px; margin: 0 auto; background: #FFF; border: 1px solid #E2E8F0; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 30px rgba(15,23,42,0.07); }
+    .banner { background: linear-gradient(135deg, #0E7490 0%, #0F172A 100%); color: #FFF; padding: 26px 32px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; }
+    .brand-row { display: flex; align-items: center; gap: 14px; }
+    .logo-box { width: 46px; height: 46px; border-radius: 12px; background: rgba(255,255,255,0.16); border: 1px solid rgba(255,255,255,0.28); display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 20px; }
+    .company { font-size: 19px; font-weight: 800; letter-spacing: -0.3px; }
+    .company-sub { font-size: 12px; color: #CBD5E1; margin-top: 3px; }
+    .doc-tag { text-align: right; }
+    .doc-pill { display: inline-block; background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.25); padding: 4px 12px; border-radius: 9999px; font-size: 11px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; margin-bottom: 6px; }
+    .doc-title { font-size: 20px; font-weight: 800; }
+    .doc-ref { font-size: 12.5px; color: #E2E8F0; margin-top: 2px; }
+    .content { padding: 26px 32px; }
+    .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px; }
+    .kpi { background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px; padding: 14px 16px; }
+    .kpi-label { font-size: 11px; color: #64748B; text-transform: uppercase; font-weight: 700; letter-spacing: 0.4px; }
+    .kpi-val { font-size: 17px; font-weight: 800; color: #0F172A; margin-top: 4px; }
+    .bar-bg { width: 100%; height: 6px; background: #E2E8F0; border-radius: 9999px; margin-top: 8px; overflow: hidden; }
+    .bar-fill { height: 100%; background: ${packedPct === 100 ? '#10B981' : '#0E7490'}; width: ${packedPct}%; }
+    .details { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px; padding: 16px 18px; margin-bottom: 22px; font-size: 13px; }
+    .d-label { font-size: 11px; color: #64748B; font-weight: 700; text-transform: uppercase; }
+    .d-val { font-weight: 700; color: #0F172A; margin-top: 3px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; border: 1px solid #E2E8F0; border-radius: 10px; overflow: hidden; }
+    th { background: #F1F5F9; color: #334155; text-align: left; padding: 11px 12px; border-bottom: 2px solid #CBD5E1; font-weight: 700; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.4px; }
+    td { padding: 11px 12px; border-bottom: 1px solid #F1F5F9; vertical-align: middle; }
+    tbody tr:nth-child(even) { background: #FAFCFF; }
+    .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .uom { font-size: 11px; color: #64748B; font-weight: 600; }
+    .code-pill { display: inline-block; background: #ECFEFF; color: #0E7490; border: 1px solid #CFFAFE; font-weight: 700; font-size: 11.5px; padding: 2px 8px; border-radius: 6px; }
+    .badge { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 700; padding: 4px 10px; border-radius: 9999px; white-space: nowrap; }
+    .badge-green { background: #ECFDF5; color: #059669; border: 1px solid #A7F3D0; }
+    .badge-amber { background: #FFFBEB; color: #B45309; border: 1px solid #FDE68A; }
+    .badge-slate { background: #F1F5F9; color: #64748B; border: 1px solid #CBD5E1; }
+    .footer { margin-top: 24px; padding-top: 16px; border-top: 1px dashed #CBD5E1; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; font-size: 12px; color: #64748B; }
+    .verified-seal { display: inline-flex; align-items: center; gap: 6px; background: #ECFDF5; color: #059669; border: 1px solid #A7F3D0; padding: 6px 12px; border-radius: 8px; font-weight: 700; font-size: 12px; }
+    @media print {
+      body { background: #FFF; padding: 0; }
+      .toolbar { display: none; }
+      .sheet { border: none; box-shadow: none; border-radius: 0; }
+      .banner { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
   </style>
 </head>
 <body>
+  <div class="toolbar">
+    <div class="toolbar-note">BUSINZ Track • Official Customer Packing Document</div>
+    <button class="btn" onclick="window.print()">Print / Download PDF</button>
+  </div>
   <div class="sheet">
-    <div class="actions">
-      <button class="btn" onclick="window.print()">Print / Save PDF</button>
-    </div>
-    <div class="header">
-      <div>
-        <div class="brand">VRM Structures India Private Limited</div>
-        <div class="sub">BUSINZ Customer Order Document Portal</div>
+    <div class="banner">
+      <div class="brand-row">
+        <div class="logo-box">V</div>
+        <div>
+          <div class="company">VRM Structures India Private Limited</div>
+          <div class="company-sub">Verified Dispatch &amp; Quality Packing Slip</div>
+        </div>
       </div>
-      <div style="text-align:right">
-        <div style="font-size:16px;font-weight:800;color:#0F172A">${escapeHtml(docTitle)}</div>
-        <div class="sub">BOM: <strong>${escapeHtml(bomCode)}</strong></div>
+      <div class="doc-tag">
+        <div class="doc-pill">${escapeHtml(docTitle)}</div>
+        <div class="doc-title">${escapeHtml(bomCode)}</div>
+        <div class="doc-ref">Issued: ${escapeHtml(docDateStr)}</div>
       </div>
     </div>
-    <div class="meta">
-      <div><div class="meta-label">Customer</div><div class="meta-val">${escapeHtml(customerName)}</div></div>
-      <div><div class="meta-label">Proforma Invoice</div><div class="meta-val">${escapeHtml(piNo)}</div></div>
-      <div><div class="meta-label">Tax Invoice</div><div class="meta-val">${escapeHtml(invNo)}</div></div>
-      <div><div class="meta-label">Transporter / LR</div><div class="meta-val">${escapeHtml(transporter)} (${escapeHtml(lrNo)})</div></div>
+
+    <div class="content">
+      <div class="kpis">
+        <div class="kpi">
+          <div class="kpi-label">Packing Completion</div>
+          <div class="kpi-val">${packedPct}%</div>
+          <div class="bar-bg"><div class="bar-fill"></div></div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">Lines Packed</div>
+          <div class="kpi-val">${packingProgress.packedLines} / ${packingProgress.totalLines} Items</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">Carrier / Transport</div>
+          <div class="kpi-val" style="font-size:14.5px;">${escapeHtml(transporter || 'To Be Assigned')}</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">LR / Vehicle</div>
+          <div class="kpi-val" style="font-size:14.5px;">${escapeHtml(lrNo || vehicleNo || 'Awaiting Dispatch')}</div>
+        </div>
+      </div>
+
+      <div class="details">
+        <div><div class="d-label">Customer</div><div class="d-val">${escapeHtml(customerName)}</div></div>
+        <div><div class="d-label">Proforma Invoice</div><div class="d-val">${escapeHtml(piNo)}</div></div>
+        <div><div class="d-label">Tax Invoice</div><div class="d-val">${escapeHtml(invNo)}</div></div>
+        ${deliveryAddress ? `<div><div class="d-label">Delivery Location</div><div class="d-val" style="font-size:12px;">${escapeHtml(deliveryAddress)}</div></div>` : ''}
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th style="width:44px">#</th>
+            <th style="width:125px">Item Code</th>
+            <th>Item Description</th>
+            <th class="num" style="width:110px">Ordered</th>
+            ${cleanType === 'packing-list' ? '<th class="num" style="width:135px">Packed</th><th class="num" style="width:105px">Pending</th><th style="width:165px">Status</th>' : ''}
+          </tr>
+        </thead>
+        <tbody>${tableRowsHtml}</tbody>
+      </table>
+
+      <div class="footer">
+        <div class="verified-seal">✓ Verified by VRM Dispatch Team</div>
+        <div>Thank you for your business with VRM Structures India Private Limited • Powered by BUSINZ</div>
+      </div>
     </div>
-    <table>
-      <thead>
-        <tr>
-          <th style="width:48px">#</th>
-          <th style="width:140px">Code</th>
-          <th>Item Description</th>
-          <th style="text-align:right;width:120px">Ordered Qty</th>
-          ${cleanType === 'packing-list' ? '<th style="text-align:right;width:140px">Packed Qty</th><th style="text-align:right;width:110px">Pending Qty</th><th style="width:170px">Packing Status</th>' : ''}
-        </tr>
-      </thead>
-      <tbody>${tableRowsHtml}</tbody>
-    </table>
   </div>
 </body>
 </html>`;

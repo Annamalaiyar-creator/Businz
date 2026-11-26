@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import {
   Trash2, X, CheckCircle, Phone, UploadCloud, Truck, Package,
   Upload, Camera, Image, Loader2, FileText, Eye, ChevronLeft, User,
-  Info, FileCheck, Check, Clock, MessageSquare
+  Info, FileCheck, Check, Clock
 } from "lucide-react";
 import { saveCloudStore, saveCloudBomRow, saveCloudInvoiceRow } from "../../utils/supabaseDataSync";
 import { centralInventoryStore } from "../../utils/centralInventoryStore";
@@ -13,7 +13,6 @@ import { getMediaFromCache, saveMediaToCache } from "../../utils/mediaUtils";
 import { stripDataUrlsFromRecord } from "../../utils/otherViewsShared";
 import { notifyDispatchCompletedToSales } from "../../services/notificationService";
 import { autoDispatchOrderStatusToCustomer } from "../../utils/whatsappDispatchService";
-import SendWhatsAppStatusModal from "./SendWhatsAppStatusModal";
 
 function readFileAsDataUrl(file) {
   return new Promise((resolve) => {
@@ -212,7 +211,6 @@ export default function VehicleLoadingModal({
     return () => window.removeEventListener('resize', handleResize);
   }, []);
   const [localMediaPreviewModal, setLocalMediaPreviewModal] = useState(null);
-  const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
 
   const salesTransportMode = (() => {
     const raw = bom.transportMode || bom.deliveryMode || existingLoading.deliveryMode || '';
@@ -448,16 +446,10 @@ export default function VehicleLoadingModal({
       return;
     }
 
-    if (currentPhotos.length === 0) {
-      alert('Please upload at least one vehicle loading proof photo before dispatch.');
-      return;
-    }
-
-    // Strictly separate vehicle loading photos from LR receipt upload:
-    // If 3rd-party transport -> departs on road, status moves to 'Dispatched - Awaiting LR Copy'.
-    // Transporter LR copy can then be uploaded from the floating bottom action bar popup menu.
-    // If own vehicle or customer pickup -> completed immediately.
-    const nextStatus = isTransport ? 'Dispatched - Awaiting LR Copy' : 'Completed';
+    // Porter / Own Vehicle / Direct modes close the BOM without LR copy.
+    // Transport mode keeps the BOM open ('Dispatched - Awaiting LR Copy') until LR copy is attached.
+    const hasLrCopy = Boolean(lrCopyDoc && (lrCopyDoc.url || lrCopyDoc.dataUrl || lrCopyDoc.name));
+    const nextStatus = (isTransport && !hasLrCopy) ? 'Dispatched - Awaiting LR Copy' : 'Completed';
     handleFinalizeVehicleLoading({ forceStatus: nextStatus });
   };
 
@@ -807,28 +799,6 @@ return (
         width: isMobile ? '100%' : 'auto',
         marginTop: isMobile ? '6px' : '0'
       }}>
-        <button
-          type="button"
-          onClick={() => setShowWhatsAppModal(true)}
-          style={{
-            border: 'none',
-            backgroundColor: '#25D366',
-            backgroundImage: 'linear-gradient(135deg, #128C7E 0%, #25D366 100%)',
-            color: '#FFFFFF',
-            height: isMobile ? '44px' : '42px',
-            padding: '0 16px',
-            borderRadius: '10px', fontSize: '13px', fontWeight: '800',
-            cursor: 'pointer',
-            boxShadow: '0 4px 12px rgba(37,211,102,0.3)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
-            width: isMobile ? '100%' : 'auto',
-            whiteSpace: 'nowrap'
-          }}
-          title="Send Real-Time Dispatch Status & Tracking Link to Customer on WhatsApp"
-        >
-          <MessageSquare size={16} /> WhatsApp Status
-        </button>
-
         {!isReadOnly && (
           <button
             type="button"
@@ -1358,14 +1328,6 @@ return (
           setLocalMediaPreviewModal(null);
           setActiveMediaPreviewModal(null);
         }}
-      />
-    )}
-
-    {/* Send Real-Time Status via WhatsApp Modal */}
-    {showWhatsAppModal && (
-      <SendWhatsAppStatusModal
-        order={bom}
-        onClose={() => setShowWhatsAppModal(false)}
       />
     )}
   </div>
