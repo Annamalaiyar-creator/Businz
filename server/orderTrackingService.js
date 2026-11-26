@@ -1317,13 +1317,16 @@ export async function getInternalTrackingOrders({ search = '', stage = '', page 
   );
   const totalCount = parseInt(countRes.rows[0].count, 10);
 
-  // Query records
+  // Query records (extracting only lightweight items/dispatchPacking/vehicleLoading paths — never full bom_data blobs)
   const querySql = `
     SELECT 
       t.id, t.bom_code, t.source_pi_no, t.tracking_token, t.customer_name, 
       t.customer_mobile, t.status, t.current_stage, t.packing_percentage,
       t.access_count, t.last_accessed_at, t.created_at, t.updated_at,
       b.transporter_name, b.vehicle_no, b.lr_no, b.invoice_no,
+      b.bom_data->'items' as items_json,
+      COALESCE(b.bom_data->'dispatchPacking', b.bom_data->'dispatch_packing') as dispatch_packing_json,
+      COALESCE(b.bom_data->'vehicleLoading', b.bom_data->'accounts_verification'->'_extra_data'->'vehicleLoading') as vehicle_loading_json,
       (SELECT COUNT(*) FROM public.order_tracking_issues i WHERE i.tracking_id = t.id AND i.status = 'OPEN') as open_issues_count
     FROM public.order_tracking t
     LEFT JOIN public.bom_orders b ON (b.code = t.bom_code OR b.bom_code = t.bom_code)
@@ -1336,10 +1339,23 @@ export async function getInternalTrackingOrders({ search = '', stage = '', page 
   const listRes = await query(querySql, params);
 
   return {
-    orders: listRes.rows.map(r => ({
-      ...r,
-      tracking_url: `https://${process.env.TRACKING_DOMAIN || 'track.businz.com'}/order/${r.tracking_token}`
-    })),
+    orders: listRes.rows.map(r => {
+      const items = Array.isArray(r.items_json) ? r.items_json : [];
+      const dispatchPacking = Array.isArray(r.dispatch_packing_json) ? r.dispatch_packing_json : [];
+      const vehicleLoading = (r.vehicle_loading_json && typeof r.vehicle_loading_json === 'object') ? r.vehicle_loading_json : {};
+      const packingProg = calculatePackingProgress({ items, dispatchPacking });
+
+      const { items_json, dispatch_packing_json, vehicle_loading_json, ...rest } = r;
+      return {
+        ...rest,
+        transporter_name: r.transporter_name || vehicleLoading.transporterName || null,
+        vehicle_no: r.vehicle_no || vehicleLoading.vehicleNumber || vehicleLoading.vehicleNo || null,
+        lr_no: r.lr_no || vehicleLoading.lrNumber || vehicleLoading.lrNo || null,
+        packed_lines_count: packingProg.packedLines,
+        total_lines_count: packingProg.totalLines,
+        tracking_url: `https://${process.env.TRACKING_DOMAIN || 'track.businz.com'}/order/${r.tracking_token}`
+      };
+    }),
     totalCount,
     page,
     limit,
@@ -1559,4 +1575,199 @@ export function broadcastCustomerTrackingUpdate(trackingToken, payload) {
       clients.delete(res);
     }
   }
+}
+
+function escapeHtml(val) {
+  return String(val ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/**
+ * Resolves a customer-safe downloadable/viewable document for /api/track/:token/documents/:docType
+ * Never exposes internal margins, purchase costs, or internal remarks.
+ */
+export async function resolveTrackingDocumentPayload(rawToken, docType) {
+  const cleanToken = String(rawToken || '').trim();
+  const cleanType = String(docType || '').trim().toLowerCase();
+  if (!cleanToken) return { notFound: true, message: 'Invalid tracking token.' };
+
+  let tracking = null;
+  let bom = null;
+
+  try {
+    const tRes = await query(
+      `SELECT * FROM public.order_tracking WHERE tracking_token = $1 OR bom_code = $1 LIMIT 1`,
+      [cleanToken]
+    );
+    if (tRes.rows.length > 0) tracking = tRes.rows[0];
+  } catch (_) {}
+
+  if (tracking?.status === 'REVOKED') {
+    return { forbidden: true, message: 'This tracking link has been revoked.' };
+  }
+
+  const targetBomCode = tracking?.bom_code || cleanToken;
+  try {
+    const bRes = await query(
+      `SELECT * FROM public.bom_orders WHERE code = $1 OR bom_code = $1 OR id = $1 LIMIT 1`,
+      [targetBomCode]
+    );
+    if (bRes.rows.length > 0) {
+      const raw = bRes.rows[0];
+      bom = raw.bom_data ? { ...raw.bom_data, ...raw } : raw;
+    }
+  } catch (_) {}
+
+  if (!tracking && !bom) {
+    return { notFound: true, message: 'Order tracking record not found.' };
+  }
+
+  const safeBom = bom || {
+    bom_code: tracking?.bom_code || cleanToken,
+    customer_name: tracking?.customer_name || 'Valued Customer',
+    items: []
+  };
+  const bomCode = safeBom.bom_code || safeBom.bomCode || safeBom.code || targetBomCode;
+  const customerName = safeBom.customer_name || safeBom.customerName || tracking?.customer_name || 'Valued Customer';
+  const piNo = safeBom.source_pi_no || safeBom.sourcePiNo || tracking?.source_pi_no || 'N/A';
+  const invNo = safeBom.invoice_no || safeBom.invoiceNo || 'Pending';
+
+  // Helper to resolve uploaded file ref (signed URL, /api/uploads path, or data URL)
+  const resolveUploadedDoc = async (docRef) => {
+    if (!docRef) return null;
+    let parsed = docRef;
+    if (typeof docRef === 'string' && docRef.trim().startsWith('{')) {
+      try { parsed = JSON.parse(docRef); } catch (_) {}
+    }
+    if (typeof parsed === 'string') {
+      if (parsed.startsWith('data:')) {
+        const match = parsed.match(/^data:([^;]+);base64,(.+)$/);
+        if (match) {
+          return { type: 'buffer', mimeType: match[1], buffer: Buffer.from(match[2], 'base64') };
+        }
+      }
+      if (parsed.startsWith('/api/') || parsed.startsWith('http')) {
+        return { type: 'redirect', url: parsed };
+      }
+    } else if (parsed && typeof parsed === 'object') {
+      if (parsed.dataUrl && String(parsed.dataUrl).startsWith('data:')) {
+        const match = parsed.dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+        if (match) {
+          return { type: 'buffer', mimeType: match[1], buffer: Buffer.from(match[2], 'base64') };
+        }
+      }
+      if (parsed.storagePath) {
+        try {
+          const signed = await createBomDocumentSignedUrl(parsed.storagePath);
+          if (signed) return { type: 'redirect', url: signed };
+        } catch (_) {}
+        return { type: 'redirect', url: `/api/uploads/bom-documents/${String(parsed.storagePath).replace(/^\/+/, '').replace(/^bom-documents\//, '')}` };
+      }
+      if (parsed.url) return { type: 'redirect', url: parsed.url };
+    }
+    return null;
+  };
+
+  if (cleanType === 'proforma-invoice') {
+    const resolved = await resolveUploadedDoc(safeBom.signed_pi_doc || safeBom.signedPiDoc);
+    if (resolved) return resolved;
+  }
+  if (cleanType === 'lr-copy') {
+    const lrDoc = safeBom.lrCopyDoc || safeBom.accounts_verification?._extra_data?.lrCopyDoc || safeBom.accounts_verification?._extra_data?.vehicleLoading?.lrCopyDoc;
+    const resolved = await resolveUploadedDoc(lrDoc);
+    if (resolved) return resolved;
+  }
+
+  // Generate clean customer-safe printable HTML for structured documents
+  const packingProgress = calculatePackingProgress(safeBom);
+  const rows = packingProgress.products || [];
+  const docTitleMap = {
+    'bom': 'Customer Bill of Materials',
+    'packing-list': 'Itemized Packing List',
+    'tax-invoice': 'Official Tax Invoice Summary',
+    'proforma-invoice': 'Proforma Invoice Reference',
+    'lr-copy': 'Lorry Receipt (LR) Summary',
+    'delivery-challan': 'Delivery Challan Summary'
+  };
+  const docTitle = docTitleMap[cleanType] || 'Order Document';
+  const vehicleLoading = safeBom.vehicleLoading || safeBom.accounts_verification?._extra_data?.vehicleLoading || {};
+  const lrNo = safeBom.lr_no || safeBom.lrNo || vehicleLoading.lrNumber || vehicleLoading.lrNo || 'N/A';
+  const transporter = safeBom.transporter_name || vehicleLoading.transporterName || 'Pending';
+
+  const tableRowsHtml = rows.length > 0
+    ? rows.map((p, idx) => `
+      <tr>
+        <td>${idx + 1}</td>
+        <td><strong>${escapeHtml(p.code)}</strong></td>
+        <td>${escapeHtml(p.name)}</td>
+        <td style="text-align:right">${escapeHtml(p.orderedQty)} ${escapeHtml(p.uom)}</td>
+        ${cleanType === 'packing-list' ? `<td style="text-align:right">${escapeHtml(p.packedQty)} ${escapeHtml(p.uom)}</td><td>${escapeHtml(p.status.replace(/_/g, ' '))}</td>` : ''}
+      </tr>
+    `).join('')
+    : `<tr><td colspan="${cleanType === 'packing-list' ? 6 : 4}" style="text-align:center;color:#64748B;padding:24px;">No line items available.</td></tr>`;
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${escapeHtml(docTitle)} — ${escapeHtml(bomCode)}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #0F172A; margin: 0; padding: 32px; background: #F8FAFC; }
+    .sheet { max-width: 900px; margin: 0 auto; background: #FFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 32px; box-shadow: 0 4px 16px rgba(15,23,42,0.06); }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0E7490; padding-bottom: 16px; margin-bottom: 24px; }
+    .brand { font-size: 18px; font-weight: 800; color: #0E7490; }
+    .sub { font-size: 12px; color: #64748B; margin-top: 4px; }
+    .meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; background: #F8FAFC; padding: 16px; border-radius: 8px; margin-bottom: 24px; font-size: 13px; }
+    .meta-label { font-size: 11px; color: #64748B; text-transform: uppercase; font-weight: 700; }
+    .meta-val { font-weight: 700; color: #0F172A; margin-top: 2px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { background: #F1F5F9; color: #334155; text-align: left; padding: 10px 12px; border-bottom: 1px solid #CBD5E1; font-weight: 700; }
+    td { padding: 10px 12px; border-bottom: 1px solid #E2E8F0; }
+    .actions { display: flex; justify-content: flex-end; gap: 10px; margin-bottom: 16px; }
+    .btn { background: #0E7490; color: #FFF; border: none; padding: 9px 16px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 13px; }
+    @media print { body { background: #FFF; padding: 0; } .sheet { border: none; box-shadow: none; } .actions { display: none; } }
+  </style>
+</head>
+<body>
+  <div class="sheet">
+    <div class="actions">
+      <button class="btn" onclick="window.print()">Print / Save PDF</button>
+    </div>
+    <div class="header">
+      <div>
+        <div class="brand">VRM Structures India Private Limited</div>
+        <div class="sub">BUSINZ Customer Order Document Portal</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:16px;font-weight:800;color:#0F172A">${escapeHtml(docTitle)}</div>
+        <div class="sub">BOM: <strong>${escapeHtml(bomCode)}</strong></div>
+      </div>
+    </div>
+    <div class="meta">
+      <div><div class="meta-label">Customer</div><div class="meta-val">${escapeHtml(customerName)}</div></div>
+      <div><div class="meta-label">Proforma Invoice</div><div class="meta-val">${escapeHtml(piNo)}</div></div>
+      <div><div class="meta-label">Tax Invoice</div><div class="meta-val">${escapeHtml(invNo)}</div></div>
+      <div><div class="meta-label">Transporter / LR</div><div class="meta-val">${escapeHtml(transporter)} (${escapeHtml(lrNo)})</div></div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:48px">#</th>
+          <th style="width:140px">Code</th>
+          <th>Item Description</th>
+          <th style="text-align:right;width:120px">Ordered Qty</th>
+          ${cleanType === 'packing-list' ? '<th style="text-align:right;width:120px">Packed Qty</th><th style="width:140px">Status</th>' : ''}
+        </tr>
+      </thead>
+      <tbody>${tableRowsHtml}</tbody>
+    </table>
+  </div>
+</body>
+</html>`;
+
+  return { type: 'html', html };
 }

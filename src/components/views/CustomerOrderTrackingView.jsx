@@ -16,7 +16,6 @@ import {
   X
 } from 'lucide-react';
 import ModernDateRangePicker from '../ModernDateRangePicker';
-import StatusBadge from '../StatusBadge';
 
 const STAGE_OPTIONS = [
   { value: 'ALL', label: 'All Stages' },
@@ -141,7 +140,11 @@ export default function CustomerOrderTrackingView() {
   // Actions
   const handleResendWhatsApp = async (bomCode) => {
     try {
-      const res = await fetch(`/api/internal/tracking/resend-whatsapp/${bomCode}`, { method: 'POST' });
+      const res = await fetch('/api/internal/tracking/resend-whatsapp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bomCode })
+      });
       const data = await res.json();
       if (res.ok) {
         alert(`WhatsApp notification queued for BOM ${bomCode}`);
@@ -159,7 +162,11 @@ export default function CustomerOrderTrackingView() {
       return;
     }
     try {
-      const res = await fetch(`/api/internal/tracking/regenerate/${bomCode}`, { method: 'POST' });
+      const res = await fetch('/api/internal/tracking/regenerate-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bomCode })
+      });
       const data = await res.json();
       if (res.ok) {
         alert(`New tracking link generated successfully for ${bomCode}`);
@@ -177,7 +184,11 @@ export default function CustomerOrderTrackingView() {
       return;
     }
     try {
-      const res = await fetch(`/api/internal/tracking/revoke/${bomCode}`, { method: 'POST' });
+      const res = await fetch('/api/internal/tracking/revoke-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bomCode })
+      });
       const data = await res.json();
       if (res.ok) {
         alert(`Tracking link revoked for ${bomCode}`);
@@ -398,14 +409,14 @@ export default function CustomerOrderTrackingView() {
       {/* 3. STATUS TABS ROW (Exact Standard BUSINZ Tabs Style & Color Palettes) */}
       <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', gap: '20px', padding: '4px 0', alignItems: 'center', flexWrap: 'wrap', marginBottom: '8px' }}>
         {[
-          { id: 'ALL', label: 'All orders', count: totalCount, bg: '#e2e8f0', fg: '#475569' },
-          { id: 'RECEIVED_BY_DISPATCH', label: 'Received by Dispatch', count: analytics?.stages?.received_by_dispatch || 0, bg: '#f1f5f9', fg: '#475569' },
-          { id: 'PACKING_IN_PROGRESS', label: 'In Packing', count: analytics?.stages?.packing_in_progress || 0, bg: '#fff7ed', fg: '#c2410c' },
-          { id: 'PACKING_COMPLETED', label: 'Packing Completed', count: analytics?.stages?.packing_completed || 0, bg: '#ecfeff', fg: '#0e7490' },
-          { id: 'READY_FOR_LOADING', label: 'Ready for Loading', count: analytics?.stages?.ready_for_loading || 0, bg: '#fef3c7', fg: '#92400e' },
-          { id: 'DISPATCHED', label: 'In Transit', count: analytics?.stages?.dispatched || 0, bg: '#EFF6FF', fg: '#1D4ED8' },
-          { id: 'DELIVERED', label: 'Delivered', count: analytics?.stages?.delivered || 0, bg: '#dcfce7', fg: '#15803d' },
-          { id: 'ISSUES', label: 'Customer Issues', count: openIssuesList.length, bg: '#fee2e2', fg: '#b91c1c' }
+          { id: 'ALL', label: 'All orders', count: analytics?.overview?.total_tracked_orders ?? totalCount, bg: '#e2e8f0', fg: '#475569' },
+          { id: 'RECEIVED_BY_DISPATCH', label: 'Received by Dispatch', count: analytics?.overview?.awaiting_packing || 0, bg: '#f1f5f9', fg: '#475569' },
+          { id: 'PACKING_IN_PROGRESS', label: 'In Packing', count: analytics?.overview?.packing_in_progress || 0, bg: '#fff7ed', fg: '#c2410c' },
+          { id: 'PACKING_COMPLETED', label: 'Packing Completed', count: analytics?.overview?.packing_completed || 0, bg: '#ecfeff', fg: '#0e7490' },
+          { id: 'READY_FOR_LOADING', label: 'Ready for Loading', count: analytics?.overview?.ready_for_dispatch || 0, bg: '#fef3c7', fg: '#92400e' },
+          { id: 'DISPATCHED', label: 'In Transit', count: analytics?.overview?.in_transit || 0, bg: '#EFF6FF', fg: '#1D4ED8' },
+          { id: 'DELIVERED', label: 'Delivered', count: analytics?.overview?.delivered || 0, bg: '#dcfce7', fg: '#15803d' },
+          { id: 'ISSUES', label: 'Customer Issues', count: analytics?.issues?.open_issues ?? openIssuesList.length, bg: '#fee2e2', fg: '#b91c1c' }
         ].map(tab => (
           <button
             key={tab.id}
@@ -547,7 +558,24 @@ export default function CustomerOrderTrackingView() {
 
                       {/* Current Stage */}
                       <td style={{ textAlign: 'left', padding: '12px 14px' }}>
-                        <StatusBadge status={stageObj.label} size="sm" />
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '4px 10px',
+                            borderRadius: '9999px',
+                            fontSize: '11px',
+                            fontWeight: '700',
+                            backgroundColor: stageObj.bg,
+                            color: stageObj.text,
+                            border: `1px solid ${stageObj.text}25`,
+                            whiteSpace: 'nowrap'
+                          }}
+                        >
+                          <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: stageObj.text }} />
+                          {stageObj.label}
+                        </span>
                       </td>
 
                       {/* Packing Progress */}
@@ -964,7 +992,14 @@ export default function CustomerOrderTrackingView() {
             </div>
             <div style={{ flex: 1, position: 'relative' }}>
               <iframe
-                src={livePreviewUrl}
+                src={(() => {
+                  try {
+                    const u = new URL(livePreviewUrl, window.location.origin);
+                    return `${u.pathname}${u.search}${u.hash}`;
+                  } catch (_) {
+                    return livePreviewUrl;
+                  }
+                })()}
                 title="Customer Tracking Live View"
                 style={{ width: '100%', height: '100%', border: 'none' }}
               />

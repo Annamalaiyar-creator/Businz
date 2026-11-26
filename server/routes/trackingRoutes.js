@@ -5,6 +5,7 @@ import {
   ensureTrackingSchema,
   getOrCreateOrderTracking,
   getTrackingByToken,
+  resolveTrackingDocumentPayload,
   submitCustomerIssue,
   confirmCustomerDelivery,
   regenerateTrackingToken,
@@ -281,6 +282,37 @@ router.post(['/api/track/confirm-delivery', '/api/track/:token/confirm-delivery'
   }
 });
 
+// 5. Customer Document Download / Printable View
+router.get('/api/track/:token/documents/:docType', async (req, res) => {
+  try {
+    const token = decodeURIComponent(req.params.token || '');
+    const docType = decodeURIComponent(req.params.docType || '');
+    const result = await resolveTrackingDocumentPayload(token, docType);
+
+    if (result?.notFound) {
+      return res.status(404).send(result.message || 'Document not found.');
+    }
+    if (result?.forbidden) {
+      return res.status(403).send(result.message || 'Access denied.');
+    }
+    if (result?.type === 'redirect' && result.url) {
+      return res.redirect(result.url);
+    }
+    if (result?.type === 'buffer' && result.buffer) {
+      res.setHeader('Content-Type', result.mimeType || 'application/octet-stream');
+      return res.send(result.buffer);
+    }
+    if (result?.type === 'html' && result.html) {
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.send(result.html);
+    }
+    return res.status(404).send('Document not available yet.');
+  } catch (err) {
+    console.error('[BUSINZ Track Document Error]:', err);
+    return res.status(500).send('Unable to load document.');
+  }
+});
+
 // ==============================================================================
 // 🏢 Internal BUSINZ Track Operations & Management Endpoints (Staff Auth)
 // ==============================================================================
@@ -303,18 +335,18 @@ router.get('/api/internal/tracking/orders', async (req, res) => {
   }
 });
 
-// Regenerate Tracking Token (Invalidates old link)
-router.post('/api/internal/tracking/orders/:bomCode/regenerate-token', async (req, res) => {
+// Regenerate Tracking Token (Invalidates old link; supports body.bomCode for slash-safe BOM codes)
+const handleRegenerateTokenRoute = async (req, res) => {
   try {
-    const { bomCode } = req.params;
-    const { reason = 'Manual staff regeneration' } = req.body;
+    const bomCode = decodeURIComponent(req.body?.bomCode || req.params?.bomCode || '');
+    const { reason = 'Manual staff regeneration' } = req.body || {};
 
     const updated = await regenerateTrackingToken(bomCode, reason);
     if (!updated) {
       return res.status(404).json({ success: false, error: 'No tracking record found for this BOM' });
     }
 
-    const domain = process.env.VITE_APP_URL || 'http://localhost:3000';
+    const domain = `https://${process.env.TRACKING_DOMAIN || 'track.businz.com'}`;
     const trackingUrl = `${domain}/order/${updated.tracking_token}`;
 
     res.json({
@@ -326,13 +358,15 @@ router.post('/api/internal/tracking/orders/:bomCode/regenerate-token', async (re
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
-});
+};
+router.post('/api/internal/tracking/regenerate-token', handleRegenerateTokenRoute);
+router.post('/api/internal/tracking/orders/:bomCode/regenerate-token', handleRegenerateTokenRoute);
 
 // Revoke Tracking Token
-router.post('/api/internal/tracking/orders/:bomCode/revoke-token', async (req, res) => {
+const handleRevokeTokenRoute = async (req, res) => {
   try {
-    const { bomCode } = req.params;
-    const { reason = 'Revoked by staff' } = req.body;
+    const bomCode = decodeURIComponent(req.body?.bomCode || req.params?.bomCode || '');
+    const { reason = 'Revoked by staff' } = req.body || {};
 
     const revoked = await revokeTrackingToken(bomCode, reason);
     if (!revoked) {
@@ -343,19 +377,21 @@ router.post('/api/internal/tracking/orders/:bomCode/revoke-token', async (req, r
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
-});
+};
+router.post('/api/internal/tracking/revoke-token', handleRevokeTokenRoute);
+router.post('/api/internal/tracking/orders/:bomCode/revoke-token', handleRevokeTokenRoute);
 
 // Resend WhatsApp Tracking Notification
-router.post('/api/internal/tracking/orders/:bomCode/resend-whatsapp', async (req, res) => {
+const handleResendWhatsappRoute = async (req, res) => {
   try {
-    const { bomCode } = req.params;
+    const bomCode = decodeURIComponent(req.body?.bomCode || req.params?.bomCode || '');
     const findRes = await query(`SELECT * FROM public.order_tracking WHERE bom_code = $1`, [bomCode]);
     if (findRes.rows.length === 0) {
       return res.status(404).json({ success: false, error: 'Tracking record not found' });
     }
 
     const tracking = findRes.rows[0];
-    const domain = process.env.VITE_APP_URL || 'http://localhost:3000';
+    const domain = `https://${process.env.TRACKING_DOMAIN || 'track.businz.com'}`;
     const trackingUrl = `${domain}/order/${tracking.tracking_token}`;
 
     const notif = await queueTrackingNotification({
@@ -376,7 +412,9 @@ router.post('/api/internal/tracking/orders/:bomCode/resend-whatsapp', async (req
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
-});
+};
+router.post('/api/internal/tracking/resend-whatsapp', handleResendWhatsappRoute);
+router.post('/api/internal/tracking/orders/:bomCode/resend-whatsapp', handleResendWhatsappRoute);
 
 // Tracking Analytics (CEO / Operations Dashboard)
 router.get('/api/internal/tracking/analytics', async (req, res) => {
