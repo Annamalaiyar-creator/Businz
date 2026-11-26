@@ -1028,13 +1028,15 @@ export default function BomOrdersView(props) {
       ].filter(Boolean).join(' ').toLowerCase();
 
       const bomEmail = String(b.salesPersonEmail || b.email || b.creatorEmail || '').toLowerCase().trim();
-      const bomCode = String(b.salesPersonCode || b.createdById || b.convertedById || b.sales_person_code || b.created_by_id || '').toUpperCase().trim();
+      const bomCode = String(b.assignedSalespersonCode || b.assignedToId || b.salesPersonCode || b.sales_person_code || b.createdById || b.convertedById || b.created_by_id || '').toUpperCase().trim();
+
+      // Strict SE-XXX isolation: if record has an explicit SE-XXX code and user has SE-XXX code, strictly isolate by code
+      if (/^SE-\d{3,4}$/.test(bomCode) && /^SE-\d{3,4}$/.test(curCode)) {
+        return bomCode === curCode;
+      }
 
       // Rule 0: If BOM was created, converted, or assigned to this user, ALWAYS show it!
       if (curCode && (bomCode === curCode || b.salesPersonCode === curCode || b.createdById === curCode || b.convertedById === curCode)) {
-        return true;
-      }
-      if (userAliases.has(bomCode) || userAliases.has(b.salesPersonCode) || userAliases.has(b.createdById) || userAliases.has(b.convertedById)) {
         return true;
       }
       if (curName && (bomNameText.includes(curName) || b.salesPerson?.toLowerCase() === curName || b.createdBy?.toLowerCase() === curName || b.convertedBy?.toLowerCase() === curName)) {

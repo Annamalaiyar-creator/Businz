@@ -750,11 +750,14 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       const assignedCode = String(pi.assignedSalespersonCode || pi.assignedToCode || pi.assignedToId || '').toUpperCase().trim();
 
       if (activeRep) {
-        // 0. Explicit assignment or direct employee code match takes top priority
-        if (assignedCode && assignedCode === activeRep.code) {
-          return true;
+        // 0. Strict SE-XXX isolation: if record has an explicit SE-XXX code, ONLY show to that exact sales rep
+        if (/^SE-\d{3,4}$/.test(assignedCode)) {
+          return assignedCode === activeRep.code;
         }
-        if (piCode && (piCode === activeRep.code || (activeRep.oldCodes && activeRep.oldCodes.includes(piCode)))) {
+        if (/^SE-\d{3,4}$/.test(piCode)) {
+          return piCode === activeRep.code;
+        }
+        if (piCode && activeRep.oldCodes && activeRep.oldCodes.includes(piCode)) {
           return true;
         }
 
