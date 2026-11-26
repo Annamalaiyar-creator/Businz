@@ -131,9 +131,11 @@ export const EMAIL_TO_SALES_CODE = {
 export const canonicalizeSalespersonCode = (rawCode, name) => {
   const c = String(rawCode || '').trim().toUpperCase();
   if (c.startsWith('TS-')) return c;
+  // NEVER overwrite a valid SE-XXX employee code on a record
+  if (/^SE-\d{3,4}$/.test(c)) return c;
   const lowerName = String(name || '').toLowerCase().trim();
 
-  // 1. Dynamic lookup from live Employee Directory (reflects renamed users & updated emails immediately)
+  // Dynamic lookup from live Employee Directory only when rawCode is missing or legacy
   try {
     const empsList = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
     const empsStore = JSON.parse(localStorage.getItem('controlroom_employees_store') || '[]');
@@ -149,21 +151,9 @@ export const canonicalizeSalespersonCode = (rawCode, name) => {
         if (empCode) return empCode;
       }
     }
-    if (/^SE-\d{3,4}$/.test(c)) {
-      const byCode = allEmps.find(e => String(e.employee_code || e.code || e.id || '').trim().toUpperCase() === c);
-      if (byCode) return c;
-    }
   } catch (_) {}
 
   if (EMAIL_TO_SALES_CODE[lowerName]) return EMAIL_TO_SALES_CODE[lowerName];
-  if (lowerName.includes('sales.s4') || lowerName.includes('mohith')) return 'SE-004';
-  if (lowerName.includes('sales.s1') || lowerName.includes('manoj')) return 'SE-001';
-  if (lowerName.includes('sales.s2') || lowerName.includes('prashanth') || lowerName.includes('prasanth')) return 'SE-007';
-  if (lowerName.includes('sales.s3') || lowerName.includes('shanthi') || lowerName.includes('santhi')) return 'SE-005';
-  if (lowerName.includes('sanjai') || lowerName.includes('sanjay')) return 'SE-002';
-  if (lowerName.includes('dhana')) return 'SE-006';
-  if (lowerName.includes('pavithra') || lowerName.includes('pavitra')) return 'SE-008';
-  if (lowerName.includes('jawahar')) return 'SE-009';
   if (c === 'SE-015' || c === 'SE-VRM004') return 'SE-004';
   if (c === 'SE-VRM002' && lowerName.includes('mohith')) return 'SE-004';
   if (c === 'SH-001' || c === 'SH-VRM001') return 'SE-001';
@@ -171,7 +161,6 @@ export const canonicalizeSalespersonCode = (rawCode, name) => {
   if (c === 'SE-010') return 'SE-008';
   if (c === 'SE-VRM090') return 'SE-009';
   if (c === 'SE-VRM006') return 'SE-003';
-  if (/^SE-\d{3,4}$/.test(c)) return c;
   return c || '';
 };
 
