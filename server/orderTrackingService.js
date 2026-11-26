@@ -1287,10 +1287,40 @@ export async function revokeTrackingToken(bomCode) {
   return updated;
 }
 
+function buildSalesIsolationFilter(salesPersonCode, salesPersonEmail, salesPersonName, startIdx = 1) {
+  const code = String(salesPersonCode || '').trim().toUpperCase();
+  const email = String(salesPersonEmail || '').trim().toLowerCase();
+  const name = String(salesPersonName || '').trim().toLowerCase();
+  if (!code && !email && !name) return { clause: '', params: [] };
+
+  if (/^SE-\d{3,4}$/.test(code)) {
+    return {
+      clause: `(UPPER(COALESCE(b.sales_person_code, b.created_by_id, '')) = $${startIdx})`,
+      params: [code]
+    };
+  }
+  const orParts = [];
+  const params = [];
+  let idx = startIdx;
+  if (code) {
+    orParts.push(`UPPER(COALESCE(b.sales_person_code, b.created_by_id, '')) = $${idx++}`);
+    params.push(code);
+  }
+  if (email) {
+    orParts.push(`LOWER(COALESCE(b.sales_person_email, '')) = $${idx++}`);
+    params.push(email);
+  }
+  if (name) {
+    orParts.push(`LOWER(COALESCE(b.sales_person, b.created_by, '')) = $${idx++}`);
+    params.push(name);
+  }
+  return { clause: orParts.length ? `(${orParts.join(' OR ')})` : '', params };
+}
+
 /**
  * Internal Tracking List Query with pagination and filtering
  */
-export async function getInternalTrackingOrders({ search = '', stage = '', page = 1, limit = 10 } = {}) {
+export async function getInternalTrackingOrders({ search = '', stage = '', page = 1, limit = 10, salesPersonCode = '', salesPersonEmail = '', salesPersonName = '' } = {}) {
   const offset = Math.max(0, (page - 1) * limit);
   const conditions = [];
   const params = [];
@@ -1308,11 +1338,18 @@ export async function getInternalTrackingOrders({ search = '', stage = '', page 
     pIdx++;
   }
 
+  const salesFilter = buildSalesIsolationFilter(salesPersonCode, salesPersonEmail, salesPersonName, pIdx);
+  if (salesFilter.clause) {
+    conditions.push(salesFilter.clause);
+    params.push(...salesFilter.params);
+    pIdx += salesFilter.params.length;
+  }
+
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
   // Get total count
   const countRes = await query(
-    `SELECT COUNT(*) FROM public.order_tracking t ${whereClause}`,
+    `SELECT COUNT(*) FROM public.order_tracking t LEFT JOIN public.bom_orders b ON (b.code = t.bom_code OR b.bom_code = t.bom_code) ${whereClause}`,
     params
   );
   const totalCount = parseInt(countRes.rows[0].count, 10);
@@ -1366,20 +1403,24 @@ export async function getInternalTrackingOrders({ search = '', stage = '', page 
 /**
  * Tracking Analytics for CEO / Admin Dashboard
  */
-export async function getTrackingAnalytics() {
+export async function getTrackingAnalytics({ salesPersonCode = '', salesPersonEmail = '', salesPersonName = '' } = {}) {
+  const salesFilter = buildSalesIsolationFilter(salesPersonCode, salesPersonEmail, salesPersonName, 1);
+  const whereClause = salesFilter.clause ? `WHERE ${salesFilter.clause}` : '';
   const statsRes = await query(`
     SELECT 
       COUNT(*) as total_tracked_orders,
-      COUNT(*) FILTER (WHERE current_stage = 'RECEIVED_BY_DISPATCH') as awaiting_packing,
-      COUNT(*) FILTER (WHERE current_stage = 'PACKING_IN_PROGRESS') as packing_in_progress,
-      COUNT(*) FILTER (WHERE current_stage = 'PACKING_COMPLETED') as packing_completed,
-      COUNT(*) FILTER (WHERE current_stage = 'INVOICE_GENERATED' OR current_stage = 'READY_FOR_LOADING' OR current_stage = 'LOADING_IN_PROGRESS') as ready_for_dispatch,
-      COUNT(*) FILTER (WHERE current_stage = 'DISPATCHED') as in_transit,
-      COUNT(*) FILTER (WHERE current_stage = 'DELIVERED') as delivered,
-      COUNT(*) FILTER (WHERE status = 'ACTIVE') as active_links,
-      COALESCE(SUM(access_count), 0) as total_customer_views
-    FROM public.order_tracking
-  `);
+      COUNT(*) FILTER (WHERE t.current_stage = 'RECEIVED_BY_DISPATCH') as awaiting_packing,
+      COUNT(*) FILTER (WHERE t.current_stage = 'PACKING_IN_PROGRESS') as packing_in_progress,
+      COUNT(*) FILTER (WHERE t.current_stage = 'PACKING_COMPLETED') as packing_completed,
+      COUNT(*) FILTER (WHERE t.current_stage = 'INVOICE_GENERATED' OR t.current_stage = 'READY_FOR_LOADING' OR t.current_stage = 'LOADING_IN_PROGRESS') as ready_for_dispatch,
+      COUNT(*) FILTER (WHERE t.current_stage = 'DISPATCHED') as in_transit,
+      COUNT(*) FILTER (WHERE t.current_stage = 'DELIVERED') as delivered,
+      COUNT(*) FILTER (WHERE t.status = 'ACTIVE') as active_links,
+      COALESCE(SUM(t.access_count), 0) as total_customer_views
+    FROM public.order_tracking t
+    LEFT JOIN public.bom_orders b ON (b.code = t.bom_code OR b.bom_code = t.bom_code)
+    ${whereClause}
+  `, salesFilter.params);
 
   const issuesRes = await query(`
     SELECT 

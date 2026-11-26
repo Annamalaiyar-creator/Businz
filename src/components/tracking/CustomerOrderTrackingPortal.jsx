@@ -1,55 +1,71 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Package, 
-  Truck, 
-  FileText, 
-  CheckCircle2, 
-  Clock, 
-  AlertCircle, 
-  Download, 
-  Phone, 
-  Mail, 
-  MessageSquare, 
-  Share2, 
-  ExternalLink, 
-  ChevronRight, 
-  ShieldCheck, 
-  ArrowLeft, 
-  Camera, 
-  Star, 
-  RefreshCw,
+import {
+  Package,
+  Truck,
+  FileText,
+  CheckCircle2,
+  AlertCircle,
+  Download,
+  Phone,
+  Mail,
+  MessageSquare,
+  Star,
   Copy,
   Check,
-  Building2,
-  Calendar,
-  Layers,
-  HelpCircle,
+  ChevronDown,
+  ChevronUp,
+  ShieldCheck,
   X
 } from 'lucide-react';
 
+const FIVE_STEPS = [
+  { id: 'CONFIRMED', label: 'Confirmed', icon: CheckCircle2 },
+  { id: 'PACKED', label: 'Packed', icon: Package },
+  { id: 'BILLED', label: 'Billed', icon: FileText },
+  { id: 'DISPATCHED', label: 'Dispatched', icon: Truck },
+  { id: 'DELIVERED', label: 'Delivered', icon: ShieldCheck }
+];
+
+function mapStageToFiveStepIndex(stageCode) {
+  switch (String(stageCode || '').toUpperCase()) {
+    case 'DELIVERED':
+      return 4;
+    case 'READY_FOR_LOADING':
+    case 'LOADING_IN_PROGRESS':
+    case 'DISPATCHED':
+      return 3;
+    case 'ORDER_VERIFICATION':
+    case 'INVOICE_GENERATED':
+      return 2;
+    case 'PACKING_IN_PROGRESS':
+    case 'PACKING_COMPLETED':
+      return 1;
+    case 'ORDER_CONFIRMED':
+    case 'RECEIVED_BY_DISPATCH':
+    default:
+      return 0;
+  }
+}
+
 export default function CustomerOrderTrackingPortal({ token: propToken }) {
-  // Extract token from prop, URL query (?token= or ?track_token=), or full path after /order/ or /track/
   const token = propToken || (() => {
     if (typeof window === 'undefined') return '';
     const params = new URLSearchParams(window.location.search);
     const qToken = params.get('token') || params.get('track_token');
     if (qToken) return decodeURIComponent(qToken).trim();
-
     const pathname = window.location.pathname || '';
     const match = pathname.match(/^\/(?:order|track)\/(.+)$/);
-    if (match && match[1]) {
-      return decodeURIComponent(match[1]).trim();
-    }
-    return '';
+    return match && match[1] ? decodeURIComponent(match[1]).trim() : '';
   })();
 
-  const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'products' | 'documents'
+  const [activeTab, setActiveTab] = useState('overview');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [orderData, setOrderData] = useState(null);
   const [isLiveConnected, setIsLiveConnected] = useState(false);
   const [copiedText, setCopiedText] = useState('');
-  
+  const [showAllStages, setShowAllStages] = useState(false);
+
   // Modals
   const [showIssueModal, setShowIssueModal] = useState(false);
   const [issueType, setIssueType] = useState('MISSING_PRODUCTS');
@@ -65,7 +81,6 @@ export default function CustomerOrderTrackingPortal({ token: propToken }) {
 
   const sseRef = useRef(null);
 
-  // Fetch initial tracking data
   const fetchTracking = async () => {
     if (!token) {
       setError({ type: 'NOT_FOUND', message: 'No tracking reference found in URL.' });
@@ -89,7 +104,7 @@ export default function CustomerOrderTrackingPortal({ token: propToken }) {
       setOrderData(data.order || data.tracking);
       setError(null);
       setLoading(false);
-    } catch (err) {
+    } catch (_) {
       setError({ type: 'NETWORK_ERROR', message: 'Network connection issue. Please check your internet.' });
       setLoading(false);
     }
@@ -99,50 +114,27 @@ export default function CustomerOrderTrackingPortal({ token: propToken }) {
     fetchTracking();
   }, [token]);
 
-  // Real-time SSE Connection
   useEffect(() => {
     if (!token || error) return;
-
     let reconnectTimer = null;
     const connectSSE = () => {
       try {
         const sse = new EventSource(`/api/track/events?token=${encodeURIComponent(token)}`);
         sseRef.current = sse;
-
-        sse.onopen = () => {
-          setIsLiveConnected(true);
-        };
-
-        sse.addEventListener('connected', () => {
-          setIsLiveConnected(true);
-        });
-
-        sse.addEventListener('tracking_update', (event) => {
-          try {
-            const payload = JSON.parse(event.data);
-            // Re-fetch authoritative tracking payload to guarantee full UI sync
-            fetchTracking();
-          } catch (_) {}
-        });
-
+        sse.onopen = () => setIsLiveConnected(true);
+        sse.addEventListener('connected', () => setIsLiveConnected(true));
+        sse.addEventListener('tracking_update', () => fetchTracking());
         sse.onerror = () => {
           setIsLiveConnected(false);
           sse.close();
-          // Attempt reconnection after 8 seconds
           reconnectTimer = setTimeout(connectSSE, 8000);
         };
       } catch (_) {
         setIsLiveConnected(false);
       }
     };
-
     connectSSE();
-
-    // Fallback polling every 20 seconds to guarantee fresh data even if SSE drops
-    const pollInterval = setInterval(() => {
-      fetchTracking();
-    }, 20000);
-
+    const pollInterval = setInterval(fetchTracking, 20000);
     return () => {
       if (sseRef.current) sseRef.current.close();
       if (reconnectTimer) clearTimeout(reconnectTimer);
@@ -157,7 +149,6 @@ export default function CustomerOrderTrackingPortal({ token: propToken }) {
     setTimeout(() => setCopiedText(''), 2000);
   };
 
-  // Submit Issue Handler
   const handleReportIssue = async (e) => {
     e.preventDefault();
     if (!issueRemarks.trim()) return;
@@ -167,10 +158,9 @@ export default function CustomerOrderTrackingPortal({ token: propToken }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          issueType,
-          remarks: issueRemarks,
-          customerName: orderData?.customerName,
-          customerPhone: orderData?.customerMobile
+          issueCategory: issueType,
+          issueDescription: issueRemarks,
+          contactNumber: orderData?.customerMobile
         })
       });
       const data = await res.json();
@@ -180,7 +170,7 @@ export default function CustomerOrderTrackingPortal({ token: propToken }) {
           setShowIssueModal(false);
           setIssueSuccess(false);
           setIssueRemarks('');
-        }, 2200);
+        }, 2000);
       } else {
         alert(data.error || 'Failed to submit issue');
       }
@@ -191,7 +181,6 @@ export default function CustomerOrderTrackingPortal({ token: propToken }) {
     }
   };
 
-  // Confirm Delivery Handler
   const handleConfirmDelivery = async (e) => {
     e.preventDefault();
     setDeliverySubmitting(true);
@@ -200,9 +189,9 @@ export default function CustomerOrderTrackingPortal({ token: propToken }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          customerName: orderData?.customerName,
-          rating: deliveryRating,
-          remarks: deliveryRemarks
+          receivedBy: orderData?.customerName,
+          feedbackRating: deliveryRating,
+          feedbackNotes: deliveryRemarks
         })
       });
       const data = await res.json();
@@ -212,7 +201,7 @@ export default function CustomerOrderTrackingPortal({ token: propToken }) {
         setTimeout(() => {
           setShowDeliveryModal(false);
           setDeliverySuccess(false);
-        }, 2200);
+        }, 2000);
       } else {
         alert(data.error || 'Failed to confirm delivery');
       }
@@ -223,7 +212,6 @@ export default function CustomerOrderTrackingPortal({ token: propToken }) {
     }
   };
 
-  // Loading State
   if (loading) {
     return (
       <div style={{
@@ -237,31 +225,21 @@ export default function CustomerOrderTrackingPortal({ token: propToken }) {
         fontFamily: "'Inter', -apple-system, sans-serif"
       }}>
         <div style={{
-          width: '44px',
-          height: '44px',
+          width: '42px',
+          height: '42px',
           borderRadius: '50%',
           border: '3px solid #E2E8F0',
           borderTopColor: '#0E7490',
           animation: 'businz_spin 0.8s linear infinite',
-          marginBottom: '16px'
+          marginBottom: '14px'
         }} />
-        <div style={{ fontSize: '15px', fontWeight: 600, color: '#0F172A' }}>
-          Loading Your Live Order Tracking...
-        </div>
-        <div style={{ fontSize: '13px', color: '#64748B', marginTop: '4px' }}>
-          Connecting securely to BUSINZ Dispatch
-        </div>
-        <style>{`
-          @keyframes businz_spin {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
-          }
-        `}</style>
+        <div style={{ fontSize: '15px', fontWeight: 700, color: '#0F172A' }}>Loading Order Status...</div>
+        <div style={{ fontSize: '13px', color: '#64748B', marginTop: '4px' }}>Fetching live updates from BUSINZ</div>
+        <style>{`@keyframes businz_spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
       </div>
     );
   }
 
-  // Error State
   if (error || !orderData) {
     return (
       <div style={{
@@ -274,7 +252,7 @@ export default function CustomerOrderTrackingPortal({ token: propToken }) {
         fontFamily: "'Inter', -apple-system, sans-serif"
       }}>
         <div style={{
-          maxWidth: '460px',
+          maxWidth: '440px',
           width: '100%',
           backgroundColor: '#FFFFFF',
           borderRadius: '20px',
@@ -292,28 +270,16 @@ export default function CustomerOrderTrackingPortal({ token: propToken }) {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            margin: '0 auto 20px'
+            margin: '0 auto 18px'
           }}>
             <AlertCircle size={28} />
           </div>
-          <h2 style={{ fontSize: '20px', fontWeight: 700, color: '#0F172A', marginBottom: '8px' }}>
+          <h2 style={{ fontSize: '20px', fontWeight: 700, color: '#0F172A', margin: '0 0 8px' }}>
             {error?.type === 'EXPIRED' ? 'Tracking Link Inactive' : 'Order Not Found'}
           </h2>
-          <p style={{ fontSize: '14px', color: '#64748B', lineHeight: '1.5', marginBottom: '24px' }}>
-            {error?.message || 'We could not locate this order tracking reference. Please verify the WhatsApp link received or contact support.'}
+          <p style={{ fontSize: '14px', color: '#64748B', lineHeight: '1.5', margin: '0 0 20px' }}>
+            {error?.message || 'We could not locate this order tracking reference.'}
           </p>
-          <div style={{
-            padding: '16px',
-            backgroundColor: '#F1F5F9',
-            borderRadius: '12px',
-            fontSize: '13px',
-            color: '#334155',
-            textAlign: 'left'
-          }}>
-            <div style={{ fontWeight: 600, marginBottom: '6px' }}>Need help with your order?</div>
-            <div>Support Desk: +91 98765 43210</div>
-            <div>Email: support@businz.com</div>
-          </div>
         </div>
       </div>
     );
@@ -323,53 +289,53 @@ export default function CustomerOrderTrackingPortal({ token: propToken }) {
     bomCode,
     piNumber,
     customerName,
-    createdAt,
     lastUpdatedAt,
     currentStage,
     packingProgress,
-    timeline,
-    documents,
+    timeline = [],
+    documents = [],
     transport,
-    shipments,
     companyBranding
   } = orderData;
 
   const brandColor = companyBranding?.brandColor || '#0E7490';
   const isDelivered = currentStage?.stage === 'DELIVERED';
   const isDispatched = currentStage?.stage === 'DISPATCHED' || isDelivered;
+  const activeStepIdx = mapStageToFiveStepIndex(currentStage?.stage);
+  const progressWidthPct = Math.round((activeStepIdx / (FIVE_STEPS.length - 1)) * 100);
+  const visibleTimeline = showAllStages
+    ? timeline
+    : timeline.filter(s => s.state === 'CURRENT' || s.state === 'COMPLETED').slice(-4);
 
   return (
     <div style={{
       minHeight: '100vh',
-      backgroundColor: '#F8FAFC',
+      backgroundColor: '#F1F5F9',
       fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
       color: '#0F172A',
-      paddingBottom: '60px'
+      paddingBottom: '48px'
     }}>
-      {/* 1. Header Banner */}
+      {/* 1. Clean Top Header */}
       <header style={{
         backgroundColor: '#FFFFFF',
         borderBottom: '1px solid #E2E8F0',
         position: 'sticky',
         top: 0,
-        zIndex: 40,
-        boxShadow: '0 2px 4px rgba(15, 23, 42, 0.02)'
+        zIndex: 40
       }}>
         <div style={{
-          maxWidth: '960px',
+          maxWidth: '980px',
           margin: '0 auto',
-          padding: '16px 20px',
+          padding: '14px 20px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          flexWrap: 'wrap',
           gap: '12px'
         }}>
-          {/* Brand & Title */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div style={{
-              width: '40px',
-              height: '40px',
+              width: '38px',
+              height: '38px',
               borderRadius: '10px',
               backgroundColor: brandColor,
               color: '#FFFFFF',
@@ -377,93 +343,71 @@ export default function CustomerOrderTrackingPortal({ token: propToken }) {
               alignItems: 'center',
               justifyContent: 'center',
               fontWeight: 800,
-              fontSize: '18px',
-              letterSpacing: '-0.5px'
+              fontSize: '17px'
             }}>
               B
             </div>
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '15px', fontWeight: 700, color: '#0F172A' }}>
-                  {companyBranding?.companyName || 'BUSINZ Track'}
-                </span>
-                <span style={{
-                  fontSize: '10px',
-                  fontWeight: 700,
-                  textTransform: 'uppercase',
-                  padding: '2px 7px',
-                  borderRadius: '20px',
-                  backgroundColor: isLiveConnected ? '#ECFDF5' : '#FEF3C7',
-                  color: isLiveConnected ? '#059669' : '#D97706',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '4px'
-                }}>
-                  <span style={{
-                    width: '6px',
-                    height: '6px',
-                    borderRadius: '50%',
-                    backgroundColor: isLiveConnected ? '#10B981' : '#F59E0B',
-                    display: 'inline-block'
-                  }} />
-                  {isLiveConnected ? 'Live Real-Time' : 'Syncing'}
-                </span>
+              <div style={{ fontSize: '15px', fontWeight: 700, color: '#0F172A', lineHeight: 1.2 }}>
+                {companyBranding?.companyName || 'BUSINZ Track'}
               </div>
-              <div style={{ fontSize: '12px', color: '#64748B' }}>
-                Live Customer Order & Dispatch Tracking
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '3px', fontSize: '12px', color: '#64748B' }}>
+                <span style={{
+                  width: '7px',
+                  height: '7px',
+                  borderRadius: '50%',
+                  backgroundColor: isLiveConnected ? '#10B981' : '#94A3B8',
+                  display: 'inline-block'
+                }} />
+                <span>{isLiveConnected ? 'Live order updates' : 'Auto-refreshing'}</span>
               </div>
             </div>
           </div>
 
-          {/* WhatsApp Support Button */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <a
-              href={`https://wa.me/${(companyBranding?.supportPhone || '').replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Hi, I am tracking order ${bomCode}. I have a query.`)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '8px 14px',
-                borderRadius: '8px',
-                backgroundColor: '#25D366',
-                color: '#FFFFFF',
-                fontSize: '13px',
-                fontWeight: 600,
-                textDecoration: 'none'
-              }}
-            >
-              <MessageSquare size={16} />
-              <span className="hide-on-mobile">WhatsApp Support</span>
-            </a>
-          </div>
+          <a
+            href={`https://wa.me/${(companyBranding?.supportPhone || '').replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Hi, I am tracking order ${bomCode}. I have a query.`)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '8px 14px',
+              borderRadius: '10px',
+              backgroundColor: '#25D366',
+              color: '#FFFFFF',
+              fontSize: '13px',
+              fontWeight: 600,
+              textDecoration: 'none'
+            }}
+          >
+            <MessageSquare size={15} />
+            <span className="hide-on-mobile">WhatsApp Support</span>
+          </a>
         </div>
       </header>
 
-      {/* Main Container */}
-      <main style={{ maxWidth: '960px', margin: '0 auto', padding: '24px 20px' }}>
-        
-        {/* 2. Order Summary Hero Card */}
-        <div style={{
+      <main style={{ maxWidth: '980px', margin: '0 auto', padding: '22px 16px' }}>
+        {/* 2. Hero Card + Modern E-Commerce 5-Step Progress Bar */}
+        <section style={{
           backgroundColor: '#FFFFFF',
-          borderRadius: '16px',
+          borderRadius: '20px',
           border: '1px solid #E2E8F0',
           padding: '24px',
-          boxShadow: '0 4px 6px -1px rgba(15, 23, 42, 0.03)',
+          boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)',
           marginBottom: '20px'
         }}>
+          {/* Top Order Identity Row */}
           <div style={{
             display: 'flex',
             alignItems: 'flex-start',
             justifyContent: 'space-between',
             flexWrap: 'wrap',
-            gap: '16px',
-            borderBottom: '1px solid #F1F5F9',
-            paddingBottom: '20px'
+            gap: '14px',
+            marginBottom: '24px'
           }}>
             <div>
-              <div style={{ fontSize: '12px', fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              <div style={{ fontSize: '11px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
                 Order Reference
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
@@ -472,38 +416,36 @@ export default function CustomerOrderTrackingPortal({ token: propToken }) {
                 </span>
                 <button
                   onClick={() => copyToClipboard(bomCode, 'BOM')}
+                  title="Copy Order Reference"
                   style={{
-                    background: 'none',
+                    background: '#F1F5F9',
                     border: 'none',
-                    color: '#64748B',
+                    borderRadius: '6px',
+                    color: '#475569',
                     cursor: 'pointer',
-                    padding: '4px',
-                    display: 'flex',
+                    padding: '5px',
+                    display: 'inline-flex',
                     alignItems: 'center'
                   }}
-                  title="Copy Order Reference"
                 >
-                  {copiedText === 'BOM' ? <Check size={16} color="#059669" /> : <Copy size={16} />}
+                  {copiedText === 'BOM' ? <Check size={14} color="#059669" /> : <Copy size={14} />}
                 </button>
               </div>
-              <div style={{ fontSize: '13px', color: '#64748B', marginTop: '2px' }}>
-                Customer: <strong style={{ color: '#0F172A' }}>{customerName}</strong>
-                {piNumber && piNumber !== 'N/A' && (
-                  <span style={{ marginLeft: '8px' }}>• PI: <strong>{piNumber}</strong></span>
-                )}
+              <div style={{ fontSize: '13px', color: '#64748B', marginTop: '4px' }}>
+                For <strong style={{ color: '#0F172A' }}>{customerName}</strong>
+                {piNumber && piNumber !== 'N/A' && <span> • PI: <strong>{piNumber}</strong></span>}
               </div>
             </div>
 
-            {/* Current Stage Status Pill */}
             <div style={{ textAlign: 'right' }}>
-              <div style={{
+              <span style={{
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: '6px',
-                padding: '6px 14px',
-                borderRadius: '30px',
-                backgroundColor: isDelivered ? '#ECFDF5' : (isDispatched ? '#EFF6FF' : '#F0FDFA'),
-                color: isDelivered ? '#059669' : (isDispatched ? '#2563EB' : brandColor),
+                gap: '7px',
+                padding: '7px 14px',
+                borderRadius: '9999px',
+                backgroundColor: isDelivered ? '#ECFDF5' : (isDispatched ? '#EFF6FF' : '#ECFEFF'),
+                color: isDelivered ? '#059669' : (isDispatched ? '#1D4ED8' : brandColor),
                 fontWeight: 700,
                 fontSize: '13px'
               }}>
@@ -511,88 +453,157 @@ export default function CustomerOrderTrackingPortal({ token: propToken }) {
                   width: '8px',
                   height: '8px',
                   borderRadius: '50%',
-                  backgroundColor: isDelivered ? '#10B981' : (isDispatched ? '#3B82F6' : brandColor)
+                  backgroundColor: isDelivered ? '#10B981' : (isDispatched ? '#2563EB' : brandColor)
                 }} />
                 {currentStage?.label || 'Processing'}
-              </div>
-              <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '6px' }}>
-                Last updated: {lastUpdatedAt ? new Date(lastUpdatedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'Recently'}
+              </span>
+              <div style={{ fontSize: '11.5px', color: '#94A3B8', marginTop: '6px' }}>
+                Updated {lastUpdatedAt ? new Date(lastUpdatedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'recently'}
               </div>
             </div>
           </div>
 
-          {/* Quick Metrics Row */}
+          {/* 5-Step Horizontal Stepper */}
+          <div style={{ position: 'relative', padding: '8px 0 18px' }}>
+            <div style={{
+              position: 'absolute',
+              top: '26px',
+              left: '8%',
+              right: '8%',
+              height: '4px',
+              backgroundColor: '#E2E8F0',
+              borderRadius: '9999px',
+              zIndex: 1
+            }}>
+              <div style={{
+                width: `${progressWidthPct}%`,
+                height: '100%',
+                backgroundColor: isDelivered ? '#10B981' : brandColor,
+                borderRadius: '9999px',
+                transition: 'width 0.4s ease'
+              }} />
+            </div>
+
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(5, 1fr)',
+              position: 'relative',
+              zIndex: 2,
+              gap: '6px'
+            }}>
+              {FIVE_STEPS.map((step, idx) => {
+                const Icon = step.icon;
+                const done = idx < activeStepIdx || (idx === 4 && isDelivered);
+                const current = idx === activeStepIdx && !isDelivered;
+                return (
+                  <div key={step.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+                    <div style={{
+                      width: '38px',
+                      height: '38px',
+                      borderRadius: '50%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      backgroundColor: done ? '#10B981' : (current ? brandColor : '#FFFFFF'),
+                      color: done || current ? '#FFFFFF' : '#94A3B8',
+                      border: done || current ? 'none' : '2px solid #CBD5E1',
+                      boxShadow: current ? `0 0 0 5px ${brandColor}22` : 'none',
+                      transition: 'all 0.2s ease'
+                    }}>
+                      {done ? <Check size={18} strokeWidth={2.8} /> : <Icon size={17} />}
+                    </div>
+                    <span style={{
+                      marginTop: '8px',
+                      fontSize: '12px',
+                      fontWeight: current || done ? 700 : 500,
+                      color: current ? brandColor : (done ? '#0F172A' : '#94A3B8')
+                    }}>
+                      {step.label}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Current Stage Description Banner */}
+          <div style={{
+            backgroundColor: '#F8FAFC',
+            border: '1px solid #E2E8F0',
+            borderRadius: '12px',
+            padding: '12px 16px',
+            fontSize: '13px',
+            color: '#334155',
+            marginBottom: '18px'
+          }}>
+            <strong style={{ color: '#0F172A' }}>{currentStage?.label}:</strong> {currentStage?.description || 'Your order is progressing through our verified workflow.'}
+          </div>
+
+          {/* 4 Compact Stat Cards */}
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-            gap: '16px',
-            marginTop: '20px'
+            gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
+            gap: '12px'
           }}>
-            <div>
-              <div style={{ fontSize: '12px', color: '#64748B' }}>Packing Progress</div>
-              <div style={{ fontSize: '18px', fontWeight: 700, color: '#0F172A', marginTop: '2px' }}>
-                {packingProgress?.percentage || 0}% Completed
+            <div style={{ padding: '14px', borderRadius: '12px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+              <div style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 600 }}>Packing Progress</div>
+              <div style={{ fontSize: '17px', fontWeight: 800, color: '#0F172A', marginTop: '4px' }}>
+                {packingProgress?.percentage || 0}%
               </div>
-              <div style={{
-                width: '100%',
-                height: '6px',
-                backgroundColor: '#F1F5F9',
-                borderRadius: '6px',
-                overflow: 'hidden',
-                marginTop: '6px'
-              }}>
+              <div style={{ width: '100%', height: '5px', backgroundColor: '#E2E8F0', borderRadius: '9999px', marginTop: '8px', overflow: 'hidden' }}>
                 <div style={{
                   width: `${packingProgress?.percentage || 0}%`,
                   height: '100%',
-                  backgroundColor: packingProgress?.percentage === 100 ? '#10B981' : brandColor,
-                  borderRadius: '6px',
-                  transition: 'width 0.5s ease'
+                  backgroundColor: packingProgress?.percentage === 100 ? '#10B981' : brandColor
                 }} />
               </div>
             </div>
 
-            <div>
-              <div style={{ fontSize: '12px', color: '#64748B' }}>Packed Products</div>
-              <div style={{ fontSize: '18px', fontWeight: 700, color: '#0F172A', marginTop: '2px' }}>
-                {packingProgress?.packedLines || 0} of {packingProgress?.totalLines || 0} Lines
+            <div style={{ padding: '14px', borderRadius: '12px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+              <div style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 600 }}>Items Packed</div>
+              <div style={{ fontSize: '17px', fontWeight: 800, color: '#0F172A', marginTop: '4px' }}>
+                {packingProgress?.packedLines || 0} / {packingProgress?.totalLines || 0} Lines
               </div>
               <div style={{ fontSize: '11px', color: '#64748B', marginTop: '4px' }}>
-                {packingProgress?.pendingLines || 0} lines pending packing
+                {packingProgress?.pendingLines || 0} pending
               </div>
             </div>
 
-            <div>
-              <div style={{ fontSize: '12px', color: '#64748B' }}>Carrier / Transport</div>
+            <div style={{ padding: '14px', borderRadius: '12px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+              <div style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 600 }}>Carrier / Transport</div>
               <div style={{ fontSize: '14px', fontWeight: 700, color: '#0F172A', marginTop: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {transport?.transporterName || 'Pending Assignment'}
               </div>
-              <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>
-                LR: {transport?.lrNumber || 'Awaiting Carrier'}
+              <div style={{ fontSize: '11px', color: '#64748B', marginTop: '4px' }}>
+                LR: {transport?.lrNumber || 'Awaiting Dispatch'}
               </div>
             </div>
 
-            <div>
-              <div style={{ fontSize: '12px', color: '#64748B' }}>Destination Vehicle</div>
+            <div style={{ padding: '14px', borderRadius: '12px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+              <div style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 600 }}>Vehicle</div>
               <div style={{ fontSize: '14px', fontWeight: 700, color: '#0F172A', marginTop: '4px' }}>
                 {transport?.vehicleNumber || 'Awaiting Loading'}
               </div>
-              <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>
-                Mode: {transport?.transportMode || 'Road'}
+              <div style={{ fontSize: '11px', color: '#64748B', marginTop: '4px' }}>
+                {transport?.transportMode || 'Road Transport'}
               </div>
             </div>
           </div>
-        </div>
+        </section>
 
-        {/* 3. Navigation Tabs */}
+        {/* 3. Segmented Navigation Tabs */}
         <div style={{
-          display: 'flex',
-          gap: '8px',
-          borderBottom: '1px solid #E2E8F0',
-          marginBottom: '20px'
+          display: 'inline-flex',
+          gap: '6px',
+          backgroundColor: '#E2E8F0',
+          padding: '4px',
+          borderRadius: '12px',
+          marginBottom: '20px',
+          flexWrap: 'wrap'
         }}>
           {[
-            { id: 'overview', label: 'Overview & Status', icon: Truck },
-            { id: 'products', label: `Products (${packingProgress?.totalLines || 0})`, icon: Package },
+            { id: 'overview', label: 'Tracking & Shipment', icon: Truck },
+            { id: 'products', label: `Items (${packingProgress?.totalLines || 0})`, icon: Package },
             { id: 'documents', label: `Documents (${documents?.length || 0})`, icon: FileText }
           ].map(tab => {
             const Icon = tab.icon;
@@ -602,143 +613,37 @@ export default function CustomerOrderTrackingPortal({ token: propToken }) {
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 style={{
-                  display: 'flex',
+                  display: 'inline-flex',
                   alignItems: 'center',
-                  gap: '8px',
-                  padding: '12px 18px',
-                  fontSize: '14px',
-                  fontWeight: isSel ? 700 : 500,
-                  color: isSel ? brandColor : '#64748B',
-                  backgroundColor: 'transparent',
+                  gap: '7px',
+                  padding: '9px 16px',
+                  fontSize: '13px',
+                  fontWeight: isSel ? 700 : 600,
+                  color: isSel ? '#0F172A' : '#475569',
+                  backgroundColor: isSel ? '#FFFFFF' : 'transparent',
                   border: 'none',
-                  borderBottom: isSel ? `3px solid ${brandColor}` : '3px solid transparent',
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease'
+                  borderRadius: '9px',
+                  boxShadow: isSel ? '0 1px 3px rgba(15, 23, 42, 0.08)' : 'none',
+                  cursor: 'pointer'
                 }}
               >
-                <Icon size={18} />
+                <Icon size={15} color={isSel ? brandColor : '#64748B'} />
                 <span>{tab.label}</span>
               </button>
             );
           })}
         </div>
 
-        {/* 4. Tab Content: OVERVIEW */}
+        {/* 4. OVERVIEW TAB */}
         {activeTab === 'overview' && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
-            
-            {/* 10-Stage Vertical Timeline */}
-            <div style={{
-              backgroundColor: '#FFFFFF',
-              borderRadius: '16px',
-              border: '1px solid #E2E8F0',
-              padding: '24px',
-              boxShadow: '0 4px 6px -1px rgba(15, 23, 42, 0.02)'
-            }}>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                marginBottom: '20px'
-              }}>
-                <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#0F172A', margin: 0 }}>
-                  Order Tracking Timeline
-                </h3>
-                <span style={{ fontSize: '12px', color: '#64748B' }}>
-                  10 Standard Verified Stages
-                </span>
-              </div>
-
-              <div style={{ position: 'relative', paddingLeft: '8px' }}>
-                {timeline && timeline.map((stageItem, idx) => {
-                  const isCompleted = stageItem.state === 'COMPLETED';
-                  const isCurrent = stageItem.state === 'CURRENT';
-                  const isPending = stageItem.state === 'PENDING';
-                  const isLast = idx === timeline.length - 1;
-
-                  return (
-                    <div key={stageItem.stageId} style={{ display: 'flex', gap: '16px', position: 'relative', minHeight: '64px' }}>
-                      {/* Vertical line connecting stages */}
-                      {!isLast && (
-                        <div style={{
-                          position: 'absolute',
-                          left: '15px',
-                          top: '28px',
-                          bottom: '-8px',
-                          width: '2px',
-                          backgroundColor: isCompleted ? '#10B981' : '#E2E8F0'
-                        }} />
-                      )}
-
-                      {/* Icon Indicator */}
-                      <div style={{
-                        width: '32px',
-                        height: '32px',
-                        borderRadius: '50%',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        backgroundColor: isCompleted ? '#ECFDF5' : (isCurrent ? '#F0FDFA' : '#F1F5F9'),
-                        color: isCompleted ? '#059669' : (isCurrent ? brandColor : '#94A3B8'),
-                        border: isCurrent ? `2px solid ${brandColor}` : 'none',
-                        zIndex: 2,
-                        flexShrink: 0
-                      }}>
-                        {isCompleted ? (
-                          <CheckCircle2 size={18} />
-                        ) : isCurrent ? (
-                          <span style={{
-                            width: '10px',
-                            height: '10px',
-                            borderRadius: '50%',
-                            backgroundColor: brandColor
-                          }} />
-                        ) : (
-                          <span style={{
-                            width: '8px',
-                            height: '8px',
-                            borderRadius: '50%',
-                            backgroundColor: '#CBD5E1'
-                          }} />
-                        )}
-                      </div>
-
-                      {/* Stage Details */}
-                      <div style={{ flex: 1, paddingBottom: '16px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '4px' }}>
-                          <span style={{
-                            fontSize: '14px',
-                            fontWeight: isCurrent || isCompleted ? 700 : 500,
-                            color: isCurrent ? brandColor : (isCompleted ? '#0F172A' : '#64748B')
-                          }}>
-                            {stageItem.label}
-                          </span>
-                          {stageItem.timestamp && (
-                            <span style={{ fontSize: '11px', color: '#94A3B8' }}>
-                              {new Date(stageItem.timestamp).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                            </span>
-                          )}
-                        </div>
-                        <p style={{ fontSize: '12px', color: '#64748B', margin: '4px 0 0 0', lineHeight: '1.4' }}>
-                          {stageItem.description}
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Right Column: Transport Details & Customer Actions */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              
-              {/* Transport Card */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px', alignItems: 'start' }}>
+            {/* Shipment & Actions Card */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div style={{
                 backgroundColor: '#FFFFFF',
                 borderRadius: '16px',
                 border: '1px solid #E2E8F0',
-                padding: '24px',
-                boxShadow: '0 4px 6px -1px rgba(15, 23, 42, 0.02)'
+                padding: '22px'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
                   <div style={{
@@ -751,39 +656,27 @@ export default function CustomerOrderTrackingPortal({ token: propToken }) {
                     alignItems: 'center',
                     justifyContent: 'center'
                   }}>
-                    <Truck size={20} />
+                    <Truck size={18} />
                   </div>
                   <div>
-                    <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#0F172A', margin: 0 }}>
-                      Logistics & Transportation
-                    </h3>
-                    <div style={{ fontSize: '12px', color: '#64748B' }}>
-                      Carrier & vehicle tracking details
-                    </div>
+                    <h3 style={{ fontSize: '15px', fontWeight: 700, margin: 0 }}>Shipment Details</h3>
+                    <div style={{ fontSize: '12px', color: '#64748B' }}>Carrier & consignment info</div>
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 12px', backgroundColor: '#F8FAFC', borderRadius: '8px' }}>
-                    <span style={{ fontSize: '13px', color: '#64748B' }}>Transporter</span>
-                    <span style={{ fontSize: '13px', fontWeight: 600, color: '#0F172A' }}>
-                      {transport?.transporterName || 'Pending'}
-                    </span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 12px', backgroundColor: '#F8FAFC', borderRadius: '8px', fontSize: '13px' }}>
+                    <span style={{ color: '#64748B' }}>Transporter</span>
+                    <strong style={{ color: '#0F172A' }}>{transport?.transporterName || 'Pending'}</strong>
                   </div>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 12px', backgroundColor: '#F8FAFC', borderRadius: '8px' }}>
-                    <span style={{ fontSize: '13px', color: '#64748B' }}>Vehicle Number</span>
-                    <span style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A', letterSpacing: '0.5px' }}>
-                      {transport?.vehicleNumber || 'Awaiting Loading'}
-                    </span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 12px', backgroundColor: '#F8FAFC', borderRadius: '8px', fontSize: '13px' }}>
+                    <span style={{ color: '#64748B' }}>Vehicle Number</span>
+                    <strong style={{ color: '#0F172A' }}>{transport?.vehicleNumber || 'Awaiting Loading'}</strong>
                   </div>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', backgroundColor: '#F8FAFC', borderRadius: '8px' }}>
-                    <span style={{ fontSize: '13px', color: '#64748B' }}>LR (Consignment) No</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', backgroundColor: '#F8FAFC', borderRadius: '8px', fontSize: '13px' }}>
+                    <span style={{ color: '#64748B' }}>LR / Consignment No</span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A' }}>
-                        {transport?.lrNumber || 'Awaiting Dispatch'}
-                      </span>
+                      <strong style={{ color: '#0F172A' }}>{transport?.lrNumber || 'Awaiting Dispatch'}</strong>
                       {transport?.lrNumber && transport?.lrNumber !== 'Awaiting Carrier Dispatch' && (
                         <button
                           onClick={() => copyToClipboard(transport.lrNumber, 'LR')}
@@ -794,63 +687,77 @@ export default function CustomerOrderTrackingPortal({ token: propToken }) {
                       )}
                     </div>
                   </div>
-
                   {transport?.driverPhone && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 12px', backgroundColor: '#F8FAFC', borderRadius: '8px' }}>
-                      <span style={{ fontSize: '13px', color: '#64748B' }}>Driver Phone</span>
-                      <a href={`tel:${transport.driverPhone}`} style={{ fontSize: '13px', fontWeight: 600, color: brandColor, textDecoration: 'none' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 12px', backgroundColor: '#F8FAFC', borderRadius: '8px', fontSize: '13px' }}>
+                      <span style={{ color: '#64748B' }}>Driver Phone</span>
+                      <a href={`tel:${transport.driverPhone}`} style={{ fontWeight: 700, color: brandColor, textDecoration: 'none' }}>
                         {transport.driverPhone}
                       </a>
                     </div>
                   )}
-
-                  {transport?.packagesCount && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 12px', backgroundColor: '#F8FAFC', borderRadius: '8px' }}>
-                      <span style={{ fontSize: '13px', color: '#64748B' }}>Packages / Bundles</span>
-                      <span style={{ fontSize: '13px', fontWeight: 600, color: '#0F172A' }}>
-                        {transport.packagesCount} Packages • {transport.bundlesCount || 0} Bundles
-                      </span>
-                    </div>
-                  )}
                 </div>
 
-                {/* Customer Action Buttons */}
-                <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
-                  <button
-                    onClick={() => setShowDeliveryModal(true)}
-                    style={{
+                {/* Action Buttons — Confirm Delivery ONLY shown after Dispatched */}
+                <div style={{ display: 'flex', gap: '10px', marginTop: '18px', flexWrap: 'wrap' }}>
+                  {isDispatched && !isDelivered && (
+                    <button
+                      onClick={() => setShowDeliveryModal(true)}
+                      style={{
+                        flex: 1,
+                        minWidth: '150px',
+                        padding: '11px 14px',
+                        borderRadius: '10px',
+                        backgroundColor: '#059669',
+                        color: '#FFFFFF',
+                        border: 'none',
+                        fontSize: '13px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px'
+                      }}
+                    >
+                      <CheckCircle2 size={16} />
+                      Confirm Delivery
+                    </button>
+                  )}
+
+                  {isDelivered && (
+                    <div style={{
                       flex: 1,
-                      padding: '12px 14px',
+                      padding: '10px 14px',
                       borderRadius: '10px',
                       backgroundColor: '#ECFDF5',
                       color: '#059669',
                       border: '1px solid #A7F3D0',
                       fontSize: '13px',
                       fontWeight: 700,
-                      cursor: 'pointer',
-                      display: 'flex',
+                      display: 'inline-flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       gap: '6px'
-                    }}
-                  >
-                    <CheckCircle2 size={16} />
-                    Confirm Delivery
-                  </button>
+                    }}>
+                      <CheckCircle2 size={16} />
+                      Delivery Confirmed
+                    </div>
+                  )}
 
                   <button
                     onClick={() => setShowIssueModal(true)}
                     style={{
                       flex: 1,
-                      padding: '12px 14px',
+                      minWidth: '140px',
+                      padding: '11px 14px',
                       borderRadius: '10px',
                       backgroundColor: '#FFFBEB',
-                      color: '#D97706',
+                      color: '#B45309',
                       border: '1px solid #FDE68A',
                       fontSize: '13px',
                       fontWeight: 700,
                       cursor: 'pointer',
-                      display: 'flex',
+                      display: 'inline-flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       gap: '6px'
@@ -862,44 +769,42 @@ export default function CustomerOrderTrackingPortal({ token: propToken }) {
                 </div>
               </div>
 
-              {/* Dedicated Support Card */}
+              {/* Support Card */}
               <div style={{
                 backgroundColor: '#FFFFFF',
                 borderRadius: '16px',
                 border: '1px solid #E2E8F0',
-                padding: '20px',
-                boxShadow: '0 4px 6px -1px rgba(15, 23, 42, 0.02)'
+                padding: '20px'
               }}>
-                <h4 style={{ fontSize: '14px', fontWeight: 700, color: '#0F172A', margin: '0 0 12px 0' }}>
-                  Customer Care & Assistance
-                </h4>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  <a
-                    href={`tel:${companyBranding?.supportPhone || '+919876543210'}`}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '10px',
-                      padding: '10px 14px',
-                      backgroundColor: '#F8FAFC',
-                      borderRadius: '8px',
-                      textDecoration: 'none',
-                      color: '#0F172A',
-                      fontSize: '13px',
-                      fontWeight: 600
-                    }}
-                  >
-                    <Phone size={16} color={brandColor} />
-                    <span>Call Helpline: {companyBranding?.supportPhone || '+91 98765 43210'}</span>
-                  </a>
-
+                <h4 style={{ fontSize: '14px', fontWeight: 700, margin: '0 0 12px' }}>Customer Care</h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {companyBranding?.supportPhone && (
+                    <a
+                      href={`tel:${companyBranding.supportPhone}`}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px',
+                        padding: '10px 12px',
+                        backgroundColor: '#F8FAFC',
+                        borderRadius: '8px',
+                        textDecoration: 'none',
+                        color: '#0F172A',
+                        fontSize: '13px',
+                        fontWeight: 600
+                      }}
+                    >
+                      <Phone size={15} color={brandColor} />
+                      <span>{companyBranding.supportPhone}</span>
+                    </a>
+                  )}
                   <a
                     href={`mailto:${companyBranding?.supportEmail || 'support@businz.com'}?subject=Tracking Query: ${bomCode}`}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
                       gap: '10px',
-                      padding: '10px 14px',
+                      padding: '10px 12px',
                       backgroundColor: '#F8FAFC',
                       borderRadius: '8px',
                       textDecoration: 'none',
@@ -908,146 +813,153 @@ export default function CustomerOrderTrackingPortal({ token: propToken }) {
                       fontWeight: 600
                     }}
                   >
-                    <Mail size={16} color={brandColor} />
-                    <span>Email: {companyBranding?.supportEmail || 'support@businz.com'}</span>
+                    <Mail size={15} color={brandColor} />
+                    <span>{companyBranding?.supportEmail || 'support@businz.com'}</span>
                   </a>
                 </div>
               </div>
+            </div>
 
+            {/* Detailed Activity Timeline (Compact + Expandable) */}
+            <div style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '16px',
+              border: '1px solid #E2E8F0',
+              padding: '22px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px' }}>
+                <h3 style={{ fontSize: '15px', fontWeight: 700, margin: 0 }}>Order Activity</h3>
+                {timeline.length > 4 && (
+                  <button
+                    onClick={() => setShowAllStages(prev => !prev)}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      background: '#F1F5F9',
+                      border: 'none',
+                      borderRadius: '8px',
+                      padding: '5px 10px',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      color: '#334155',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <span>{showAllStages ? 'Show recent' : `View all ${timeline.length} stages`}</span>
+                    {showAllStages ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                  </button>
+                )}
+              </div>
+
+              <div style={{ position: 'relative', paddingLeft: '4px' }}>
+                {visibleTimeline.map((stageItem, idx) => {
+                  const done = stageItem.state === 'COMPLETED';
+                  const current = stageItem.state === 'CURRENT';
+                  const isLast = idx === visibleTimeline.length - 1;
+                  return (
+                    <div key={stageItem.stageId} style={{ display: 'flex', gap: '14px', position: 'relative', minHeight: '56px' }}>
+                      {!isLast && (
+                        <div style={{
+                          position: 'absolute',
+                          left: '13px',
+                          top: '26px',
+                          bottom: '-6px',
+                          width: '2px',
+                          backgroundColor: done ? '#10B981' : '#E2E8F0'
+                        }} />
+                      )}
+                      <div style={{
+                        width: '28px',
+                        height: '28px',
+                        borderRadius: '50%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backgroundColor: done ? '#ECFDF5' : (current ? '#ECFEFF' : '#F1F5F9'),
+                        color: done ? '#059669' : (current ? brandColor : '#94A3B8'),
+                        border: current ? `2px solid ${brandColor}` : 'none',
+                        flexShrink: 0,
+                        zIndex: 2
+                      }}>
+                        {done ? <CheckCircle2 size={15} /> : (
+                          <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: current ? brandColor : '#CBD5E1' }} />
+                        )}
+                      </div>
+                      <div style={{ flex: 1, paddingBottom: '14px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
+                          <span style={{
+                            fontSize: '13.5px',
+                            fontWeight: current || done ? 700 : 500,
+                            color: current ? brandColor : (done ? '#0F172A' : '#64748B')
+                          }}>
+                            {stageItem.label}
+                          </span>
+                          {stageItem.timestamp && (
+                            <span style={{ fontSize: '11px', color: '#94A3B8' }}>
+                              {new Date(stageItem.timestamp).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          )}
+                        </div>
+                        <p style={{ fontSize: '12px', color: '#64748B', margin: '3px 0 0', lineHeight: 1.4 }}>
+                          {stageItem.description}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
         )}
 
-        {/* 5. Tab Content: PRODUCTS (Real-Time Product Packing Progress) */}
+        {/* 5. PRODUCTS TAB */}
         {activeTab === 'products' && (
-          <div style={{
-            backgroundColor: '#FFFFFF',
-            borderRadius: '16px',
-            border: '1px solid #E2E8F0',
-            padding: '24px',
-            boxShadow: '0 4px 6px -1px rgba(15, 23, 42, 0.02)'
-          }}>
-            {/* Header with Overall Progress */}
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              flexWrap: 'wrap',
-              gap: '16px',
-              borderBottom: '1px solid #F1F5F9',
-              paddingBottom: '20px',
-              marginBottom: '20px'
-            }}>
+          <div style={{ backgroundColor: '#FFFFFF', borderRadius: '16px', border: '1px solid #E2E8F0', padding: '22px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '18px' }}>
               <div>
-                <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                  Itemized Packing Progress
-                </h3>
-                <div style={{ fontSize: '13px', color: '#64748B', marginTop: '4px' }}>
-                  {packingProgress?.summaryText || '0% Packing Completed'}
-                </div>
+                <h3 style={{ fontSize: '17px', fontWeight: 800, margin: 0 }}>Itemized Packing Progress</h3>
+                <div style={{ fontSize: '13px', color: '#64748B', marginTop: '2px' }}>{packingProgress?.summaryText || '0% Packing Completed'}</div>
               </div>
-
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px'
+              <span style={{
+                fontSize: '13px',
+                fontWeight: 700,
+                padding: '5px 12px',
+                borderRadius: '9999px',
+                backgroundColor: packingProgress?.percentage === 100 ? '#ECFDF5' : '#ECFEFF',
+                color: packingProgress?.percentage === 100 ? '#059669' : brandColor
               }}>
-                <span style={{
-                  fontSize: '20px',
-                  fontWeight: 800,
-                  color: packingProgress?.percentage === 100 ? '#059669' : brandColor
-                }}>
-                  {packingProgress?.percentage || 0}%
-                </span>
-                <span style={{
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  padding: '4px 10px',
-                  borderRadius: '20px',
-                  backgroundColor: packingProgress?.percentage === 100 ? '#ECFDF5' : '#F0FDFA',
-                  color: packingProgress?.percentage === 100 ? '#059669' : brandColor
-                }}>
-                  {packingProgress?.percentage === 100 ? 'Fully Packed' : 'Packing in Progress'}
-                </span>
-              </div>
+                {packingProgress?.percentage || 0}% Packed
+              </span>
             </div>
 
-            {/* Product Items List */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {packingProgress?.products && packingProgress.products.map((prod, idx) => {
-                const isFullyPacked = prod.isFullyPacked;
-                const isPartial = prod.status === 'PARTIALLY_PACKED';
-                const percent = prod.orderedQty > 0 ? Math.min(100, Math.round((prod.packedQty / prod.orderedQty) * 100)) : 0;
-
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {(packingProgress?.products || []).map((prod, idx) => {
+                const fullyPacked = prod.isFullyPacked;
+                const partial = prod.status === 'PARTIALLY_PACKED';
+                const pct = prod.orderedQty > 0 ? Math.min(100, Math.round((prod.packedQty / prod.orderedQty) * 100)) : 0;
                 return (
-                  <div
-                    key={prod.code || idx}
-                    style={{
-                      border: '1px solid #E2E8F0',
-                      borderRadius: '12px',
-                      padding: '16px',
-                      backgroundColor: '#FFFFFF',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '10px'
-                    }}
-                  >
-                    <div style={{
-                      display: 'flex',
-                      alignItems: 'flex-start',
-                      justifyContent: 'space-between',
-                      flexWrap: 'wrap',
-                      gap: '8px'
-                    }}>
+                  <div key={prod.code || idx} style={{ border: '1px solid #E2E8F0', borderRadius: '12px', padding: '14px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px', flexWrap: 'wrap' }}>
                       <div>
-                        <div style={{ fontSize: '15px', fontWeight: 700, color: '#0F172A' }}>
-                          {prod.name}
-                        </div>
+                        <div style={{ fontSize: '14px', fontWeight: 700, color: '#0F172A' }}>{prod.name}</div>
                         <div style={{ fontSize: '12px', color: '#64748B', marginTop: '2px' }}>
-                          Code: <strong>{prod.code}</strong> • UOM: <strong>{prod.uom}</strong>
+                          Code: <strong>{prod.code}</strong> • Ordered: <strong>{prod.orderedQty} {prod.uom}</strong> • Packed: <strong>{prod.packedQty} {prod.uom}</strong>
                         </div>
                       </div>
-
-                      {/* Status Chip */}
                       <span style={{
                         fontSize: '11px',
                         fontWeight: 700,
                         padding: '4px 10px',
-                        borderRadius: '20px',
-                        backgroundColor: isFullyPacked ? '#ECFDF5' : (isPartial ? '#FEF3C7' : '#F1F5F9'),
-                        color: isFullyPacked ? '#059669' : (isPartial ? '#D97706' : '#64748B')
+                        borderRadius: '9999px',
+                        backgroundColor: fullyPacked ? '#ECFDF5' : (partial ? '#FEF3C7' : '#F1F5F9'),
+                        color: fullyPacked ? '#059669' : (partial ? '#B45309' : '#64748B')
                       }}>
-                        {isFullyPacked ? 'Fully Packed' : (isPartial ? 'Partially Packed' : 'Pending')}
+                        {fullyPacked ? 'Packed' : (partial ? 'Partial' : 'Pending')}
                       </span>
                     </div>
-
-                    {/* Progress Fill Bar */}
-                    <div>
-                      <div style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        fontSize: '12px',
-                        color: '#64748B',
-                        marginBottom: '6px'
-                      }}>
-                        <span>Packed: <strong style={{ color: '#0F172A' }}>{prod.packedQty} {prod.uom}</strong> / {prod.orderedQty} {prod.uom}</span>
-                        <span>Pending: <strong style={{ color: prod.pendingQty > 0 ? '#DC2626' : '#059669' }}>{prod.pendingQty} {prod.uom}</strong></span>
-                      </div>
-                      <div style={{
-                        width: '100%',
-                        height: '6px',
-                        backgroundColor: '#F1F5F9',
-                        borderRadius: '6px',
-                        overflow: 'hidden'
-                      }}>
-                        <div style={{
-                          width: `${percent}%`,
-                          height: '100%',
-                          backgroundColor: isFullyPacked ? '#10B981' : (isPartial ? '#F59E0B' : '#CBD5E1'),
-                          borderRadius: '6px',
-                          transition: 'width 0.4s ease'
-                        }} />
-                      </div>
+                    <div style={{ width: '100%', height: '5px', backgroundColor: '#F1F5F9', borderRadius: '9999px', marginTop: '10px', overflow: 'hidden' }}>
+                      <div style={{ width: `${pct}%`, height: '100%', backgroundColor: fullyPacked ? '#10B981' : brandColor }} />
                     </div>
                   </div>
                 );
@@ -1056,54 +968,30 @@ export default function CustomerOrderTrackingPortal({ token: propToken }) {
           </div>
         )}
 
-        {/* 6. Tab Content: DOCUMENTS (Customer Document Centre) */}
+        {/* 6. DOCUMENTS TAB */}
         {activeTab === 'documents' && (
-          <div style={{
-            backgroundColor: '#FFFFFF',
-            borderRadius: '16px',
-            border: '1px solid #E2E8F0',
-            padding: '24px',
-            boxShadow: '0 4px 6px -1px rgba(15, 23, 42, 0.02)'
-          }}>
-            <div style={{ marginBottom: '20px' }}>
-              <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                Customer Document Centre
-              </h3>
-              <p style={{ fontSize: '13px', color: '#64748B', margin: '4px 0 0 0' }}>
-                Secure access to official commercial and dispatch documentation. Internal cost structures and trade secrets are sanitized.
-              </p>
-            </div>
-
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-              gap: '16px'
-            }}>
-              {documents && documents.map((doc, idx) => {
-                const isAvail = doc.available;
-
+          <div style={{ backgroundColor: '#FFFFFF', borderRadius: '16px', border: '1px solid #E2E8F0', padding: '22px' }}>
+            <h3 style={{ fontSize: '17px', fontWeight: 800, margin: '0 0 16px' }}>Order Documents</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '14px' }}>
+              {documents.map((doc, idx) => {
+                const isAvail = Boolean(doc.available);
                 return (
-                  <div
-                    key={doc.type || idx}
-                    style={{
-                      border: '1px solid #E2E8F0',
-                      borderRadius: '12px',
-                      padding: '18px',
-                      backgroundColor: '#FFFFFF',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      justifyContent: 'space-between',
-                      gap: '16px'
-                    }}
-                  >
+                  <div key={doc.type || idx} style={{
+                    border: '1px solid #E2E8F0',
+                    borderRadius: '14px',
+                    padding: '16px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                    gap: '12px'
+                  }}>
                     <div>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                         <span style={{
                           fontSize: '11px',
                           fontWeight: 700,
-                          textTransform: 'uppercase',
-                          padding: '2px 8px',
-                          borderRadius: '12px',
+                          padding: '3px 9px',
+                          borderRadius: '9999px',
                           backgroundColor: isAvail ? '#ECFDF5' : '#F1F5F9',
                           color: isAvail ? '#059669' : '#64748B'
                         }}>
@@ -1115,13 +1003,8 @@ export default function CustomerOrderTrackingPortal({ token: propToken }) {
                           </span>
                         )}
                       </div>
-
-                      <div style={{ fontSize: '15px', fontWeight: 700, color: '#0F172A' }}>
-                        {doc.title}
-                      </div>
-                      <div style={{ fontSize: '12px', color: '#64748B', marginTop: '4px' }}>
-                        Reference: <strong>{doc.docNumber}</strong>
-                      </div>
+                      <div style={{ fontSize: '14.5px', fontWeight: 700, color: '#0F172A' }}>{doc.title}</div>
+                      <div style={{ fontSize: '12px', color: '#64748B', marginTop: '3px' }}>Ref: <strong>{doc.docNumber}</strong></div>
                     </div>
 
                     {isAvail ? (
@@ -1133,30 +1016,29 @@ export default function CustomerOrderTrackingPortal({ token: propToken }) {
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          gap: '8px',
-                          padding: '10px 14px',
-                          borderRadius: '8px',
-                          backgroundColor: '#0E7490',
+                          gap: '7px',
+                          padding: '9px 12px',
+                          borderRadius: '9px',
+                          backgroundColor: brandColor,
                           color: '#FFFFFF',
                           fontSize: '13px',
                           fontWeight: 600,
                           textDecoration: 'none'
                         }}
                       >
-                        <Download size={16} />
+                        <Download size={15} />
                         <span>Download / View</span>
                       </a>
                     ) : (
                       <div style={{
-                        padding: '10px',
+                        padding: '9px',
                         backgroundColor: '#F8FAFC',
-                        borderRadius: '8px',
+                        borderRadius: '9px',
                         textAlign: 'center',
                         fontSize: '12px',
-                        color: '#94A3B8',
-                        fontWeight: 500
+                        color: '#94A3B8'
                       }}>
-                        Generated automatically when dispatched
+                        Available once generated
                       </div>
                     )}
                   </div>
@@ -1165,14 +1047,13 @@ export default function CustomerOrderTrackingPortal({ token: propToken }) {
             </div>
           </div>
         )}
-
       </main>
 
-      {/* 7. Modal: Report an Issue */}
+      {/* Report Issue Modal */}
       {showIssueModal && (
         <div style={{
           position: 'fixed',
-          top: 0, left: 0, right: 0, bottom: 0,
+          inset: 0,
           backgroundColor: 'rgba(15, 23, 42, 0.55)',
           backdropFilter: 'blur(3px)',
           display: 'flex',
@@ -1181,129 +1062,42 @@ export default function CustomerOrderTrackingPortal({ token: propToken }) {
           padding: '20px',
           zIndex: 100
         }}>
-          <div style={{
-            maxWidth: '480px',
-            width: '100%',
-            backgroundColor: '#FFFFFF',
-            borderRadius: '20px',
-            padding: '28px',
-            boxShadow: '0 20px 25px -5px rgba(15, 23, 42, 0.1)',
-            position: 'relative'
-          }}>
-            <button
-              onClick={() => setShowIssueModal(false)}
-              style={{
-                position: 'absolute',
-                top: '20px',
-                right: '20px',
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                color: '#64748B'
-              }}
-            >
+          <div style={{ maxWidth: '460px', width: '100%', backgroundColor: '#FFFFFF', borderRadius: '20px', padding: '26px', position: 'relative' }}>
+            <button onClick={() => setShowIssueModal(false)} style={{ position: 'absolute', top: '18px', right: '18px', background: 'none', border: 'none', cursor: 'pointer', color: '#64748B' }}>
               <X size={20} />
             </button>
-
-            <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', margin: '0 0 6px 0' }}>
-              Report an Issue with Your Order
-            </h3>
-            <p style={{ fontSize: '13px', color: '#64748B', margin: '0 0 20px 0' }}>
-              Our dispatch and support team will inspect and resolve this immediately.
-            </p>
-
+            <h3 style={{ fontSize: '18px', fontWeight: 800, margin: '0 0 6px' }}>Report an Issue</h3>
+            <p style={{ fontSize: '13px', color: '#64748B', margin: '0 0 18px' }}>Our dispatch and support team will respond shortly.</p>
             {issueSuccess ? (
-              <div style={{
-                padding: '24px',
-                textAlign: 'center',
-                backgroundColor: '#ECFDF5',
-                borderRadius: '12px',
-                color: '#059669'
-              }}>
-                <CheckCircle2 size={36} style={{ margin: '0 auto 12px' }} />
-                <div style={{ fontWeight: 700, fontSize: '16px' }}>Issue Submitted Successfully</div>
-                <div style={{ fontSize: '13px', marginTop: '4px' }}>Our operations manager has been alerted.</div>
+              <div style={{ padding: '22px', textAlign: 'center', backgroundColor: '#ECFDF5', borderRadius: '12px', color: '#059669' }}>
+                <CheckCircle2 size={34} style={{ margin: '0 auto 10px' }} />
+                <div style={{ fontWeight: 700 }}>Issue Submitted</div>
               </div>
             ) : (
               <form onSubmit={handleReportIssue}>
-                <div style={{ marginBottom: '16px' }}>
-                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>
-                    Issue Type
-                  </label>
-                  <select
-                    value={issueType}
-                    onChange={(e) => setIssueType(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '10px 12px',
-                      borderRadius: '8px',
-                      border: '1px solid #CBD5E1',
-                      fontSize: '14px',
-                      color: '#0F172A',
-                      backgroundColor: '#FFFFFF'
-                    }}
-                  >
-                    <option value="MISSING_PRODUCTS">Missing Items / Shortage</option>
-                    <option value="DAMAGED_PRODUCTS">Damaged During Transit</option>
-                    <option value="INCORRECT_ITEMS">Incorrect Item Specifications</option>
-                    <option value="DOCUMENT_DISCREPANCY">Invoice / LR Discrepancy</option>
-                    <option value="OTHER">Other Query</option>
-                  </select>
-                </div>
-
-                <div style={{ marginBottom: '20px' }}>
-                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>
-                    Remarks & Description
-                  </label>
-                  <textarea
-                    rows={4}
-                    value={issueRemarks}
-                    onChange={(e) => setIssueRemarks(e.target.value)}
-                    placeholder="Describe the issue, specific items, or concerns..."
-                    required
-                    style={{
-                      width: '100%',
-                      padding: '10px 12px',
-                      borderRadius: '8px',
-                      border: '1px solid #CBD5E1',
-                      fontSize: '14px',
-                      boxSizing: 'border-box'
-                    }}
-                  />
-                </div>
-
+                <select
+                  value={issueType}
+                  onChange={(e) => setIssueType(e.target.value)}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', marginBottom: '14px', fontSize: '14px' }}
+                >
+                  <option value="MISSING_PRODUCTS">Missing Items / Shortage</option>
+                  <option value="DAMAGED_PRODUCTS">Damaged During Transit</option>
+                  <option value="INCORRECT_ITEMS">Incorrect Specifications</option>
+                  <option value="DOCUMENT_DISCREPANCY">Invoice / LR Discrepancy</option>
+                  <option value="OTHER">Other Query</option>
+                </select>
+                <textarea
+                  rows={4}
+                  value={issueRemarks}
+                  onChange={(e) => setIssueRemarks(e.target.value)}
+                  placeholder="Describe the issue..."
+                  required
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '14px', boxSizing: 'border-box', marginBottom: '16px' }}
+                />
                 <div style={{ display: 'flex', gap: '10px' }}>
-                  <button
-                    type="button"
-                    onClick={() => setShowIssueModal(false)}
-                    style={{
-                      flex: 1,
-                      padding: '12px',
-                      borderRadius: '8px',
-                      border: '1px solid #CBD5E1',
-                      backgroundColor: '#FFFFFF',
-                      color: '#475569',
-                      fontWeight: 600,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={issueSubmitting}
-                    style={{
-                      flex: 1,
-                      padding: '12px',
-                      borderRadius: '8px',
-                      border: 'none',
-                      backgroundColor: '#0E7490',
-                      color: '#FFFFFF',
-                      fontWeight: 700,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    {issueSubmitting ? 'Submitting...' : 'Submit Issue'}
+                  <button type="button" onClick={() => setShowIssueModal(false)} style={{ flex: 1, padding: '11px', borderRadius: '8px', border: '1px solid #CBD5E1', backgroundColor: '#FFF', fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+                  <button type="submit" disabled={issueSubmitting} style={{ flex: 1, padding: '11px', borderRadius: '8px', border: 'none', backgroundColor: brandColor, color: '#FFF', fontWeight: 700, cursor: 'pointer' }}>
+                    {issueSubmitting ? 'Submitting...' : 'Submit'}
                   </button>
                 </div>
               </form>
@@ -1312,11 +1106,11 @@ export default function CustomerOrderTrackingPortal({ token: propToken }) {
         </div>
       )}
 
-      {/* 8. Modal: Confirm Delivery */}
+      {/* Confirm Delivery Modal */}
       {showDeliveryModal && (
         <div style={{
           position: 'fixed',
-          top: 0, left: 0, right: 0, bottom: 0,
+          inset: 0,
           backgroundColor: 'rgba(15, 23, 42, 0.55)',
           backdropFilter: 'blur(3px)',
           display: 'flex',
@@ -1325,126 +1119,36 @@ export default function CustomerOrderTrackingPortal({ token: propToken }) {
           padding: '20px',
           zIndex: 100
         }}>
-          <div style={{
-            maxWidth: '460px',
-            width: '100%',
-            backgroundColor: '#FFFFFF',
-            borderRadius: '20px',
-            padding: '28px',
-            boxShadow: '0 20px 25px -5px rgba(15, 23, 42, 0.1)',
-            position: 'relative'
-          }}>
-            <button
-              onClick={() => setShowDeliveryModal(false)}
-              style={{
-                position: 'absolute',
-                top: '20px',
-                right: '20px',
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                color: '#64748B'
-              }}
-            >
+          <div style={{ maxWidth: '440px', width: '100%', backgroundColor: '#FFFFFF', borderRadius: '20px', padding: '26px', position: 'relative' }}>
+            <button onClick={() => setShowDeliveryModal(false)} style={{ position: 'absolute', top: '18px', right: '18px', background: 'none', border: 'none', cursor: 'pointer', color: '#64748B' }}>
               <X size={20} />
             </button>
-
-            <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', margin: '0 0 6px 0' }}>
-              Confirm Delivery Receipt
-            </h3>
-            <p style={{ fontSize: '13px', color: '#64748B', margin: '0 0 20px 0' }}>
-              Confirm that you have received your products in good order.
-            </p>
-
+            <h3 style={{ fontSize: '18px', fontWeight: 800, margin: '0 0 6px' }}>Confirm Delivery Receipt</h3>
+            <p style={{ fontSize: '13px', color: '#64748B', margin: '0 0 18px' }}>Confirm that you received your order in good condition.</p>
             {deliverySuccess ? (
-              <div style={{
-                padding: '24px',
-                textAlign: 'center',
-                backgroundColor: '#ECFDF5',
-                borderRadius: '12px',
-                color: '#059669'
-              }}>
-                <CheckCircle2 size={36} style={{ margin: '0 auto 12px' }} />
-                <div style={{ fontWeight: 700, fontSize: '16px' }}>Delivery Confirmed!</div>
-                <div style={{ fontSize: '13px', marginTop: '4px' }}>Thank you for choosing {companyBranding?.companyName}.</div>
+              <div style={{ padding: '22px', textAlign: 'center', backgroundColor: '#ECFDF5', borderRadius: '12px', color: '#059669' }}>
+                <CheckCircle2 size={34} style={{ margin: '0 auto 10px' }} />
+                <div style={{ fontWeight: 700 }}>Delivery Confirmed!</div>
               </div>
             ) : (
               <form onSubmit={handleConfirmDelivery}>
-                <div style={{ marginBottom: '16px', textAlign: 'center' }}>
-                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#334155', marginBottom: '10px' }}>
-                    How was your dispatch & delivery experience?
-                  </label>
-                  <div style={{ display: 'flex', justifyContent: 'center', gap: '8px' }}>
-                    {[1, 2, 3, 4, 5].map(star => (
-                      <button
-                        key={star}
-                        type="button"
-                        onClick={() => setDeliveryRating(star)}
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          cursor: 'pointer',
-                          padding: '4px',
-                          color: star <= deliveryRating ? '#F59E0B' : '#E2E8F0'
-                        }}
-                      >
-                        <Star size={28} fill={star <= deliveryRating ? '#F59E0B' : 'none'} />
-                      </button>
-                    ))}
-                  </div>
+                <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginBottom: '16px' }}>
+                  {[1, 2, 3, 4, 5].map(star => (
+                    <button key={star} type="button" onClick={() => setDeliveryRating(star)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: star <= deliveryRating ? '#F59E0B' : '#E2E8F0' }}>
+                      <Star size={28} fill={star <= deliveryRating ? '#F59E0B' : 'none'} />
+                    </button>
+                  ))}
                 </div>
-
-                <div style={{ marginBottom: '20px' }}>
-                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>
-                    Feedback or Delivery Note (Optional)
-                  </label>
-                  <textarea
-                    rows={3}
-                    value={deliveryRemarks}
-                    onChange={(e) => setDeliveryRemarks(e.target.value)}
-                    placeholder="Received in good condition, unloaded at site..."
-                    style={{
-                      width: '100%',
-                      padding: '10px 12px',
-                      borderRadius: '8px',
-                      border: '1px solid #CBD5E1',
-                      fontSize: '14px',
-                      boxSizing: 'border-box'
-                    }}
-                  />
-                </div>
-
+                <textarea
+                  rows={3}
+                  value={deliveryRemarks}
+                  onChange={(e) => setDeliveryRemarks(e.target.value)}
+                  placeholder="Optional delivery note..."
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '14px', boxSizing: 'border-box', marginBottom: '16px' }}
+                />
                 <div style={{ display: 'flex', gap: '10px' }}>
-                  <button
-                    type="button"
-                    onClick={() => setShowDeliveryModal(false)}
-                    style={{
-                      flex: 1,
-                      padding: '12px',
-                      borderRadius: '8px',
-                      border: '1px solid #CBD5E1',
-                      backgroundColor: '#FFFFFF',
-                      color: '#475569',
-                      fontWeight: 600,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={deliverySubmitting}
-                    style={{
-                      flex: 1,
-                      padding: '12px',
-                      borderRadius: '8px',
-                      border: 'none',
-                      backgroundColor: '#059669',
-                      color: '#FFFFFF',
-                      fontWeight: 700,
-                      cursor: 'pointer'
-                    }}
-                  >
+                  <button type="button" onClick={() => setShowDeliveryModal(false)} style={{ flex: 1, padding: '11px', borderRadius: '8px', border: '1px solid #CBD5E1', backgroundColor: '#FFF', fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+                  <button type="submit" disabled={deliverySubmitting} style={{ flex: 1, padding: '11px', borderRadius: '8px', border: 'none', backgroundColor: '#059669', color: '#FFF', fontWeight: 700, cursor: 'pointer' }}>
                     {deliverySubmitting ? 'Confirming...' : 'Confirm Received'}
                   </button>
                 </div>
@@ -1454,7 +1158,6 @@ export default function CustomerOrderTrackingPortal({ token: propToken }) {
         </div>
       )}
 
-      {/* Responsive CSS styling helper */}
       <style>{`
         @media (max-width: 640px) {
           .hide-on-mobile { display: none !important; }

@@ -31,7 +31,12 @@ const STAGE_OPTIONS = [
   { value: 'DELIVERED', label: '10. Order Delivered' }
 ];
 
-export default function CustomerOrderTrackingView() {
+export default function CustomerOrderTrackingView({ userRole = '' }) {
+  const normalizedRole = String(userRole || (typeof window !== 'undefined' ? localStorage.getItem('controlroom_user_role') : '') || '').trim();
+  const isSalesOnly = /^(sales|sales executive)$/i.test(normalizedRole);
+  const currentEmpCode = typeof window !== 'undefined' ? (localStorage.getItem('controlroom_logged_emp_id') || localStorage.getItem('controlroom_logged_user_id') || '').trim().toUpperCase() : '';
+  const currentEmpEmail = typeof window !== 'undefined' ? (localStorage.getItem('controlroom_logged_user') || localStorage.getItem('controlroom_logged_email') || '').trim().toLowerCase() : '';
+  const currentEmpName = typeof window !== 'undefined' ? (localStorage.getItem('controlroom_logged_user_name') || '').trim() : '';
   const [orders, setOrders] = useState([]);
   const [analytics, setAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -61,7 +66,14 @@ export default function CustomerOrderTrackingView() {
   // Load analytics & orders
   const fetchAnalytics = async () => {
     try {
-      const res = await fetch('/api/internal/tracking/analytics');
+      const params = new URLSearchParams();
+      if (isSalesOnly) {
+        if (currentEmpCode) params.append('salesPersonCode', currentEmpCode);
+        if (currentEmpEmail) params.append('salesPersonEmail', currentEmpEmail);
+        if (currentEmpName) params.append('salesPersonName', currentEmpName);
+      }
+      const qs = params.toString();
+      const res = await fetch(`/api/internal/tracking/analytics${qs ? `?${qs}` : ''}`);
       const data = await res.json();
       if (res.ok && data.analytics) {
         setAnalytics(data.analytics);
@@ -80,6 +92,11 @@ export default function CustomerOrderTrackingView() {
       });
       if (filterDate) params.append('startDate', filterDate);
       if (filterEndDate) params.append('endDate', filterEndDate);
+      if (isSalesOnly) {
+        if (currentEmpCode) params.append('salesPersonCode', currentEmpCode);
+        if (currentEmpEmail) params.append('salesPersonEmail', currentEmpEmail);
+        if (currentEmpName) params.append('salesPersonName', currentEmpName);
+      }
 
       const res = await fetch(`/api/internal/tracking/orders?${params.toString()}`);
       const data = await res.json();

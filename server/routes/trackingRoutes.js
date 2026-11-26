@@ -320,12 +320,15 @@ router.get('/api/track/:token/documents/:docType', async (req, res) => {
 // List Tracked Orders with summary KPIs & filters
 router.get('/api/internal/tracking/orders', async (req, res) => {
   try {
-    const { stage, search, limit = 50, offset = 0 } = req.query;
+    const { stage, search, page = 1, limit = 10, salesPersonCode = '', salesPersonEmail = '', salesPersonName = '' } = req.query;
     const data = await getInternalTrackingOrders({
       stage,
       search,
-      limit: Math.min(Number(limit) || 50, 100),
-      offset: Number(offset) || 0
+      page: Math.max(1, Number(page) || 1),
+      limit: Math.min(Number(limit) || 10, 100),
+      salesPersonCode,
+      salesPersonEmail,
+      salesPersonName
     });
 
     res.json({ success: true, ...data });
@@ -419,7 +422,8 @@ router.post('/api/internal/tracking/orders/:bomCode/resend-whatsapp', handleRese
 // Tracking Analytics (CEO / Operations Dashboard)
 router.get('/api/internal/tracking/analytics', async (req, res) => {
   try {
-    const analytics = await getTrackingAnalytics();
+    const { salesPersonCode = '', salesPersonEmail = '', salesPersonName = '' } = req.query;
+    const analytics = await getTrackingAnalytics({ salesPersonCode, salesPersonEmail, salesPersonName });
     res.json({ success: true, analytics });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
