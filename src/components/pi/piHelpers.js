@@ -198,12 +198,14 @@ export const resolvePiSalesPersonName = (pi) => {
 
     const targetCode = (canonicalCode || rawCode).toUpperCase().trim();
     if (targetCode) {
-      const match = allEmps.find(e => {
-        if (!e) return false;
-        const c = String(e.employee_code || e.code || e.id || '').toUpperCase().trim();
-        const aliases = Array.isArray(e.alias_codes) ? e.alias_codes.map(a => String(a).toUpperCase().trim()) : [];
-        return c === targetCode || aliases.includes(targetCode);
-      });
+      let match = allEmps.find(e => e && (
+        String(e.employee_code || '').toUpperCase().trim() === targetCode ||
+        String(e.code || '').toUpperCase().trim() === targetCode ||
+        String(e.id || '').toUpperCase().trim() === targetCode
+      ));
+      if (!match) {
+        match = allEmps.find(e => e && Array.isArray(e.alias_codes) && e.alias_codes.some(a => String(a).toUpperCase().trim() === targetCode));
+      }
       if (match && (match.employee_name || match.name)) {
         return clean(match.employee_name || match.name);
       }

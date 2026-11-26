@@ -2722,11 +2722,13 @@ export default function CreateBomFormPage(props) {
                           const emps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
                           const cloudEmps = JSON.parse(localStorage.getItem('controlroom_employees_store') || '[]');
                           const allEmps = [...(Array.isArray(emps) ? emps : []), ...(Array.isArray(cloudEmps) ? cloudEmps : [])];
-                          const match = allEmps.find(e => e && (
-                            String(e.employee_code || '').toUpperCase() === empId || 
-                            String(e.code || '').toUpperCase() === empId ||
-                            (Array.isArray(e.alias_codes) && e.alias_codes.some(a => String(a).toUpperCase() === empId))
+                          let match = allEmps.find(e => e && (
+                            String(e.employee_code || '').toUpperCase() === empId ||
+                            String(e.code || '').toUpperCase() === empId
                           ));
+                          if (!match) {
+                            match = allEmps.find(e => e && Array.isArray(e.alias_codes) && e.alias_codes.some(a => String(a).toUpperCase() === empId));
+                          }
                           if (match && (match.employee_name || match.name)) return match.employee_name || match.name;
                         } catch (_) {}
                       }

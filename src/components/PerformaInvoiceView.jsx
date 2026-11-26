@@ -556,11 +556,13 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       const cloudEmps = JSON.parse(localStorage.getItem('controlroom_employees_store') || '[]');
       const allEmps = [...(Array.isArray(storedEmps) ? storedEmps : []), ...(Array.isArray(cloudEmps) ? cloudEmps : [])];
       if (curEmp) {
-        const match = allEmps.find(e => e && (
-          String(e.employee_code || '').toUpperCase() === curEmp || 
-          String(e.code || '').toUpperCase() === curEmp ||
-          (Array.isArray(e.alias_codes) && e.alias_codes.some(a => String(a).toUpperCase() === curEmp))
+        let match = allEmps.find(e => e && (
+          String(e.employee_code || '').toUpperCase() === curEmp ||
+          String(e.code || '').toUpperCase() === curEmp
         ));
+        if (!match) {
+          match = allEmps.find(e => e && Array.isArray(e.alias_codes) && e.alias_codes.some(a => String(a).toUpperCase() === curEmp));
+        }
         if (match && (match.employee_name || match.name)) return match.employee_name || match.name;
       }
       if (curEmail) {
@@ -1524,11 +1526,13 @@ export default function PerformaInvoiceView({ onConvertToBom, userRole = 'Procur
       const cloudEmps = JSON.parse(localStorage.getItem('controlroom_employees_store') || '[]');
       const allEmps = [...(Array.isArray(storedEmps) ? storedEmps : []), ...(Array.isArray(cloudEmps) ? cloudEmps : [])];
       if (curEmp) {
-        const match = allEmps.find(e => e && (
-          String(e.employee_code || '').toUpperCase() === curEmp || 
-          String(e.code || '').toUpperCase() === curEmp ||
-          (Array.isArray(e.alias_codes) && e.alias_codes.some(a => String(a).toUpperCase() === curEmp))
+        let match = allEmps.find(e => e && (
+          String(e.employee_code || '').toUpperCase() === curEmp ||
+          String(e.code || '').toUpperCase() === curEmp
         ));
+        if (!match) {
+          match = allEmps.find(e => e && Array.isArray(e.alias_codes) && e.alias_codes.some(a => String(a).toUpperCase() === curEmp));
+        }
         if (match && (match.employee_name || match.name)) return match.employee_name || match.name;
       }
     } catch (_) {}

@@ -58,17 +58,7 @@ export default function Header({
 
   let userName = '';
 
-  // 0. Explicit user-customized profile name takes highest priority
-  if (storedName && storedName !== 'undefined' && storedName !== 'null' && storedName !== 'Executive Leadership (CEO)' && storedName !== 'Sales Executive' && storedName !== 'User') {
-    userName = storedName;
-  }
-
-  // 1. Authoritative resolution: Canonical sales mapping if user hasn't explicitly set a custom profile name
-  if (!userName && storedEmpId && CODE_TO_SALES_NAME[storedEmpId]) {
-    userName = CODE_TO_SALES_NAME[storedEmpId];
-  }
-
-  // 2. Authoritative resolution: Check employee directory by canonical empId
+  // 1. Authoritative resolution: Check live employee directory by exact storedEmpId first (auto-heals stale localStorage)
   if (!userName) {
     try {
       const storedEmps = JSON.parse(localStorage.getItem('controlroom_employees_list') || '[]');
@@ -78,10 +68,12 @@ export default function Header({
       let matchedEmp = null;
       if (storedEmpId) {
         matchedEmp = allEmps.find(e => e && (
-          String(e.employee_code || '').toUpperCase() === storedEmpId || 
-          String(e.code || '').toUpperCase() === storedEmpId ||
-          (Array.isArray(e.alias_codes) && e.alias_codes.some(a => String(a).toUpperCase() === storedEmpId))
+          String(e.employee_code || '').toUpperCase() === storedEmpId ||
+          String(e.code || '').toUpperCase() === storedEmpId
         ));
+        if (!matchedEmp) {
+          matchedEmp = allEmps.find(e => e && Array.isArray(e.alias_codes) && e.alias_codes.some(a => String(a).toUpperCase() === storedEmpId));
+        }
       }
       if (!matchedEmp && storedEmail) {
         matchedEmp = allEmps.find(e => e && String(e.email || '').toLowerCase() === storedEmail);
@@ -99,6 +91,11 @@ export default function Header({
         userName = matchedEmp.employee_name || matchedEmp.name;
       }
     } catch (_) {}
+  }
+
+  // 2. Canonical sales mapping fallback
+  if (!userName && storedEmpId && CODE_TO_SALES_NAME[storedEmpId]) {
+    userName = CODE_TO_SALES_NAME[storedEmpId];
   }
 
   // 3. Fallback to storedName if employee directory lookup wasn't available
