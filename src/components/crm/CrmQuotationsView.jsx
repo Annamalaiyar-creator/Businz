@@ -193,6 +193,8 @@ export default function CrmQuotationsView({
   const [selectedQuote, setSelectedQuote] = useState(null);
   const [showBOMQuoteForm, setShowBOMQuoteForm] = useState(false);
   const [editingQuoteId, setEditingQuoteId] = useState(null);
+  // Smart Leads lead this quotation belongs to (needed for the lead's Won check and Lead Profile)
+  const [linkedLead, setLinkedLead] = useState(null);
   const [revisionCount, setRevisionCount] = useState(0);
 
   // Quote Sending Template Modal State
@@ -856,6 +858,7 @@ export default function CrmQuotationsView({
 
   // Open Create BOM-style Quote
   const handleOpenCreateForm = () => {
+    setLinkedLead(null);
     const nextCode = getNextSequence('QT', quotations || []).code;
     setQuoteCode(nextCode);
     fetch('/api/next-quotation-number')
@@ -913,6 +916,7 @@ export default function CrmQuotationsView({
         localStorage.removeItem('vrm_prefill_lead_for_quotation');
 
         handleOpenCreateForm();
+        if (lead.leadId) setLinkedLead({ id: lead.leadId, number: lead.leadNumber || '' });
         if (lead.companyName || lead.customer) setCustomerName(lead.companyName || lead.customer);
         if (lead.customerName || lead.contactPerson) setContactPerson(lead.customerName || lead.contactPerson);
         if (lead.phone) setPhone(lead.phone);
@@ -930,6 +934,7 @@ export default function CrmQuotationsView({
 
   // Open Edit / Revise Quote
   const handleStartEditQuote = (quote) => {
+    setLinkedLead(quote.leadId ? { id: quote.leadId, number: quote.leadNumber || '' } : null);
     setQuoteCode(quote.quoteNumber || quote.code || quote.id);
     setQuoteDate(quote.date || (quote.createdAt ? quote.createdAt.split('T')[0] : new Date().toISOString().split('T')[0]));
     const todayStr = new Date().toISOString().split('T')[0];
@@ -1130,6 +1135,8 @@ export default function CrmQuotationsView({
       deliveryDate,
       customerName: customerName.trim(),
       companyName: customerName.trim(),
+      leadId: linkedLead?.id || null,
+      leadNumber: linkedLead?.number || null,
       contactPerson,
       phone,
       email,
@@ -1282,6 +1289,12 @@ export default function CrmQuotationsView({
       presetKitPrice: quote.presetKitPrice || quote.kitSubtotal || null,
       presetSetCount: quote.presetSetCount || null,
       kitSubtotal: quote.kitSubtotal || null,
+      // Carry the quotation's real totals; without them the server falls back to unitValue (grand total / item count)
+      subtotal: Number(quote.taxableAmount) || 0,
+      taxTotal: Number(quote.gstTotal) || 0,
+      cgst: Number(quote.cgst) || 0,
+      sgst: Number(quote.sgst) || 0,
+      grandTotal: cleanAmount,
       notes: `Generated automatically from Quotation ${quote.code || quote.quoteNumber}. Unlimited revisions kept in quotation history.`
     };
 

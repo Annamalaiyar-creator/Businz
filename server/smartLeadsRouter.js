@@ -308,6 +308,18 @@ export function createSmartLeadsRouter({ requireSession, broadcast = () => {}, g
     stage: lead?.stage || extra.stage || null
   });
 
+  // Quotations created in the app are kept in the crm_quotations store (not public.quotations); match them by leadId
+  const STORE_QUOTES_FOR_LEAD_SQL = `
+    SELECT COALESCE(q->>'quoteNumber', q->>'code', q->>'id') AS id,
+           COALESCE(q->>'quoteNumber', q->>'code', q->>'id') AS quote_number,
+           q->>'status' AS status,
+           NULLIF(q->>'grandTotal', '')::numeric AS grand_total,
+           q->>'date' AS date,
+           q->>'convertedPiNo' AS converted_pi_no
+      FROM public.controlroom_store s,
+           jsonb_array_elements(CASE WHEN jsonb_typeof(s.data) = 'array' THEN s.data ELSE '[]'::jsonb END) q
+     WHERE s.key = 'crm_quotations' AND q->>'leadId' = $1`;
+
   // ---------- Meta / settings ----------
   router.get('/meta', wrap(async (req, res) => {
     const [settings, reasons, team] = await Promise.all([
@@ -476,7 +488,7 @@ export function createSmartLeadsRouter({ requireSession, broadcast = () => {}, g
     const phone10 = normalizePhone(lead.phone || lead.whatsapp);
     const companyClean = String(lead.company_name || '').trim().toLowerCase();
 
-    const [notes, activities, statusHist, assignHist, audit, followups, quotations, customerMatch, relatedLeads, proformaInvoices, bomOrders, invoices] = await Promise.all([
+    const [notes, activities, statusHist, assignHist, audit, followups, quotations, customerMatch, relatedLeads] = await Promise.all([
       query(`SELECT id, body, created_by_name, created_at FROM public.lead_notes WHERE lead_id = $1 ORDER BY created_at DESC LIMIT 100`, [id]),
       query(`SELECT id, activity_type, summary, customer_response, conducted_by_name, created_at FROM public.lead_activities WHERE lead_id = $1 ORDER BY created_at DESC LIMIT 100`, [id]),
       query(`SELECT id, previous_status, new_status, remarks, updated_by_name, created_at FROM public.lead_status_history WHERE lead_id = $1 ORDER BY created_at DESC LIMIT 100`, [id]),
@@ -484,7 +496,10 @@ export function createSmartLeadsRouter({ requireSession, broadcast = () => {}, g
       query(`SELECT id, field, old_value, new_value, changed_by_name, changed_at FROM public.lead_field_audit WHERE lead_id = $1 ORDER BY changed_at DESC LIMIT 100`, [id]),
       query(`SELECT id, followup_type, scheduled_at, notes, status, outcome, outcome_remarks, assigned_salesperson_name, completed_at, rescheduled_from_id, escalated_at, created_at
                FROM public.lead_followups WHERE lead_id = $1 ORDER BY scheduled_at DESC LIMIT 100`, [id]),
-      query(`SELECT id, quote_number, status, grand_total, date, converted_pi_no FROM public.quotations WHERE lead_id = $1 ORDER BY created_at DESC LIMIT 50`, [id]),
+      Promise.all([
+        query(`SELECT id, quote_number, status, grand_total, date, converted_pi_no FROM public.quotations WHERE lead_id = $1 ORDER BY created_at DESC LIMIT 50`, [id]),
+        query(STORE_QUOTES_FOR_LEAD_SQL, [id]).catch(() => ({ rows: [] }))
+      ]).then(([t, st]) => ({ rows: [...t.rows, ...st.rows.filter(r => !t.rows.some(x => x.quote_number === r.quote_number))] })),
       // Customer Master cross-reference (Customer 360)
       query(`SELECT id, customer_code, company_name, customer_name, gst_number, city, state, credit_limit, credit_approved
                FROM public.customers
@@ -497,30 +512,50 @@ export function createSmartLeadsRouter({ requireSession, broadcast = () => {}, g
               WHERE id <> $1 AND deleted_at IS NULL
                 AND ((company_name IS NOT NULL AND LOWER(TRIM(company_name)) = $2)
                      OR ($3 <> '' AND (RIGHT(regexp_replace(COALESCE(phone, ''), '\\D', '', 'g'), 10) = $3)))
-              ORDER BY created_at DESC LIMIT 5`, [id, companyClean, phone10]),
-      // Linked Proforma Invoices (PIs)
-      query(`SELECT id, pi_no, customer_name, grand_total, total_amount, pi_date, status, sales_person
-               FROM public.proforma_invoices
-              WHERE (customer_name IS NOT NULL AND LOWER(TRIM(customer_name)) = $1)
-                 OR (pi_no IN (SELECT converted_pi_no FROM public.quotations WHERE lead_id = $2 AND converted_pi_no IS NOT NULL))
-              ORDER BY pi_date DESC LIMIT 50`, [companyClean, id]).catch(() => ({ rows: [] })),
-      // Linked BOM Production Orders
-      query(`SELECT id, bom_code, source_pi_no, customer_name, company_name, grand_total, date, status
-               FROM public.bom_orders
-              WHERE (customer_name IS NOT NULL AND LOWER(TRIM(customer_name)) = $1)
-                 OR (company_name IS NOT NULL AND LOWER(TRIM(company_name)) = $1)
-                 OR (source_pi_no IN (SELECT converted_pi_no FROM public.quotations WHERE lead_id = $2 AND converted_pi_no IS NOT NULL))
-              ORDER BY date DESC LIMIT 50`, [companyClean, id]).catch(() => ({ rows: [] })),
-      // Linked Final Tax Invoices
-      query(`SELECT id, inv_no, bom_code, inv_amt, status, created_at
-               FROM public.invoices
-              WHERE bom_code IN (
-                SELECT bom_code FROM public.bom_orders
-                WHERE (customer_name IS NOT NULL AND LOWER(TRIM(customer_name)) = $1)
-                   OR (source_pi_no IN (SELECT converted_pi_no FROM public.quotations WHERE lead_id = $2 AND converted_pi_no IS NOT NULL))
-              )
-              ORDER BY created_at DESC LIMIT 50`, [companyClean, id]).catch(() => ({ rows: [] }))
+              ORDER BY created_at DESC LIMIT 5`, [id, companyClean, phone10])
     ]);
+
+    // Downstream tracking: PI -> BOM -> Tax Invoice for this lead
+    const leadQuoteNos = quotations.rows.map(q => q.quote_number).filter(Boolean);
+    const leadQuotePiNos = quotations.rows.map(q => q.converted_pi_no).filter(Boolean);
+    // PIs: same customer, or created from this lead's quotations
+    const proformaInvoices = await query(
+      `SELECT id, pi_no, customer_name, grand_total, pi_date, status, sales_person, converted_bom_code
+         FROM public.proforma_invoices
+        WHERE (customer_name IS NOT NULL AND LOWER(TRIM(customer_name)) = $1)
+           OR pi_no = ANY($2::text[])
+           OR (extra_data->>'sourceQuoteNo') = ANY($3::text[])
+        ORDER BY pi_date DESC NULLS LAST LIMIT 50`,
+      [companyClean, leadQuotePiNos, leadQuoteNos]
+    ).catch(() => ({ rows: [] }));
+    const leadPiNos = proformaInvoices.rows.map(p => p.pi_no).filter(Boolean);
+    // BOMs: same customer, or converted from those PIs
+    const bomOrders = await query(
+      `SELECT id, bom_code, source_pi_no, customer_name, company_name, grand_total, date, status, invoice_no, invoice_confirmed, updated_at
+         FROM public.bom_orders
+        WHERE (customer_name IS NOT NULL AND LOWER(TRIM(customer_name)) = $1)
+           OR (company_name IS NOT NULL AND LOWER(TRIM(company_name)) = $1)
+           OR source_pi_no = ANY($2::text[])
+        ORDER BY date DESC NULLS LAST LIMIT 50`,
+      [companyClean, leadPiNos]
+    ).catch(() => ({ rows: [] }));
+    const leadBomCodes = bomOrders.rows.map(b => b.bom_code).filter(Boolean);
+    // Tax invoices: the invoice number lives on the BOM order; also include any rows in public.invoices
+    const legacyInvoices = await query(
+      `SELECT id, inv_no, bom_code, inv_amt, status, created_at FROM public.invoices WHERE bom_code = ANY($1::text[]) ORDER BY created_at DESC LIMIT 50`,
+      [leadBomCodes]
+    ).catch(() => ({ rows: [] }));
+    const bomInvoices = bomOrders.rows
+      .filter(b => String(b.invoice_no || '').trim() && !/pending/i.test(String(b.invoice_no)))
+      .map(b => ({
+        id: b.invoice_no,
+        inv_no: b.invoice_no,
+        bom_code: b.bom_code,
+        inv_amt: b.grand_total,
+        status: b.invoice_confirmed ? 'Invoice Confirmed' : 'Pending Confirmation',
+        created_at: b.updated_at
+      }));
+    const invoices = { rows: [...bomInvoices, ...legacyInvoices.rows.filter(r => !bomInvoices.some(x => x.inv_no === r.inv_no))] };
     res.json({
       success: true, lead,
       customerMaster: customerMatch.rows[0] || null,
@@ -668,7 +703,8 @@ export function createSmartLeadsRouter({ requireSession, broadcast = () => {}, g
     let customerCode = cur.converted_customer_code || null;
     if (stage === 'Won') {
       const q = await client.query(`SELECT 1 FROM public.quotations WHERE lead_id = $1 LIMIT 1`, [cur.id]);
-      if (!q.rows[0]) throw new HttpError(400, 'Create a quotation for this lead before marking it Won');
+      const sq = q.rows[0] ? { rows: [1] } : await client.query(`${STORE_QUOTES_FOR_LEAD_SQL} LIMIT 1`, [cur.id]);
+      if (!q.rows[0] && !sq.rows[0]) throw new HttpError(400, 'Create a quotation for this lead before marking it Won');
       if (!customerId) {
         const c = await client.query(
           `SELECT id, customer_code FROM public.customers
@@ -740,10 +776,10 @@ export function createSmartLeadsRouter({ requireSession, broadcast = () => {}, g
         await client.query(
           `UPDATE public.leads
               SET is_converted = TRUE,
-                  converted_customer_id = $2,
-                  converted_customer_code = $3,
-                  customer_id = $2,
-                  customer_code = $3,
+                  converted_customer_id = $2::text,
+                  converted_customer_code = $3::text,
+                  customer_id = $2::text,
+                  customer_code = $3::text,
                   updated_at = NOW()
             WHERE id = $1`,
           [cur.id, customer.id, customer.customer_code || customer.code || customer.id]
@@ -811,10 +847,10 @@ export function createSmartLeadsRouter({ requireSession, broadcast = () => {}, g
       await client.query(
         `UPDATE public.leads
             SET is_converted = TRUE,
-                converted_customer_id = $2,
-                converted_customer_code = $2,
-                customer_id = $2,
-                customer_code = $2,
+                converted_customer_id = $2::text,
+                converted_customer_code = $2::text,
+                customer_id = $2::text,
+                customer_code = $2::text,
                 updated_at = NOW()
           WHERE id = $1`,
         [cur.id, customerCode]
@@ -1234,6 +1270,7 @@ export function createSmartLeadsRouter({ requireSession, broadcast = () => {}, g
       const fRes = await client.query(`SELECT * FROM public.lead_followups WHERE id = $1 FOR UPDATE`, [req.params.id]);
       if (!fRes.rows.length) throw new HttpError(404, 'Follow-up not found');
       const f = fRes.rows[0];
+      if (String(f.status || '').toUpperCase() !== 'PENDING') throw new HttpError(409, `Follow-up is already ${String(f.status || '').toLowerCase()}`);
 
       // Update follow-up as completed
       const up = await client.query(
@@ -1320,6 +1357,7 @@ export function createSmartLeadsRouter({ requireSession, broadcast = () => {}, g
       const fRes = await client.query(`SELECT * FROM public.lead_followups WHERE id = $1 FOR UPDATE`, [req.params.id]);
       if (!fRes.rows.length) throw new HttpError(404, 'Follow-up not found');
       const f = fRes.rows[0];
+      if (String(f.status || '').toUpperCase() !== 'PENDING') throw new HttpError(409, `Follow-up is already ${String(f.status || '').toLowerCase()}`);
 
       // Mark old as rescheduled and create new one
       await client.query(

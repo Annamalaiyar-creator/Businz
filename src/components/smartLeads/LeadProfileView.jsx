@@ -770,19 +770,21 @@ export default function LeadProfileView({ meta, leadId, onBack, toast, isModal =
             </div>
 
             {/* Final Tax Invoices */}
-            {(detail.invoices && detail.invoices.length > 0) && (
-              <div style={{ marginBottom: 12, paddingTop: 8, borderTop: '1px solid #F1F5F9' }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', marginBottom: 4 }}>
-                  Tax Invoices ({detail.invoices.length})
-                </div>
-                {detail.invoices.map(inv => (
+            <div style={{ marginBottom: 12, paddingTop: 8, borderTop: '1px solid #F1F5F9' }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', marginBottom: 4 }}>
+                Tax Invoices ({detail.invoices?.length || 0})
+              </div>
+              {(!detail.invoices || detail.invoices.length === 0) ? (
+                <div className="sl-faint" style={{ fontSize: 12 }}>No Tax Invoice yet. It appears here once Accounts assigns the invoice for a BOM.</div>
+              ) : (
+                detail.invoices.map(inv => (
                   <div key={inv.id || inv.inv_no} className="sl-score-row" style={{ fontSize: 12.5 }}>
-                    <span>{inv.inv_no} · <span className="sl-muted">{inv.status || 'Generated'}</span></span>
+                    <span>{inv.inv_no} · <span className="sl-muted">{inv.status || 'Generated'}{inv.bom_code ? ` · ${inv.bom_code}` : ''}</span></span>
                     <span className="sl-strong">{formatINR(inv.inv_amt)}</span>
                   </div>
-                ))}
-              </div>
-            )}
+                ))
+              )}
+            </div>
 
             {l.is_converted && <div className="sl-muted" style={{ marginTop: 6, fontSize: 11 }}>Converted customer: {l.converted_customer_code || l.converted_customer_id}</div>}
           </div>
