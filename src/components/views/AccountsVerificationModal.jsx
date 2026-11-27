@@ -535,9 +535,14 @@ export default function AccountsVerificationModal({
     let finalInvNo = assignedInvoiceNo;
     const isTaken = (no) => {
       if (!no || no === 'Pending Confirmation' || no === 'Assigned upon Clearance' || no === 'Auto-Assign') return true;
-      return (invoiceList || []).some(inv => 
+      const inInvoices = (invoiceList || []).some(inv => 
         (inv.invNo === no || inv.code === no || inv.invoiceNo === no) &&
         inv.poNo !== targetCode && inv.bomCode !== targetCode
+      );
+      if (inInvoices) return true;
+      return (bomStore || []).some(b =>
+        b && (b.invoiceNo === no || b.taxInvoiceNo === no) &&
+        b.bomCode !== targetCode && b.code !== targetCode
       );
     };
 

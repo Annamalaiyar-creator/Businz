@@ -2028,7 +2028,7 @@ export default function DispatchPackingModal({
                                 )}
                               </div>
                               <div style={{ fontSize: '13.5px', fontWeight: '800', color: '#0F172A' }}>
-                                {grpName} {setCount > 1 ? `(${setCount} Sets)` : '(1 Set)'}
+                                {grpName} ({setCount} {String(grp.unitType || grp.unit || '').trim().toLowerCase() === 'kw' ? 'kW' : (setCount > 1 ? 'Sets' : 'Set')})
                               </div>
                               <div style={{ fontSize: '11.5px', fontWeight: '700', color: theme.tagText }}>
                                 {packedCountInSet} of {setIndices.length} items packed in this set
@@ -2147,7 +2147,7 @@ export default function DispatchPackingModal({
                                       {theme.badge}
                                     </span>
                                     <span style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A' }}>
-                                      {grpName} {setCount > 1 ? `(${setCount} Sets)` : '(1 Set)'}
+                                      {grpName} ({setCount} {String(grp.unitType || grp.unit || '').trim().toLowerCase() === 'kw' ? 'kW' : (setCount > 1 ? 'Sets' : 'Set')})
                                     </span>
                                     <span style={{ fontSize: '11.5px', fontWeight: '700', color: theme.tagText, backgroundColor: theme.tagBg, padding: '2px 8px', borderRadius: '4px' }}>
                                       {packedCountInSet} / {setIndices.length} Items Packed
