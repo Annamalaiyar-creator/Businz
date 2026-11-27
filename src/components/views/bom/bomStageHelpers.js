@@ -750,6 +750,21 @@ export const sanitizeBomRecord = (b) => {
   return b;
 };
 
+// Compares addresses by their unique parts so repeated "City, State, PIN" suffixes, case and punctuation don't count as a different address.
+const addressKey = (addr) => [...new Set(
+  String(addr || '').toLowerCase().split(/,|\s-\s|\n/)
+    .map(t => t.replace(/^\s*(pin\s*code|pin)\s*[:-]?\s*/, '').replace(/[^a-z0-9]/g, ''))
+    .filter(Boolean)
+)].sort().join('|');
+export const isSameAddressText = (a, b) => Boolean(a && b && addressKey(a) === addressKey(b));
+
+// Sales still needs to attach address proof: proof missing and the order is not yet invoiced, dispatched or completed.
+export const needsSalesAddressProof = (bom) => Boolean(
+  bom && !bom.invoiceConfirmed &&
+  !/complete|dispatched|closed/i.test(String(bom.status || '')) &&
+  isBomAddressProofPending(bom)
+);
+
 /** Returns true when a non-cancelled BOM uses a different delivery address without an attached address proof doc. */
 export const isBomAddressProofPending = (bom) => {
   if (!bom || typeof bom !== 'object') return false;
@@ -775,9 +790,9 @@ export const isBomAddressProofPending = (bom) => {
 
   let isDifferentAddress = false;
   if (hasDObjFields) {
-    isDifferentAddress = !(dStreet === bStreet && dCity === bCity && dState === bState && dPin === bPin);
+    isDifferentAddress = !((dStreet === bStreet || isSameAddressText(dStreet, bStreet)) && dCity === bCity && dState === bState && dPin === bPin);
   } else if (dStr) {
-    isDifferentAddress = dStr !== bStr;
+    isDifferentAddress = !isSameAddressText(dStr, bStr);
   } else if (bom.sameAsBilling === false) {
     isDifferentAddress = true;
   }

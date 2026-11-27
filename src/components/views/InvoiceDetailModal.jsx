@@ -16,6 +16,7 @@ import { isTamilNaduIntra, extractGstRate } from "../../utils/gstHelper";
 import { notifyInvoiceCompletedReadyForDispatch, notifyAddressProofPendingToSales } from "../../services/notificationService";
 import VRMTaxInvoicePrintTemplate, { VRMTaxInvoicePrintSheet } from "../VRMTaxInvoicePrintTemplate";
 import { getHsnCode } from "../../utils/hsnCodeService";
+import { isSameAddressText } from "./bom/bomStageHelpers";
 import { autoDispatchOrderStatusToCustomer } from "../../utils/whatsappDispatchService";
 
 const isBomCodeMatching = (codeA, codeB) => {
@@ -402,6 +403,13 @@ export default function InvoiceDetailModal({
     return acc + (lineSub * (pct / 100));
   }, 0);
   const computedGrandTotal = computedSubtotal + computedTaxGst;
+  // Tax per GST rate, so mixed 5% / 18% orders show a correct breakdown
+  const gstRateGroups = Object.entries(itemsList.reduce((acc, it) => {
+    const pct = extractGstRate(it.gstRate ?? it.tax, 18);
+    acc[pct] = (acc[pct] || 0) + (it.qty || it.invQty || it.bomQty || 1) * (it.rate || 0) * (pct / 100);
+    return acc;
+  }, {})).map(([rate, amt]) => ({ rate: Number(rate), amt })).sort((a, b) => a.rate - b.rate);
+  const gstRateGroupsTotal = gstRateGroups.reduce((acc, g) => acc + g.amt, 0);
 
   const cleanAmtNum = (amt) => {
     if (typeof amt === 'number' && !isNaN(amt) && amt > 0) return amt;
@@ -439,11 +447,16 @@ export default function InvoiceDetailModal({
   const isInvIntra = isTamilNaduIntra(invGst, invState);
 
   // Amount received = what Accounts verified (slip + adjustment); invoice total stays the order value.
-  const verifiedReceivedAmt = cleanAmtNum(inv.accountsVerification?.totalAmount) || cleanAmtNum(matchingBom?.accountsVerification?.totalAmount);
-  const advanceAmt = verifiedReceivedAmt > 0
+  // Credit orders: Accounts stores the order value (not money received), so received is 0 until Credit is settled.
+  const isCreditInvoice = /credit|net\s?\d/i.test(String(inv.paymentType || matchingBom?.paymentType || matchingBom?.paymentTerms || ''));
+  const isCreditSettled = Boolean(inv.creditSettled || matchingBom?.creditSettled || matchingBom?.accountsVerification?.creditSettled);
+  const verifiedReceivedAmt = isCreditInvoice
+    ? (isCreditSettled ? (cleanAmtNum(matchingBom?.creditSettledAmount) || cleanAmtNum(matchingBom?.accountsVerification?.settledAmount) || totalAmtRaw) : 0)
+    : (cleanAmtNum(inv.accountsVerification?.totalAmount) || cleanAmtNum(matchingBom?.accountsVerification?.totalAmount));
+  const advanceAmt = (isCreditInvoice || verifiedReceivedAmt > 0)
     ? Math.min(verifiedReceivedAmt, totalAmtRaw)
     : (isFullAdvance ? totalAmtRaw : (is50Percent ? totalAmtRaw * 0.5 : totalAmtRaw));
-  const balanceAmt = verifiedReceivedAmt > 0
+  const balanceAmt = (isCreditInvoice || verifiedReceivedAmt > 0)
     ? Math.max(0, Math.round((totalAmtRaw - verifiedReceivedAmt) * 100) / 100)
     : (isFullAdvance ? 0 : (is50Percent ? totalAmtRaw * 0.5 : 0));
   const paymentStatusText = safeStringVal(inv.pay, balanceAmt === 0 ? 'Verified & Paid (100%)' : 'Ready for Payment');
@@ -617,7 +630,7 @@ export default function InvoiceDetailModal({
       inv.sameAsBilling ||
       matchingBom?.sameAsBilling ||
       foundBom?.sameAsBilling ||
-      (bAddr && dAddr && bAddr.trim().toLowerCase() === dAddr.trim().toLowerCase())
+      isSameAddressText(bAddr, dAddr)
     );
     const hasAddressProof = Boolean(
       inv.deliveryAddressProofDoc ||
@@ -1125,23 +1138,28 @@ export default function InvoiceDetailModal({
                 <strong style={{ color: '#0F172A' }}>₹ {subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
               </div>
 
-              {isInvIntra ? (
-                <>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569' }}>
-                    <span>CGST (9%)</span>
-                    <strong style={{ color: '#0F172A' }}>₹ {(taxGst / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+              {(gstRateGroupsTotal > 0 && gstRateGroups.length > 1
+                ? gstRateGroups.map(g => ({ rates: [g.rate], amt: taxGst * (g.amt / gstRateGroupsTotal) }))
+                : [{ rates: gstRateGroups.length > 0 ? gstRateGroups.map(g => g.rate) : [invFallbackRate], amt: taxGst }]
+              ).map(({ rates, amt }) => (
+                isInvIntra ? (
+                  <React.Fragment key={rates.join('-')}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569' }}>
+                      <span>CGST ({rates.map(r => `${r / 2}%`).join(' + ')})</span>
+                      <strong style={{ color: '#0F172A' }}>₹ {(amt / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569' }}>
+                      <span>SGST ({rates.map(r => `${r / 2}%`).join(' + ')})</span>
+                      <strong style={{ color: '#0F172A' }}>₹ {(amt / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                    </div>
+                  </React.Fragment>
+                ) : (
+                  <div key={rates.join('-')} style={{ display: 'flex', justifyContent: 'space-between', color: '#475569' }}>
+                    <span>IGST ({rates.map(r => `${r}%`).join(' + ')})</span>
+                    <strong style={{ color: '#0F172A' }}>₹ {amt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569' }}>
-                    <span>SGST (9%)</span>
-                    <strong style={{ color: '#0F172A' }}>₹ {(taxGst / 2).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
-                  </div>
-                </>
-              ) : (
-                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569' }}>
-                  <span>IGST (18%)</span>
-                  <strong style={{ color: '#0F172A' }}>₹ {taxGst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
-                </div>
-              )}
+                )
+              ))}
 
               <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569' }}>
                 <span>Shipping Charges</span>
@@ -1350,7 +1368,7 @@ export default function InvoiceDetailModal({
             inv.sameAsBilling ||
             matchingBom?.sameAsBilling ||
             foundBom?.sameAsBilling ||
-            (bAddr && dAddr && bAddr.trim().toLowerCase() === dAddr.trim().toLowerCase())
+            isSameAddressText(bAddr, dAddr)
           );
 
           return (
@@ -2167,7 +2185,7 @@ export default function InvoiceDetailModal({
           const rawDAddr = inv.deliveryAddress || matchingBom?.deliveryAddress || dObj.address || rawBAddr;
           const bAddr = safeStringVal(rawBAddr, 'Plot No 42, SIDCO Industrial Estate, Ambattur, Chennai, Tamil Nadu - 600058');
           const dAddr = safeStringVal(rawDAddr, bAddr);
-          const isSame = Boolean(inv.sameAsBilling || matchingBom?.sameAsBilling || (bAddr.trim() === dAddr.trim()));
+          const isSame = Boolean(inv.sameAsBilling || matchingBom?.sameAsBilling || isSameAddressText(bAddr, dAddr));
 
           return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>

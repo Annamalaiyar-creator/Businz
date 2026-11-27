@@ -410,10 +410,15 @@ export default function AccountsVerificationModal({
     payTypeLower.includes('net 45') || 
     payTypeLower.includes('net 60') ||
     Number(accountsVerificationModal?.creditDays || 0) > 0;
+  // Delivery Challan orders carry no customer payment, so no slip/date/amount is required in Accounts.
+  const isDcOrder = ['docType', 'documentType', 'invoiceType'].some(k => {
+    const v = String(accountsVerificationModal?.[k] || '').toUpperCase();
+    return v === 'DC' || v.includes('CHALLAN');
+  });
   const isWhileDispatch = !isCreditTerms && (payType === 'Payment While Dispatch' || payTypeLower.includes('while dispatch') || payTypeLower.includes('before dispatch'));
   const isPartialPaidTerms = !isCreditTerms && (payTypeLower.includes('partial') || payTypeLower.includes('50%'));
   const is100PaidTerms = !isCreditTerms && (payTypeLower.includes('100%') || payTypeLower.includes('full') || payTypeLower.includes('advance'));
-  const requiresPaymentProofForApproval = !isCreditTerms && Boolean(
+  const requiresPaymentProofForApproval = !isCreditTerms && !isDcOrder && Boolean(
     isWhileDispatch ||
     isPartialPaidTerms ||
     is100PaidTerms ||
@@ -467,13 +472,13 @@ export default function AccountsVerificationModal({
     (accountsVerificationModal?.balanceAmount !== undefined && accountsVerificationModal?.balanceAmount !== null && Number(accountsVerificationModal.balanceAmount) <= 0 && Number(accountsVerificationModal.partialAmount) > 0 && hasUploadedPaymentProof)
   );
 
-  const isMissingRequiredPaymentProof = !isCreditTerms && Boolean(
+  const isMissingRequiredPaymentProof = !isCreditTerms && !isDcOrder && Boolean(
     isPartialPaidTerms ? !hasBalancePaymentProof : (requiresPaymentProofForApproval && !hasUploadedPaymentProof)
   );
 
   const isVerified = Boolean(
     currentPayStatus && 
-    (isCreditTerms || (currentPayDate && effectiveTotalAmountNum > 0)) &&
+    (isCreditTerms || isDcOrder || (currentPayDate && effectiveTotalAmountNum > 0)) &&
     !isMissingRequiredPaymentProof
   );
   const isPartialVerified = Boolean(isCreditTerms ? !isVerified : (currentPayStatus || currentPayDate || effectiveTotalAmountNum > 0)) && !isVerified;
@@ -493,19 +498,19 @@ export default function AccountsVerificationModal({
       alert(`⛔ CANNOT APPROVE — PAYMENT PROOF PENDING\n\nThis order has payment terms "${payType || 'Payment While Dispatch / Partial Payment'}". The required ${isPartialPaidTerms ? 'remaining balance ' : ''}payment proof slip has NOT been uploaded by the Sales person yet.\n\nBy strict company policy, this order remains in Payment Proof Pending until the Sales person attaches the payment proof receipt.`);
       return;
     }
-    if (!isCreditTerms && !currentPayDate) {
+    if (!isCreditTerms && !isDcOrder && !currentPayDate) {
       alert('⚠️ Please enter the verified Payment Date from the payment slip before completing accounts verification.');
       return;
     }
-    if (!isCreditTerms && effectiveTotalAmountNum <= 0) {
+    if (!isCreditTerms && !isDcOrder && effectiveTotalAmountNum <= 0) {
       alert('⚠️ Please enter the verified Total Amount (₹) from the payment slip (or apply an Adjust Payment amount) before completing accounts verification.');
       return;
     }
 
     const targetCode = accountsVerificationModal.bomCode || accountsVerificationModal.code;
     const targetOrderAmt = orderValue > 0 ? orderValue : cleanNum(accountsVerificationModal?.grandTotal, 0);
-    const balanceDue = isCreditTerms ? targetOrderAmt : Math.max(0, targetOrderAmt - effectiveTotalAmountNum);
-    const verifiedPayStatus = isCreditTerms
+    const balanceDue = isDcOrder ? 0 : (isCreditTerms ? targetOrderAmt : Math.max(0, targetOrderAmt - effectiveTotalAmountNum));
+    const verifiedPayStatus = isDcOrder ? 'Delivery Challan — No Payment' : isCreditTerms
       ? (currentPayStatus || 'Credit Payment')
       : (balanceDue <= 0
           ? '100% Received • Fully Settled'
@@ -1952,7 +1957,7 @@ export default function AccountsVerificationModal({
                       </div>
                     )}
                   </div>
-                ) : (requiresPaymentProofForApproval || (is100PaidTerms && !isCreditTerms)) ? (
+                ) : (requiresPaymentProofForApproval || (is100PaidTerms && !isCreditTerms && !isDcOrder)) ? (
                   <div style={{
                     backgroundColor: '#FFFBEB',
                     border: '1.5px solid #F59E0B',

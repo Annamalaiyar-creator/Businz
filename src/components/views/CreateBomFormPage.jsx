@@ -341,6 +341,7 @@ export default function CreateBomFormPage(props) {
 
     const sub = itemsSub + kitSubtotal;
     const disc = 0;
+    const gstRateSet = new Set();
 
     const itemsGst = (bomMaterialsList || []).reduce((acc, item) => {
       if (selectedPreset && (item.isPresetItem || item.presetGroupId)) return acc;
@@ -348,16 +349,20 @@ export default function CreateBomFormPage(props) {
       const r = cleanNum(item.rate, 0);
       const rowTot = q * r;
       const pct = extractGstRate(item.gstRate ?? newBomGstRate, 18);
+      if (rowTot > 0) gstRateSet.add(pct);
       return acc + (rowTot * (pct / 100));
     }, 0);
     const presetItem = (bomMaterialsList || []).find(it => it.isPresetItem);
     const presetGstPct = extractGstRate(presetItem?.gstRate ?? newBomGstRate, 18);
     const kitGst = kitSubtotal * (presetGstPct / 100);
+    if (kitSubtotal > 0) gstRateSet.add(presetGstPct);
     const gst = itemsGst + kitGst;
 
     const grand = sub - disc + gst;
     const cgst = gst / 2;
     const sgst = gst / 2;
+    const usedRates = [...gstRateSet].sort((a, b) => a - b);
+    const shownRates = usedRates.length > 0 ? usedRates : [18];
     return {
       sub: cleanNum(sub, 0),
       kitSubtotal: cleanNum(kitSubtotal, 0),
@@ -365,7 +370,9 @@ export default function CreateBomFormPage(props) {
       gst: cleanNum(gst, 0),
       grand: cleanNum(grand, 0),
       cgst: cleanNum(cgst, 0),
-      sgst: cleanNum(sgst, 0)
+      sgst: cleanNum(sgst, 0),
+      halfGstLabel: shownRates.map(r => `${r / 2}%`).join(' + '),
+      gstLabel: shownRates.map(r => `${r}%`).join(' + ')
     };
   };
 
@@ -2032,15 +2039,15 @@ export default function CreateBomFormPage(props) {
             <strong style={{ color: '#0F172A' }}>₹{totals.sub.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', width: '320px', color: '#64748B', fontSize: '12px' }}>
-            <span>CGST (9%)</span>
+            <span>CGST ({totals.halfGstLabel})</span>
             <span style={{ color: '#475569', fontWeight: '600' }}>₹{totals.cgst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', width: '320px', color: '#64748B', fontSize: '12px' }}>
-            <span>SGST (9%)</span>
+            <span>SGST ({totals.halfGstLabel})</span>
             <span style={{ color: '#475569', fontWeight: '600' }}>₹{totals.sgst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', width: '320px', color: '#4338CA', fontWeight: '700', backgroundColor: '#EEF2FF', padding: '6px 10px', borderRadius: '6px' }}>
-            <span>Total Applicable GST (18%)</span>
+            <span>Total Applicable GST ({totals.gstLabel})</span>
             <span>₹{totals.gst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', width: '320px', color: '#0F172A', fontSize: '17px', fontWeight: '800', borderTop: '1px solid #E2E8F0', paddingTop: '10px', marginTop: '4px' }}>

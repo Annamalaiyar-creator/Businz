@@ -24,7 +24,8 @@ import {
   getCleanSalesPersonName,
   safeSaveBomStoreToLocal,
   sanitizeBomRecord,
-  isBomAddressProofPending
+  isBomAddressProofPending,
+  needsSalesAddressProof
 } from './bom/bomStageHelpers';
 import {
   BomDocPreviewModal,
@@ -2142,7 +2143,7 @@ export default function BomOrdersView(props) {
     ] : [
       { id: 'All', label: 'All BOMs', count: tabBaseBomList.filter(b => !(b.cancelled || b.status === 'Cancelled & Stock Restored' || (b.status || '').toLowerCase().includes('cancel'))).length, bg: '#e2e8f0', fg: '#475569' },
       { id: 'Pending', label: 'Pending Sales Confirmation', count: tabBaseBomList.filter(b => (!b.status || b.status === 'Pending Sales Confirmation' || b.status.includes('Pending Confirmation') || b.status === 'Draft') && !b.cancelled).length, bg: '#fef3c7', fg: '#b45309' },
-      { id: 'AddressAction', label: 'Address Proof Requested', count: tabBaseBomList.filter(b => (b.addressProofReuploadRequested || b.status === 'Address Proof Requested from Sales') && !b.cancelled).length, bg: '#fee2e2', fg: '#b91c1c' },
+      { id: 'AddressAction', label: 'Address Proof Requested', count: tabBaseBomList.filter(b => (b.addressProofReuploadRequested || b.status === 'Address Proof Requested from Sales' || needsSalesAddressProof(b)) && !b.cancelled).length, bg: '#fee2e2', fg: '#b91c1c' },
       { id: 'Sent', label: 'Sales Confirmed / Forwarded', count: tabBaseBomList.filter(b => (b.status === 'Sales Confirmed - Sent to Dispatch' || b.status === 'Sent to Production' || b.status === 'Confirmed' || b.salesConfirmed) && !b.fullyCompleted && b.status !== 'Completed' && b.status !== 'Closed' && !b.cancelled).length, bg: '#dcfce7', fg: '#166534' },
       { id: 'PendingPrint', label: 'Pending Print', count: tabBaseBomList.filter(b => (!b.dispatchPrinted && !b.isPrinted) && !(b.status === 'Completed' || b.status === 'Closed' || b.status === 'CLOSED' || b.fullyCompleted || b.status === 'Fully Dispatched & Delivered' || (b.status || '').toLowerCase().includes('completed') || (b.status || '').toLowerCase().includes('closed')) && !(b.status === 'Cancelled & Stock Restored' || b.cancelled)).length, bg: '#fef3c7', fg: '#b45309' },
       { id: 'Printed', label: 'Print Taken', count: tabBaseBomList.filter(b => (b.dispatchPrinted || b.isPrinted) && !(b.status === 'Completed' || b.status === 'Closed' || b.status === 'CLOSED' || b.fullyCompleted || b.status === 'Fully Dispatched & Delivered' || (b.status || '').toLowerCase().includes('completed') || (b.status || '').toLowerCase().includes('closed')) && !(b.status === 'Cancelled & Stock Restored' || b.cancelled)).length, bg: '#dcfce7', fg: '#166534' },
@@ -2400,7 +2401,7 @@ export default function BomOrdersView(props) {
       } else if (subTab === 'printed') {
         matchesTab = isPrinted && !isCancelled && !isClosedOrDone;
       } else if (subTab === 'addressaction') {
-        matchesTab = Boolean(r.addressProofReuploadRequested || rStatus.includes('address proof')) && !isCancelled;
+        matchesTab = Boolean(r.addressProofReuploadRequested || rStatus.includes('address proof') || needsSalesAddressProof(r)) && !isCancelled;
       } else if (subTab.includes('closed') || subTab.includes('complete')) {
         matchesTab = Boolean(isClosedOrDone) && !isCancelled;
       } else if (subTab.includes('cancel')) {
@@ -2513,6 +2514,7 @@ export default function BomOrdersView(props) {
 
     const sub = itemsSub + kitSubtotal;
     const disc = 0;
+    const gstRateSet = new Set();
 
     // 3. GST: Custom item GSTs + Preset kits GST (dynamically from each preset's selected gstRate)
     const itemsGst = (bomMaterialsList || []).reduce((acc, item) => {
@@ -2521,6 +2523,7 @@ export default function BomOrdersView(props) {
       const r = cleanNum(item.rate, 0);
       const rowTot = q * r;
       const pct = cleanNum(String(item.gstRate || '18%').replace('%', ''), 18);
+      if (rowTot > 0) gstRateSet.add(pct);
       return acc + (rowTot * (pct / 100));
     }, 0);
 
@@ -2546,11 +2549,13 @@ export default function BomOrdersView(props) {
           const itQty = cleanNum(it.qty, 1);
           const itemShare = groupTotal * (itQty / totalQty);
           const itGstRate = extractGstRate(it.gstRate ?? grp?.gstRate, 18);
+          if (itemShare > 0) gstRateSet.add(itGstRate);
           kitGst += itemShare * (itGstRate / 100);
         });
       } else {
         const gRateStr = grp?.gstRate || '18%';
         const gPct = cleanNum(String(gRateStr).replace('%', ''), 18);
+        if (groupTotal > 0) gstRateSet.add(gPct);
         kitGst += groupTotal * (gPct / 100);
       }
     });
@@ -2559,6 +2564,8 @@ export default function BomOrdersView(props) {
     const grand = sub - disc + gst;
     const cgst = gst / 2;
     const sgst = gst / 2;
+    const usedRates = [...gstRateSet].sort((a, b) => a - b);
+    const shownRates = usedRates.length > 0 ? usedRates : [18];
     return {
       sub: cleanNum(sub, 0),
       kitSubtotal: cleanNum(kitSubtotal, 0),
@@ -2566,7 +2573,9 @@ export default function BomOrdersView(props) {
       gst: cleanNum(gst, 0),
       grand: cleanNum(grand, 0),
       cgst: cleanNum(cgst, 0),
-      sgst: cleanNum(sgst, 0)
+      sgst: cleanNum(sgst, 0),
+      halfGstLabel: shownRates.map(r => `${r / 2}%`).join(' + '),
+      gstLabel: shownRates.map(r => `${r}%`).join(' + ')
     };
   };
 

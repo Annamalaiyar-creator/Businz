@@ -28,6 +28,7 @@ import { notifyBomSentToDispatch } from '../../../services/notificationService';
 import BomConfirmCeoDetailSection from './BomConfirmCeoDetailSection';
 import BomOperationalModals from './BomOperationalModals';
 import { extractGstRate } from '../../../utils/gstHelper';
+import { needsSalesAddressProof } from './bomStageHelpers';
 
 export default function BomConfirmAuditSection({ ctx }) {
   const {
@@ -1670,12 +1671,12 @@ export default function BomConfirmAuditSection({ ctx }) {
                         </div>
                       ) : null}
 
-                      {!isCeo && (confirmingBomModal.addressProofReuploadRequested || confirmingBomModal.status === 'Address Proof Requested from Sales') && (
+                      {!isCeo && (confirmingBomModal.addressProofReuploadRequested || confirmingBomModal.status === 'Address Proof Requested from Sales' || needsSalesAddressProof(confirmingBomModal)) && (
                         <div style={{ marginTop: '10px', padding: '12px 14px', backgroundColor: '#FEF2F2', border: '1.5px dashed #F87171', borderRadius: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#991B1B', fontSize: '12px', fontWeight: '800' }}>
                               <AlertCircle style={{ width: '14px', height: '14px', color: '#DC2626' }} />
-                              <span>Accounts Requested Verified Address Proof Re-upload</span>
+                              <span>{(confirmingBomModal.addressProofReuploadRequested || confirmingBomModal.status === 'Address Proof Requested from Sales') ? 'Accounts Requested Verified Address Proof Re-upload' : 'Address Proof Missing — Delivery Address Differs from Billing'}</span>
                             </div>
                             {(() => {
                               const reqAt = confirmingBomModal.addressProofReuploadRequestedAt || confirmingBomModal.reuploadRequestedAt || confirmingBomModal.reissueRequestedAt;

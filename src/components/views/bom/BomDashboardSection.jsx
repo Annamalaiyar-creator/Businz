@@ -5,7 +5,7 @@ import {
 import ModernDateRangePicker from '../../ModernDateRangePicker';
 import BomOperationalModals from './BomOperationalModals';
 import BomExecutiveModals from './BomExecutiveModals';
-import { isBomAddressProofPending } from './bomStageHelpers';
+import { isBomAddressProofPending, needsSalesAddressProof } from './bomStageHelpers';
 
 export default function BomDashboardSection({ ctx }) {
   const {
@@ -1098,8 +1098,8 @@ export default function BomDashboardSection({ ctx }) {
                       </div>
                     )}
 
-                    {/* Action Required Banner for Accounts-Requested Address Proof Re-upload */}
-                    {!isCeo && !isCancelled && (row.addressProofReuploadRequested || row.status === 'Address Proof Requested from Sales') && (
+                    {/* Action Required Banner for Accounts-Requested Address Proof Re-upload, or missing proof for a different delivery address */}
+                    {!isCeo && !isCancelled && (row.addressProofReuploadRequested || row.status === 'Address Proof Requested from Sales' || needsSalesAddressProof(row)) && (
                       <div style={{
                         backgroundColor: '#FEF2F2',
                         border: '1px solid #FCA5A5',
@@ -1128,10 +1128,14 @@ export default function BomDashboardSection({ ctx }) {
                             <AlertCircle size={12} style={{ color: '#FFFFFF' }} />
                           </div>
                           <span style={{ fontSize: '12px', fontWeight: '800', color: '#991B1B' }}>
-                            Action Required: Address Proof Re-upload Requested by Accounts
+                            {(row.addressProofReuploadRequested || row.status === 'Address Proof Requested from Sales')
+                              ? 'Action Required: Address Proof Re-upload Requested by Accounts'
+                              : 'Action Required: Address Proof Missing'}
                           </span>
                           <span style={{ fontSize: '11px', color: '#B91C1C' }}>
-                            Upload a verified address proof document (GST / Electricity Bill / Lease Agreement) to clear Accounts hold.
+                            {(row.addressProofReuploadRequested || row.status === 'Address Proof Requested from Sales')
+                              ? 'Upload a verified address proof document (GST / Electricity Bill / Lease Agreement) to clear Accounts hold.'
+                              : 'Delivery address is different from billing. Upload address proof now, or Billing will block this invoice.'}
                           </span>
                         </div>
                         <button

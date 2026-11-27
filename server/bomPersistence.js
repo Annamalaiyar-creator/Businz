@@ -613,7 +613,7 @@ export const toDatabaseBomRowServer = (item) => {
         item.status.toLowerCase().includes('sales confirmed') ||
         item.status.toLowerCase().includes('sent to dispatch')
       ))
-    ) ? (item.salesConfirmedAt || new Date().toISOString()) : null),
+    ) ? new Date().toISOString() : null),
     sales_person: cleanSalesPerson || item.salesPerson || item.sales_person || item.createdBy || item.created_by || item.c8 || '',
     sales_person_code: item.salesPersonCode || item.sales_person_code || item.createdById || item.created_by_id || extraData.salesPersonCode || '',
     created_by: item.createdBy || item.created_by || cleanSalesPerson || item.salesPerson || item.sales_person || '',
@@ -641,6 +641,8 @@ export const toDatabaseBomRowServer = (item) => {
     updated_at: new Date().toISOString()
   };
 };
+
+const firstValidTimestamp = (...values) => values.find(v => v && !isNaN(new Date(v).getTime())) || null;
 
 /**
  * Merges an existing authoritative BOM record with an incoming update.
@@ -718,8 +720,9 @@ export function mergeBomRecords(existing, incoming) {
         incoming.status.toLowerCase().includes('sent to dispatch')
       ))
     ),
-    salesConfirmedAt: incoming.salesConfirmedAt || existing.salesConfirmedAt || incoming.reconfirmedAt || existing.reconfirmedAt || null,
-    reconfirmedAt: incoming.reconfirmedAt || existing.reconfirmedAt || incoming.salesConfirmedAt || existing.salesConfirmedAt || null,
+    // First VALID timestamp wins, so a corrupt client value (e.g. {}) never overrides the stored date
+    salesConfirmedAt: firstValidTimestamp(incoming.salesConfirmedAt, existing.salesConfirmedAt, incoming.reconfirmedAt, existing.reconfirmedAt),
+    reconfirmedAt: firstValidTimestamp(incoming.reconfirmedAt, existing.reconfirmedAt, incoming.salesConfirmedAt, existing.salesConfirmedAt),
     // Workflow progression safety: do not allow a stale lower-rank status to regress progress,
     // while explicitly honoring legitimate cancellation / stock restoration requests.
     status: (incoming.cancelled || String(incoming.status || '').toLowerCase().includes('cancel') || String(incoming.status || '').toLowerCase().includes('stock restored') || iRank >= eRank)

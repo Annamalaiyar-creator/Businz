@@ -215,15 +215,15 @@ const getOrReserveNextInvAtomic = async (commit = false) => {
         if (isDbConnected()) {
           try {
             const dbRes = await query(`
-              SELECT invoice_no FROM public.tax_invoices
-              WHERE invoice_no ~ '^VRM-INV-[0-9]{4}-[0-9]+$'
+              SELECT inv_no AS invoice_no FROM public.invoices
+              WHERE inv_no ~ '^(VRM-INV-[0-9]{4}-[0-9]+|VRMS/INV/[0-9]{2}-[0-9]{2}/[0-9]+)$'
             `).catch(() => null);
             if (dbRes?.rows) records.push(...dbRes.rows);
 
             // Also check bom_orders in PG for assigned invoice_no
             const bomDbRes = await query(`
               SELECT invoice_no FROM public.bom_orders
-              WHERE invoice_no ~ '^VRM-INV-[0-9]{4}-[0-9]+$'
+              WHERE invoice_no ~ '^(VRM-INV-[0-9]{4}-[0-9]+|VRMS/INV/[0-9]{2}-[0-9]{2}/[0-9]+)$'
             `).catch(() => null);
             if (bomDbRes?.rows) records.push(...bomDbRes.rows);
           } catch (_) {}
@@ -275,6 +275,27 @@ const getOrReserveNextInvAtomic = async (commit = false) => {
     }).catch(reject);
   });
 };
+
+// Returns next sequential Tax Invoice number. Supports ?reserve=true for atomic locking across concurrent users
+router.get('/api/next-invoice-number', async (req, res) => {
+  try {
+    const isReserve = req.query.reserve === 'true' || req.query.commit === 'true';
+    const result = await getOrReserveNextInvAtomic(isReserve);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// Explicit atomic invoice number reservation endpoint
+router.post('/api/invoices/reserve-number', async (req, res) => {
+  try {
+    const result = await getOrReserveNextInvAtomic(true);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
 
   return router;
 }

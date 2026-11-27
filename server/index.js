@@ -3379,29 +3379,6 @@ app.use(createPoCoreRouter({
 }));
 
 
-// Returns next sequential Tax Invoice number matching unified sequence VRM-INV-[YYYY]-[SEQ] (e.g. VRM-INV-2026-01)
-// Supports ?reserve=true for atomic locking across concurrent users
-app.get('/api/next-invoice-number', async (req, res) => {
-  try {
-    const isReserve = req.query.reserve === 'true' || req.query.commit === 'true';
-    const result = await getOrReserveNextInvAtomic(isReserve);
-    res.json(result);
-  } catch (err) {
-    const fy = getFinancialYear();
-    res.json({ nextInvNo: `VRM-INV-${fy}-01`, nextInvoiceNumber: `VRM-INV-${fy}-01`, nextNum: 1, financialYear: fy });
-  }
-});
-
-// Explicit atomic invoice number reservation endpoint
-app.post('/api/invoices/reserve-number', async (req, res) => {
-  try {
-    const result = await getOrReserveNextInvAtomic(true);
-    res.json(result);
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
-});
-
 let serverBomSequenceCounter = null;
 let serverBomReservationLock = Promise.resolve();
 
