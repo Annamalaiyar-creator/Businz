@@ -1,1944 +1,809 @@
 import React, { useMemo, useState } from 'react';
-import {
-  ShoppingCart, TrendingUp, Users, Clock, Layers,
-  FileText, AlertTriangle, ShieldAlert, CheckCircle2,
-  X, Search, ArrowRight, Package
-} from 'lucide-react';
-
-const cardStyle = {
-  backgroundColor: '#FFFFFF',
-  borderRadius: '16px',
-  border: '1px solid #EAEFEF',
-  padding: '18px 20px',
-  display: 'flex',
-  flexDirection: 'column',
-  gap: '14px',
-  boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)'
-};
-
-const cardHeaderStyle = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  borderBottom: '1px solid #F1F5F9',
-  paddingBottom: '8px'
-};
-
-const cardTitleStyle = {
-  fontSize: '11.5px',
-  fontWeight: '800',
-  color: '#0F172A',
-  textTransform: 'uppercase',
-  letterSpacing: '0.4px'
-};
-
-const summaryStripStyle = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-  gap: '8px',
-  backgroundColor: '#F8FAFC',
-  border: '1px solid #E2E8F0',
-  borderRadius: '10px',
-  padding: '8px 12px'
-};
-
-const formatINRCompact = (val) => {
-  const n = Number(val) || 0;
-  if (n >= 10000000) return `₹ ${(n / 10000000).toFixed(2)} Cr`;
-  if (n >= 100000) return `₹ ${(n / 100000).toFixed(2)} L`;
-  return `₹ ${Math.round(n).toLocaleString('en-IN')}`;
-};
+import { X, Search, ExternalLink } from 'lucide-react';
+import CeoKpiGrid from '../ceoDashboard/CeoKpiGrid';
 
 const parseAmount = (val) => {
-  if (typeof val === 'number') return Number.isFinite(val) ? val : 0;
-  const cleaned = String(val ?? '0').replace(/[^0-9.-]/g, '');
-  const n = parseFloat(cleaned);
-  return Number.isFinite(n) ? n : 0;
+  if (typeof val === 'number' && !isNaN(val)) return val;
+  if (!val) return 0;
+  const n = parseFloat(String(val).replace(/[^0-9.-]/g, ''));
+  return isNaN(n) ? 0 : n;
 };
 
-const parseDateMs = (raw) => {
-  if (!raw) return NaN;
-  const str = String(raw).trim();
-  const dmy = str.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
-  if (dmy) {
-    return new Date(Number(dmy[3]), Number(dmy[2]) - 1, Number(dmy[1])).getTime();
+const parseDateMs = (d) => {
+  if (!d) return null;
+  if (d instanceof Date) return isNaN(d.getTime()) ? null : d.getTime();
+  const s = String(d).trim();
+  if (!s || s === '—' || s === '-') return null;
+  const parsed = Date.parse(s);
+  if (!isNaN(parsed)) return parsed;
+  const m = s.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})/);
+  if (m) {
+    const day = Number(m[1]);
+    const mon = Number(m[2]) - 1;
+    const yr = Number(m[3]) < 100 ? 2000 + Number(m[3]) : Number(m[3]);
+    const dt = new Date(yr, mon, day);
+    return isNaN(dt.getTime()) ? null : dt.getTime();
   }
-  const ts = new Date(str).getTime();
-  return Number.isFinite(ts) ? ts : NaN;
+  return null;
 };
 
-const formatShortDate = (raw) => {
-  const ts = parseDateMs(raw);
-  if (!Number.isFinite(ts)) return raw || '—';
-  return new Date(ts).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' });
+const formatCompactINR = (num) => {
+  const n = Number(num) || 0;
+  const abs = Math.abs(n);
+  if (abs >= 10000000) return `₹${(n / 10000000).toFixed(3).replace(/\.?0+$/, '')} Cr`;
+  if (abs >= 100000) return `₹${(n / 100000).toFixed(2)} L`;
+  return `₹${Math.round(n).toLocaleString('en-IN')}`;
 };
 
-const DonutChartSvg = ({ segments = [], centerLabel, centerSub, activeName = null, onSelectSegment = null }) => {
-  const size = 136;
-  const stroke = 19;
-  const radius = (size - stroke) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const total = segments.reduce((s, seg) => s + (seg.value || 0), 0) || 1;
+const formatLakhs = (num) => {
+  const n = Number(num) || 0;
+  if (Math.abs(n) >= 100000) return `₹${(n / 100000).toFixed(2)} L`;
+  return `₹${Math.round(n).toLocaleString('en-IN')}`;
+};
 
-  let offset = 0;
-  return (
-    <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ transform: 'rotate(-90deg)' }}>
-        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#F1F5F9" strokeWidth={stroke} />
-        {segments.map((seg, idx) => {
-          const pct = (seg.value || 0) / total;
-          const dash = pct * circumference;
-          const curOffset = offset;
-          offset += dash;
-          if (dash <= 0) return null;
-          const isSelected = activeName && seg.name === activeName;
-          const isDimmed = activeName && seg.name !== activeName;
-          return (
-            <circle
-              key={idx}
-              cx={size / 2}
-              cy={size / 2}
-              r={radius}
-              fill="none"
-              stroke={seg.color}
-              strokeWidth={isSelected ? stroke + 3 : stroke}
-              strokeDasharray={`${dash} ${circumference}`}
-              strokeDashoffset={-curOffset}
-              opacity={isDimmed ? 0.35 : 1}
-              style={{ cursor: onSelectSegment ? 'pointer' : 'default', transition: 'opacity 0.18s ease, stroke-width 0.18s ease' }}
-              onClick={() => onSelectSegment && onSelectSegment(seg.name)}
-            />
-          );
-        })}
-      </svg>
-      <div style={{
-        position: 'absolute',
-        inset: 0,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        textAlign: 'center',
-        pointerEvents: 'none',
-        padding: '0 18px'
-      }}>
-        <div style={{ fontSize: '13px', fontWeight: '900', color: '#0F172A', lineHeight: 1.1 }}>{centerLabel}</div>
-        <div style={{ fontSize: '9.5px', fontWeight: '600', color: '#64748B', marginTop: '2px' }}>{centerSub}</div>
-      </div>
-    </div>
+const formatShortDate = (d) => {
+  const ms = parseDateMs(d);
+  if (!ms) return '—';
+  return new Date(ms).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+};
+
+const getPeriodSubtitle = (selectedPeriod) => {
+  const now = new Date();
+  const monthName = now.toLocaleDateString('en-GB', { month: 'long' });
+  const shortMonth = now.toLocaleDateString('en-GB', { month: 'short' });
+  const day = now.getDate();
+  if (selectedPeriod === 'Today') return { range: `POs placed ${day} ${shortMonth}`, prefix: `Today (${day} ${shortMonth})` };
+  if (selectedPeriod === 'This Week') return { range: 'POs placed this week', prefix: 'This week' };
+  if (selectedPeriod === 'MTD') return { range: `POs placed 1–${day} ${shortMonth}`, prefix: monthName };
+  if (selectedPeriod === 'Last Month') return { range: 'POs placed last month', prefix: 'Last month' };
+  if (selectedPeriod === 'Q2 FY27' || selectedPeriod === 'This Quarter') return { range: 'POs placed this quarter', prefix: 'Quarter' };
+  if (selectedPeriod === 'YTD') return { range: 'POs placed FYTD', prefix: 'FYTD' };
+  return { range: 'All POs placed', prefix: 'All' };
+};
+
+const getPoExclGstValue = (po) => {
+  if (!po) return 0;
+  const sub = parseAmount(po.subTotal ?? po.subtotal ?? po.sub_total ?? po.taxableAmount ?? po.amountExclGst);
+  if (sub > 0) return sub;
+  if (Array.isArray(po.items) && po.items.length > 0) {
+    const itemsSum = po.items.reduce((acc, it) => {
+      const q = parseAmount(it.qty ?? it.quantity ?? it.orderedQty ?? 0);
+      const r = parseAmount(it.rate ?? it.unitPrice ?? it.price ?? 0);
+      const line = parseAmount(it.amount ?? it.subTotal ?? (q * r));
+      return acc + (line > 0 ? line : 0);
+    }, 0);
+    if (itemsSum > 0) return itemsSum;
+  }
+  const grand = parseAmount(po.grandTotal ?? po.total ?? po.totalAmount ?? po.amount ?? 0);
+  return grand > 0 ? Math.round((grand / 1.18) * 100) / 100 : 0;
+};
+
+const enrichPoRecord = (po, idx, grnByPoMap) => {
+  const poNo = String(po.poNo || po.poNumber || po.purchaseorder_number || po.id || `PO-${idx + 1}`).trim();
+  const poKey = poNo.toUpperCase();
+  const vendor = String(po.vendor || po.vendorName || po.vendor_name || po.supplierName || 'Vendor').trim() || 'Vendor';
+  const rawDate = po.poDate || po.date || po.createdAt || po.created_at || '';
+  const dateTs = parseDateMs(rawDate);
+  const rawDel = po.committedDeliveryDate || po.deliveryDate || po.expectedDeliveryDate || po.expectedDate || po.dueDate || '';
+  const delTs = parseDateMs(rawDel);
+
+  const rawStatus = String(po.status || po.stage || po.approvalStatus || '').trim();
+  const lower = rawStatus.toLowerCase();
+  const statusType = String(po.statusType || po.order_status || '').trim().toLowerCase();
+
+  const matchedGrns = grnByPoMap.get(poKey) || [];
+  const grnHist = Array.isArray(po.grnHistory) ? po.grnHistory : [];
+  const allGrns = matchedGrns.length > 0 ? matchedGrns : grnHist;
+
+  const isCancelled = lower.includes('cancel') || lower.includes('reject') || statusType === 'cancelled' || statusType === 'rejected';
+  const isClosed = !isCancelled && (
+    lower.includes('closed') ||
+    lower.includes('completed') ||
+    lower.includes('grn completed') ||
+    statusType === 'closed' ||
+    allGrns.some(g => String(g?.status || '').toLowerCase().includes('closed') || g?.forceClosePO === true)
   );
+
+  const orderedQty = parseAmount(po.totalOrderedQty) || (Array.isArray(po.items) ? po.items.reduce((s, it) => s + parseAmount(it.qty ?? it.quantity ?? 0), 0) : 0);
+  const receivedQtyFromGrns = allGrns.reduce((s, g) => s + parseAmount(g.acceptedQty ?? g.receivedQty ?? 0), 0);
+  const receivedQty = Math.max(parseAmount(po.totalReceivedQty), receivedQtyFromGrns);
+
+  const isFullyReceived = !isCancelled && (
+    isClosed ||
+    lower.includes('fully') ||
+    lower === 'received' ||
+    allGrns.some(g => String(g?.status || '').toLowerCase().includes('fully')) ||
+    (orderedQty > 0 && receivedQty >= orderedQty)
+  );
+  const isPartiallyReceived = !isCancelled && !isFullyReceived && (
+    lower.includes('partial') ||
+    statusType === 'partially_received' ||
+    receivedQty > 0 ||
+    allGrns.length > 0
+  );
+  const hasNoMaterial = !isCancelled && !isFullyReceived && !isPartiallyReceived;
+
+  const isMdApprovalPending = !isCancelled && !isFullyReceived && !isPartiallyReceived && (
+    lower.includes('waiting for approval') ||
+    lower.includes('pending approval') ||
+    lower.includes('pending ceo') ||
+    lower.includes('pending md') ||
+    lower.includes('awaiting approval') ||
+    lower === 'draft' ||
+    lower === '' ||
+    statusType === 'pending' ||
+    statusType === 'draft'
+  );
+
+  const isPaidOrProceeded = Boolean(
+    po.paymentDetails ||
+    po.proceedDetails ||
+    lower.includes('proceed') ||
+    lower.includes('payment processed') ||
+    lower.includes('paid') ||
+    lower.includes('issued') ||
+    lower.includes('sent') ||
+    statusType === 'payment_processed' ||
+    statusType === 'proceed_po'
+  );
+
+  const isApprovedPaymentPending = !isCancelled && !isMdApprovalPending && !isFullyReceived && !isPartiallyReceived && !isPaidOrProceeded && (
+    lower.includes('payment pending') ||
+    lower.includes('awaiting payment') ||
+    lower.includes('md approved') ||
+    lower.includes('ceo approved') ||
+    lower === 'approved' ||
+    lower === 'open' ||
+    statusType === 'approved'
+  );
+
+  const isPaidDeliveryPending = !isCancelled && !isMdApprovalPending && !isApprovedPaymentPending && !isFullyReceived && !isPartiallyReceived && isPaidOrProceeded;
+
+  const hasMaterialArrived = Boolean(
+    po.materialReceivedAt ||
+    po.arrivedAt ||
+    po.receivedAt ||
+    po.materialReceived === true ||
+    isFullyReceived ||
+    isPartiallyReceived ||
+    allGrns.length > 0
+  );
+  const hasGrnPosted = allGrns.length > 0 || Number(po.grnCount || 0) > 0 || isFullyReceived;
+  const isMaterialReceivedGrnPending = !isCancelled && !isFullyReceived && (
+    isPartiallyReceived ||
+    (hasMaterialArrived && !hasGrnPosted)
+  );
+
+  const latestGrnTs = allGrns.reduce((maxTs, g) => {
+    const t = parseDateMs(g.date || g.grnDate || g.createdAt || g.created_at);
+    return (t && (!maxTs || t > maxTs)) ? t : maxTs;
+  }, null);
+  const receiptTs = parseDateMs(po.materialReceivedAt || po.arrivedAt || po.receivedAt) || latestGrnTs;
+
+  const deliveredOnTime = isFullyReceived && (!delTs || !receiptTs || receiptTs <= delTs + 86400000);
+  const grnPostedOnTime = hasGrnPosted && (!receiptTs || !latestGrnTs || latestGrnTs <= receiptTs + (2 * 86400000));
+
+  const exclGstValue = getPoExclGstValue(po);
+  const grandTotal = parseAmount(po.grandTotal ?? po.total ?? po.totalAmount ?? po.amount ?? 0);
+
+  return {
+    ...po,
+    poNo,
+    vendor,
+    rawDate,
+    dateTs,
+    rawDel,
+    delTs,
+    rawStatus: rawStatus || 'Draft',
+    exclGstValue,
+    grandTotal,
+    isCancelled,
+    isClosed,
+    isFullyReceived,
+    isPartiallyReceived,
+    hasNoMaterial,
+    isMdApprovalPending,
+    isApprovedPaymentPending,
+    isPaidDeliveryPending,
+    isMaterialReceivedGrnPending,
+    hasMaterialArrived,
+    hasGrnPosted,
+    deliveredOnTime,
+    grnPostedOnTime,
+    receiptTs
+  };
 };
+
+const BusinzSectionCard = ({ title, subtitle, children }) => (
+  <div style={{
+    backgroundColor: '#F8FAFC',
+    border: '1px solid #EAEFEF',
+    borderRadius: '16px',
+    overflow: 'hidden',
+    boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)'
+  }}>
+    <div style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px',
+      padding: '12px 18px', backgroundColor: '#FFFFFF', borderBottom: '1px solid #EAEFEF'
+    }}>
+      <h3 style={{ margin: 0, fontSize: '14px', fontWeight: '800', color: '#0F172A', letterSpacing: '-0.2px' }}>{title}</h3>
+      <span style={{
+        fontSize: '11px', fontWeight: '700', color: '#475569',
+        backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0',
+        padding: '3px 10px', borderRadius: '999px'
+      }}>
+        {subtitle}
+      </span>
+    </div>
+    <div style={{ padding: '14px' }}>
+      {children}
+    </div>
+  </div>
+);
 
 export default function CeoProcurementAnalyticsSection({
   poList = [],
+  allPoList = [],
   grnList = [],
-  inventoryList = [],
+  selectedPeriod = 'MTD',
   onNavigateTab
 }) {
-  const [selectedStatus, setSelectedStatus] = useState(null);
-  const [selectedTrendIdx, setSelectedTrendIdx] = useState(null);
-  const [selectedCat, setSelectedCat] = useState(null);
   const [poPopup, setPoPopup] = useState(null);
   const [popupSearch, setPopupSearch] = useState('');
-  const [detailPo, setDetailPo] = useState(null);
-
-  const closePoPopup = () => {
-    setPoPopup(null);
-    setSelectedStatus(null);
-    setSelectedCat(null);
-    setPopupSearch('');
-  };
 
   const analytics = useMemo(() => {
-    const now = Date.now();
-    const invCatLookup = new Map();
-    (inventoryList || []).forEach((it) => {
-      const key = String(it.name || it.itemName || '').trim().toLowerCase();
-      if (key) invCatLookup.set(key, it.category || it.group || 'General Material');
-    });
-
-    const CORE_MATERIAL_CATEGORIES = [
-      'Galvalume',
-      'Aluminium Profiles',
-      'HDG Steel',
-      'Fasteners & Accessories',
-      'Solar & BOS',
-      'Others'
-    ];
-    const CORE_MATERIAL_SET = new Set(CORE_MATERIAL_CATEGORIES);
-
-    const normalizeMaterialCategory = (rawText = '') => {
-      const clean = String(rawText || '').trim();
-      if (CORE_MATERIAL_SET.has(clean)) return clean;
-      const lower = clean.toLowerCase();
-      if (!lower) return 'Others';
-      if (
-        lower.includes('galvalume') ||
-        lower.includes('aluzinc') ||
-        lower.includes('az150') ||
-        /\bgal\b/.test(lower) ||
-        lower.includes('(gal)') ||
-        (lower.includes('hat') && lower.includes('purlin'))
-      ) {
-        return 'Galvalume';
-      }
-      if (lower.includes('alu') || lower.includes('6063') || lower.includes('rail') || lower.includes('clamp')) {
-        return 'Aluminium Profiles';
-      }
-      if (lower.includes('hdg') || lower.includes('purlin') || lower.includes('rafter') || lower.includes('leg') || lower.includes('steel') || lower.includes('bracing')) {
-        return 'HDG Steel';
-      }
-      if (lower.includes('bolt') || lower.includes('nut') || lower.includes('washer') || lower.includes('screw') || lower.includes('fastener')) {
-        return 'Fasteners & Accessories';
-      }
-      if (
-        lower.includes('panel') ||
-        lower.includes('inverter') ||
-        lower.includes('cable') ||
-        lower.includes('solar') ||
-        /\bbos\b/.test(lower) ||
-        lower.includes('acdb') ||
-        lower.includes('dcdb') ||
-        lower.includes('earthing') ||
-        lower.includes('lightning') ||
-        lower.includes('spd') ||
-        lower.includes('mcb')
-      ) {
-        return 'Solar & BOS';
-      }
-      return 'Others';
-    };
-
-    const inferCategory = (items = []) => {
-      if (!Array.isArray(items) || items.length === 0) return 'Others';
-      const counts = new Map();
-      for (const it of items) {
-        const nm = String(it.name || it.itemName || it.description || '').trim();
-        const lower = nm.toLowerCase();
-        const rawCat = String(it.category || invCatLookup.get(lower) || '').trim();
-        const cat = CORE_MATERIAL_SET.has(rawCat)
-          ? rawCat
-          : normalizeMaterialCategory(`${nm} ${rawCat}`);
-        counts.set(cat, (counts.get(cat) || 0) + 1);
-      }
-      let best = 'Others';
-      let bestC = -1;
-      counts.forEach((c, k) => {
-        if (c > bestC) {
-          bestC = c;
-          best = k;
-        }
-      });
-      return best;
-    };
-
-    const normalizeStatus = (po) => {
-      const raw = String(po.status || po.stage || po.approvalStatus || '').trim();
-      const lower = raw.toLowerCase();
-      const statusType = String(po.statusType || po.order_status || '').trim().toLowerCase();
-      if (lower.includes('cancel') || lower.includes('reject') || statusType === 'cancelled' || statusType === 'rejected') {
-        return 'Cancelled';
-      }
-      if (
-        lower.includes('fully') ||
-        lower.includes('closed') ||
-        lower.includes('completed') ||
-        lower === 'received' ||
-        lower.includes('grn completed') ||
-        statusType === 'closed'
-      ) {
-        return 'Fully Received';
-      }
-      if (lower.includes('partial') || statusType === 'partially_received') {
-        return 'Partially Received';
-      }
-      if (
-        lower.includes('waiting for approval') ||
-        lower.includes('pending approval') ||
-        lower.includes('pending ceo') ||
-        lower.includes('pending md') ||
-        lower.includes('awaiting approval') ||
-        statusType === 'pending'
-      ) {
-        return 'Pending CEO Approval';
-      }
-      if (lower === 'draft' || statusType === 'draft' || lower === '') {
-        return 'Draft';
-      }
-      if (lower.includes('payment pending') || lower.includes('awaiting payment')) {
-        return 'Payment Pending';
-      }
-      if (
-        lower.includes('proceed') ||
-        lower.includes('grn pending') ||
-        lower.includes('pending grn') ||
-        lower.includes('payment processed') ||
-        lower.includes('issued') ||
-        lower.includes('sent') ||
-        statusType === 'payment_processed' ||
-        statusType === 'proceed_po' ||
-        Boolean(po.proceedDetails) ||
-        Boolean(po.paymentDetails)
-      ) {
-        return 'GRN Pending';
-      }
-      if (
-        lower.includes('md approved') ||
-        lower.includes('ceo approved') ||
-        lower === 'approved' ||
-        lower === 'open' ||
-        statusType === 'approved'
-      ) {
-        return 'Payment Pending';
-      }
-      return 'Draft';
-    };
-
-    let rawPOs = (poList || []).filter(Boolean);
-
-    // Localhost-only demo data when local PO store is empty (NEVER runs on live/dev servers)
-    const isLocalhostPreview =
-      typeof window !== 'undefined' &&
-      ['localhost', '127.0.0.1'].includes(window.location.hostname) &&
-      rawPOs.length === 0;
-
-    if (isLocalhostPreview) {
-      const today = new Date();
-      const isoDaysAgo = (d) => new Date(today.getTime() - d * 86400000).toISOString().split('T')[0];
-      rawPOs = [
-        { poNo: 'PO-00086', vendorName: 'AKEYEM SONS', date: isoDaysAgo(1), deliveryDate: isoDaysAgo(-4), grandTotal: 5248000, status: 'WAITING FOR APPROVAL', items: [{ name: 'Alu. Rail 100 mm', category: 'Aluminium Profiles', qty: 1000, unit: 'NOS', rate: 4447.46, tax: 18 }] },
-        { poNo: 'PO-00085', vendorName: 'ARUMUGA STEEL', date: isoDaysAgo(2), deliveryDate: isoDaysAgo(-3), grandTotal: 2875600, status: 'MD Approved', items: [{ name: 'LEG 2500 mm (HDG)', category: 'HDG Steel', qty: 800, unit: 'NOS', rate: 3046.19, tax: 18 }] },
-        { poNo: 'PO-00084', vendorName: 'VAIBOV POLES', date: isoDaysAgo(4), deliveryDate: isoDaysAgo(-6), grandTotal: 2164400, status: 'Proceed PO', items: [{ name: 'RAFTER 3900 mm (GAL)', category: 'Galvalume', qty: 600, unit: 'NOS', rate: 3057.06, tax: 18 }] },
-        {
-          poNo: 'PO-00083', vendorName: 'KPR Mill', date: isoDaysAgo(6), deliveryDate: isoDaysAgo(1), grandTotal: 1788000, status: 'Partially Received',
-          totalOrderedQty: 2000, totalReceivedQty: 1200, grnCount: 1,
-          items: [{ name: 'Mid Clamp 35mm', category: 'Aluminium Profiles', qty: 2000, unit: 'NOS', rate: 757.63, tax: 18 }],
-          grnHistory: [{ grnNo: 'GRN-2026-0041', date: isoDaysAgo(2), challanNo: 'DC-8821', receivedBy: 'Store Team', status: 'OPEN / PARTIALLY RECEIVED', acceptedQty: 1200, items: [{ name: 'Mid Clamp 35mm', uom: 'NOS', ordered: 2000, accepted: 1200, rejected: 0, date: isoDaysAgo(2) }] }]
-        },
-        {
-          poNo: 'PO-00082', vendorName: 'SHREE GANESH TRADERS', date: isoDaysAgo(9), deliveryDate: isoDaysAgo(2), grandTotal: 1436000, status: 'Fully Received',
-          totalOrderedQty: 5000, totalReceivedQty: 5000, grnCount: 1,
-          items: [{ name: 'SS304 Hex Bolt M10*30', category: 'Fasteners & Accessories', qty: 5000, unit: 'NOS', rate: 243.39, tax: 18 }],
-          grnHistory: [{ grnNo: 'GRN-2026-0039', date: isoDaysAgo(3), challanNo: 'INV-4410', receivedBy: 'Store Team', status: 'CLOSED / FULLY RECEIVED', acceptedQty: 5000, items: [{ name: 'SS304 Hex Bolt M10*30', uom: 'NOS', ordered: 5000, accepted: 5000, rejected: 0, date: isoDaysAgo(3) }] }]
-        },
-        {
-          poNo: 'PO-00079', vendorName: 'AKEYEM SONS', date: isoDaysAgo(18), deliveryDate: isoDaysAgo(6), grandTotal: 3420000, status: 'Partially Received',
-          totalOrderedQty: 1500, totalReceivedQty: 900, grnCount: 1,
-          items: [{ name: 'Alu. Rail 60 mm', category: 'Aluminium Profiles', qty: 1500, unit: 'NOS', rate: 1932.2, tax: 18 }],
-          grnHistory: [{ grnNo: 'GRN-2026-0031', date: isoDaysAgo(8), challanNo: 'DC-7705', receivedBy: 'Store Team', status: 'OPEN / PARTIALLY RECEIVED', acceptedQty: 900, items: [{ name: 'Alu. Rail 60 mm', uom: 'NOS', ordered: 1500, accepted: 900, rejected: 0, date: isoDaysAgo(8) }] }]
-        },
-        { poNo: 'PO-00074', vendorName: 'ARUMUGA STEEL', date: isoDaysAgo(35), deliveryDate: isoDaysAgo(9), grandTotal: 1864000, status: 'Proceed PO', items: [{ name: 'Purlin C Type 2400mm', category: 'HDG Steel', qty: 1000, unit: 'NOS', rate: 1579.66, tax: 18 }] },
-        { poNo: 'PO-00071', vendorName: 'KPR Mill', date: isoDaysAgo(44), deliveryDate: isoDaysAgo(7), grandTotal: 1248000, status: 'Draft', items: [{ name: 'T Nut M10', category: 'Fasteners & Accessories', qty: 4000, unit: 'NOS', rate: 264.41, tax: 18 }] },
-        {
-          poNo: 'PO-00063', vendorName: 'VAIBOV POLES', date: isoDaysAgo(65), deliveryDate: isoDaysAgo(12), grandTotal: 972000, status: 'Partially Received',
-          totalOrderedQty: 400, totalReceivedQty: 250, grnCount: 1,
-          items: [{ name: 'HDG Pipe 50 NB', category: 'HDG Steel', qty: 400, unit: 'NOS', rate: 2059.32, tax: 18 }],
-          grnHistory: [{ grnNo: 'GRN-2026-0018', date: isoDaysAgo(20), challanNo: 'DC-6102', receivedBy: 'Store Team', status: 'OPEN / PARTIALLY RECEIVED', acceptedQty: 250, items: [{ name: 'HDG Pipe 50 NB', uom: 'NOS', ordered: 400, accepted: 250, rejected: 0, date: isoDaysAgo(20) }] }]
-        },
-        {
-          poNo: 'PO-00058', vendorName: 'SHREE GANESH TRADERS', date: isoDaysAgo(95), deliveryDate: isoDaysAgo(90), grandTotal: 1640000, status: 'Fully Received',
-          totalOrderedQty: 100, totalReceivedQty: 100, grnCount: 1,
-          items: [{ name: 'Solar Panel 550W', category: 'Solar & BOS', qty: 100, unit: 'NOS', rate: 15619.05, tax: 5 }],
-          grnHistory: [{ grnNo: 'GRN-2026-0011', date: isoDaysAgo(90), challanNo: 'INV-1180', receivedBy: 'Store Team', status: 'CLOSED / FULLY RECEIVED', acceptedQty: 100, items: [{ name: 'Solar Panel 550W', uom: 'NOS', ordered: 100, accepted: 100, rejected: 0, date: isoDaysAgo(90) }] }]
-        },
-        {
-          poNo: 'PO-00049', vendorName: 'AKEYEM SONS', date: isoDaysAgo(128), deliveryDate: isoDaysAgo(120), grandTotal: 2950000, status: 'Fully Received',
-          totalOrderedQty: 750, totalReceivedQty: 750, grnCount: 1,
-          items: [{ name: 'Alu. Rail 100 mm', category: 'Aluminium Profiles', qty: 750, unit: 'NOS', rate: 3333.33, tax: 18 }],
-          grnHistory: [{ grnNo: 'GRN-2026-0007', date: isoDaysAgo(120), challanNo: 'INV-0942', receivedBy: 'Store Team', status: 'CLOSED / FULLY RECEIVED', acceptedQty: 750, items: [{ name: 'Alu. Rail 100 mm', uom: 'NOS', ordered: 750, accepted: 750, rejected: 0, date: isoDaysAgo(120) }] }]
-        },
-        { poNo: 'PO-00042', vendorName: 'ARUMUGA STEEL', date: isoDaysAgo(155), deliveryDate: isoDaysAgo(148), grandTotal: 2410000, status: 'CANCELLED', items: [{ name: 'LEG 3000 mm (HDG)', category: 'HDG Steel', qty: 500, unit: 'NOS', rate: 4084.75, tax: 18 }] }
-      ];
-    }
-
-    const grnPoStatusMap = new Map();
-    (grnList || []).forEach(g => {
+    const nowMs = Date.now();
+    const grnByPoMap = new Map();
+    (grnList || []).forEach((g) => {
       const ref = String(g?.poNumber || g?.poNo || g?.poRef || '').trim().toUpperCase();
       if (!ref) return;
-      const gSt = String(g?.status || '').toLowerCase();
-      const isFull = gSt.includes('closed') || gSt.includes('fully') || gSt.includes('completed') || g?.forceClosePO === true;
-      const prev = grnPoStatusMap.get(ref);
-      grnPoStatusMap.set(ref, (isFull || prev === 'full') ? 'full' : 'partial');
+      if (!grnByPoMap.has(ref)) grnByPoMap.set(ref, []);
+      grnByPoMap.get(ref).push(g);
     });
 
-    const normalizedPOs = rawPOs.map((po, idx) => {
-      const poNo = po.poNo || po.poNumber || po.purchaseorder_number || `PO-${idx + 1}`;
-      const vendor = po.vendor || po.vendorName || po.vendor_name || po.supplierName || 'Vendor';
-      const rawDate = po.poDate || po.date || po.createdAt || po.created_at || '';
-      const dateTs = parseDateMs(rawDate);
-      const rawDel = po.deliveryDate || po.expectedDeliveryDate || po.expectedDate || po.dueDate || '';
-      const delTs = parseDateMs(rawDel);
-      const value = parseAmount(po.grandTotal ?? po.total ?? po.totalAmount ?? po.amount ?? 0);
-      let statusGroup = normalizeStatus(po);
-      if (statusGroup !== 'Fully Received' && statusGroup !== 'Cancelled') {
-        const grnState = grnPoStatusMap.get(String(poNo).trim().toUpperCase());
-        if (grnState === 'full') {
-          statusGroup = 'Fully Received';
-        } else if (grnState === 'partial') {
-          statusGroup = 'Partially Received';
-        }
-      }
-      const rawStatus = po.status || po.stage || statusGroup;
-      const ageDays = Number.isFinite(dateTs) ? Math.max(0, Math.floor((now - dateTs) / 86400000)) : 0;
-      const isClosed = statusGroup === 'Fully Received' || statusGroup === 'Cancelled';
-      let delayDays = 0;
-      if (!isClosed) {
-        if (Number.isFinite(delTs) && now > delTs) {
-          delayDays = Math.max(1, Math.floor((now - delTs) / 86400000));
-        } else if (!Number.isFinite(delTs) && ageDays > 15) {
-          delayDays = ageDays - 15;
-        }
-      }
-      const poItems = Array.isArray(po.items) ? po.items : (Array.isArray(po.lineItems) ? po.lineItems : (Array.isArray(po.line_items) ? po.line_items : []));
-      const category = po.category ? normalizeMaterialCategory(po.category) : inferCategory(poItems);
+    const periodSource = (poList && poList.length > 0) ? poList : [];
+    const allSource = (allPoList && allPoList.length > 0) ? allPoList : periodSource;
 
-      return {
-        id: po.id || poNo,
-        poNo,
-        vendor,
-        rawDate,
-        dateTs,
-        rawDel,
-        delTs,
-        value,
-        statusGroup,
-        rawStatus,
-        ageDays,
-        delayDays,
-        category,
-        itemsCount: Array.isArray(po.items) ? po.items.length : 0,
-        rawPo: po
-      };
-    });
+    const periodPOs = periodSource
+      .filter(Boolean)
+      .map((p, i) => enrichPoRecord(p, i, grnByPoMap))
+      .filter(p => !p.isCancelled);
 
-    const totalPOs = normalizedPOs.length;
-    const totalValue = normalizedPOs.reduce((s, p) => s + p.value, 0);
-    const receivedValue = normalizedPOs
-      .filter(p => p.statusGroup === 'Fully Received')
-      .reduce((s, p) => s + p.value, 0);
-    const openValue = normalizedPOs
-      .filter(p => p.statusGroup !== 'Fully Received' && p.statusGroup !== 'Cancelled')
-      .reduce((s, p) => s + p.value, 0);
+    const openAllPOs = allSource
+      .filter(Boolean)
+      .map((p, i) => enrichPoRecord(p, i, grnByPoMap))
+      .filter(p => !p.isCancelled);
 
-    // 1. Purchase Status Segments
-    const statusOrder = [
-      { name: 'Draft', label: 'Draft', color: '#64748B' },
-      { name: 'Pending CEO Approval', label: 'Pending CEO Approval', color: '#7C3AED' },
-      { name: 'Payment Pending', label: 'Payment Pending', color: '#2563EB' },
-      { name: 'GRN Pending', label: 'GRN Pending', color: '#0E7490' },
-      { name: 'Partially Received', label: 'Partially Received', color: '#D97706' },
-      { name: 'Fully Received', label: 'Fully Received', color: '#059669' },
-      { name: 'Cancelled', label: 'Cancelled', color: '#DC2626' }
-    ];
-    const statusSegments = statusOrder.map(st => {
-      const list = normalizedPOs.filter(p => p.statusGroup === st.name);
-      const val = list.reduce((s, p) => s + p.value, 0);
-      return {
-        name: st.label,
-        key: st.name,
-        color: st.color,
-        value: list.length,
-        amount: val,
-        pct: totalPOs > 0 ? ((list.length / totalPOs) * 100).toFixed(1) : '0.0',
-        orders: list
-      };
-    });
+    const noMaterialPOs = periodPOs.filter(p => p.hasNoMaterial);
+    const fullyReceivedPOs = periodPOs.filter(p => p.isFullyReceived);
+    const partiallyReceivedPOs = periodPOs.filter(p => p.isPartiallyReceived);
+    const closedPOs = periodPOs.filter(p => p.isClosed);
+    const totalPeriodValue = periodPOs.reduce((s, p) => s + p.exclGstValue, 0);
 
-    // 2. PO Value Trend (Last 6 Months)
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const curDate = new Date();
-    const trendMap = new Map();
-    const trendMonths = [];
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(curDate.getFullYear(), curDate.getMonth() - i, 1);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      const bucket = {
-        key,
-        label: `${monthNames[d.getMonth()]}-${String(d.getFullYear()).slice(-2)}`,
-        value: 0,
-        count: 0,
-        orders: []
-      };
-      trendMap.set(key, bucket);
-      trendMonths.push(bucket);
-    }
-    normalizedPOs.forEach(p => {
-      if (!Number.isFinite(p.dateTs)) return;
-      const d = new Date(p.dateTs);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      const bucket = trendMap.get(key);
-      if (bucket) {
-        bucket.value += p.value;
-        bucket.count += 1;
-        bucket.orders.push(p);
-      }
-    });
+    const mdPendingPOs = openAllPOs.filter(p => p.isMdApprovalPending);
+    const paymentPendingPOs = openAllPOs.filter(p => p.isApprovedPaymentPending);
+    const deliveryPendingPOs = openAllPOs.filter(p => p.isPaidDeliveryPending);
+    const deliveryOverdueCount = deliveryPendingPOs.filter(p => p.delTs && p.delTs < nowMs).length;
+    const grnPendingPOs = openAllPOs.filter(p => p.isMaterialReceivedGrnPending);
+    const grnArrivedOnTimeCount = grnPendingPOs.filter(p => !p.delTs || !p.receiptTs || p.receiptTs <= p.delTs + 86400000).length;
 
-    // 3. Top 5 Vendors by PO Value
+    const deliveredFullPOs = periodPOs.filter(p => p.isFullyReceived);
+    const deliveredOnTimePOs = deliveredFullPOs.filter(p => p.deliveredOnTime);
+    const deliveredOnTimePct = deliveredFullPOs.length > 0 ? Math.round((deliveredOnTimePOs.length / deliveredFullPOs.length) * 100) : 0;
+
+    const grnEligiblePOs = periodPOs.filter(p => p.isFullyReceived || p.isPartiallyReceived || p.hasGrnPosted);
+    const grnPostedPOs = grnEligiblePOs.filter(p => p.hasGrnPosted);
+    const grnPostedOnTimePOs = grnPostedPOs.filter(p => p.grnPostedOnTime);
+    const grnPostedOnTimePct = grnPostedPOs.length > 0 ? Math.round((grnPostedOnTimePOs.length / grnPostedPOs.length) * 100) : 0;
+
     const vendorMap = new Map();
-    normalizedPOs.forEach(p => {
-      const prev = vendorMap.get(p.vendor) || { vendor: p.vendor, value: 0, count: 0, onTimeCount: 0, orders: [] };
-      prev.value += p.value;
-      prev.count += 1;
-      if (p.delayDays === 0) prev.onTimeCount += 1;
-      prev.orders.push(p);
-      vendorMap.set(p.vendor, prev);
+    const productMap = new Map();
+
+    periodPOs.forEach((po) => {
+      const vEntry = vendorMap.get(po.vendor) || { name: po.vendor, value: 0, pos: [] };
+      vEntry.value += po.exclGstValue;
+      vEntry.pos.push(po);
+      vendorMap.set(po.vendor, vEntry);
+
+      if (Array.isArray(po.items) && po.items.length > 0) {
+        const rawItemLines = po.items.map((it) => {
+          const pName = String(it.name || it.itemName || it.description || 'Material Item').trim() || 'Material Item';
+          const q = parseAmount(it.qty ?? it.quantity ?? it.orderedQty ?? 0);
+          const r = parseAmount(it.rate ?? it.unitPrice ?? it.price ?? 0);
+          const line = parseAmount(it.amount ?? it.subTotal ?? (q * r));
+          return { pName, line: line > 0 ? line : 0 };
+        });
+        const lineSum = rawItemLines.reduce((s, x) => s + x.line, 0);
+        const scale = (lineSum > 0 && po.exclGstValue > 0) ? (po.exclGstValue / lineSum) : 1;
+
+        rawItemLines.forEach(({ pName, line }) => {
+          const val = line > 0 ? line * scale : (po.exclGstValue / rawItemLines.length);
+          const pEntry = productMap.get(pName) || { name: pName, value: 0, pos: [] };
+          pEntry.value += val;
+          if (!pEntry.pos.some(x => x.poNo === po.poNo)) pEntry.pos.push(po);
+          productMap.set(pName, pEntry);
+        });
+      }
     });
-    const top5Vendors = Array.from(vendorMap.values())
+
+    const topVendors = Array.from(vendorMap.values())
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 5)
       .map(v => ({
         ...v,
-        pct: totalValue > 0 ? ((v.value / totalValue) * 100).toFixed(1) : '0.0',
-        onTimePct: v.count > 0 ? ((v.onTimeCount / v.count) * 100).toFixed(1) : '100.0'
-      }))
+        share: totalPeriodValue > 0 ? (v.value / totalPeriodValue) * 100 : 0
+      }));
+    const topVendorsTotal = topVendors.reduce((s, v) => s + v.value, 0);
+    const topVendorsShare = totalPeriodValue > 0 ? (topVendorsTotal / totalPeriodValue) * 100 : 0;
+
+    const topProducts = Array.from(productMap.values())
       .sort((a, b) => b.value - a.value)
-      .slice(0, 5);
-
-    // 4. PO Ageing Summary (By Value) - ONLY Payment Pending / GRN Pending / Partially Received POs still awaiting material inward (GRN)
-    const openPOs = normalizedPOs.filter(
-      p => p.statusGroup === 'Payment Pending' || p.statusGroup === 'GRN Pending' || p.statusGroup === 'Partially Received'
-    );
-    const ageingPool = openPOs;
-    const ageingTotalVal = ageingPool.reduce((s, p) => s + p.value, 0);
-    const ageingBrackets = [
-      { label: '0 - 7 Days', color: '#059669', min: 0, max: 7 },
-      { label: '8 - 15 Days', color: '#0E7490', min: 8, max: 15 },
-      { label: '16 - 30 Days', color: '#2563EB', min: 16, max: 30 },
-      { label: '31 - 60 Days', color: '#D97706', min: 31, max: 60 },
-      { label: 'Above 60 Days', color: '#DC2626', min: 61, max: Infinity }
-    ].map(b => {
-      const orders = ageingPool.filter(p => p.ageDays >= b.min && p.ageDays <= b.max);
-      const val = orders.reduce((s, p) => s + p.value, 0);
-      return {
-        ...b,
-        value: val,
-        count: orders.length,
-        pct: ageingTotalVal > 0 ? ((val / ageingTotalVal) * 100).toFixed(1) : '0.0',
-        orders
-      };
-    });
-
-    // 5. Material Category Wise Purchase (Exact 6 canonical sub-headings)
-    const catColors = ['#0E7490', '#059669', '#2563EB', '#D97706', '#7C3AED', '#64748B'];
-    const catMap = new Map();
-    CORE_MATERIAL_CATEGORIES.forEach((name) => {
-      catMap.set(name, { name, value: 0, count: 0, orders: [] });
-    });
-    normalizedPOs.forEach(p => {
-      const bucketName = CORE_MATERIAL_SET.has(p.category) ? p.category : normalizeMaterialCategory(p.category);
-      const prev = catMap.get(bucketName) || catMap.get('Others');
-      prev.value += p.value;
-      prev.count += 1;
-      prev.orders.push(p);
-    });
-    const categorySegments = CORE_MATERIAL_CATEGORIES.map((name, idx) => {
-      const c = catMap.get(name);
-      return {
-        ...c,
-        color: catColors[idx % catColors.length],
-        pct: totalValue > 0 ? ((c.value / totalValue) * 100).toFixed(1) : '0.0'
-      };
-    });
-
-    // 6. Recently Raised POs
-    const recentlyRaised = [...normalizedPOs]
-      .sort((a, b) => (b.dateTs || 0) - (a.dateTs || 0))
-      .slice(0, 6);
-
-    // 7. Overdue POs
-    const overduePOs = normalizedPOs
-      .filter(p => p.delayDays > 0)
-      .sort((a, b) => b.delayDays - a.delayDays);
-
-    // 8. Low Stock / Material Shortages from inventoryList
-    const lowStockItems = (inventoryList || []).filter(it => {
-      const qty = parseFloat(it.stock ?? it.availableStock ?? it.available ?? it.quantity ?? 0) || 0;
-      const minStock = parseFloat(it.minStock ?? it.reorderLevel ?? 10) || 10;
-      return qty <= minStock;
-    });
-    const pendingApprovalPOs = normalizedPOs.filter(p => p.statusGroup === 'Pending CEO Approval');
-    const agedOpenPOs = openPOs.filter(p => p.ageDays > 30);
-
-    const keyAlerts = [
-      {
-        title: `${overduePOs.length} Overdue PO${overduePOs.length === 1 ? '' : 's'} Pending Delivery`,
-        sub: overduePOs.length > 0 ? `Max delay ${overduePOs[0].delayDays} days (${overduePOs[0].vendor})` : 'All active POs within delivery schedule',
-        badge: overduePOs.length > 0 ? 'Follow Up' : 'On Time',
-        color: overduePOs.length > 0 ? '#DC2626' : '#059669',
-        bg: overduePOs.length > 0 ? '#FEF2F2' : '#F0FDF4',
-        border: overduePOs.length > 0 ? '#FECACA' : '#BBF7D0',
-        icon: AlertTriangle,
-        orders: overduePOs
-      },
-      {
-        title: `${pendingApprovalPOs.length} PO${pendingApprovalPOs.length === 1 ? '' : 's'} Awaiting CEO Approval`,
-        sub: pendingApprovalPOs.length > 0 ? `Pending value ${formatINRCompact(pendingApprovalPOs.reduce((s, p) => s + p.value, 0))}` : 'No POs stuck in approval queue',
-        badge: pendingApprovalPOs.length > 0 ? 'Approval Due' : 'Cleared',
-        color: pendingApprovalPOs.length > 0 ? '#D97706' : '#059669',
-        bg: pendingApprovalPOs.length > 0 ? '#FFFBEB' : '#F0FDF4',
-        border: pendingApprovalPOs.length > 0 ? '#FDE68A' : '#BBF7D0',
-        icon: Clock,
-        orders: pendingApprovalPOs
-      },
-      {
-        title: `${lowStockItems.length} Material Shortage / Low Stock SKU${lowStockItems.length === 1 ? '' : 's'}`,
-        sub: lowStockItems.length > 0 ? 'Items at or below minimum reorder threshold' : 'Inventory stock above reorder levels',
-        badge: lowStockItems.length > 0 ? 'Reorder Now' : 'Healthy',
-        color: lowStockItems.length > 0 ? '#DC2626' : '#059669',
-        bg: lowStockItems.length > 0 ? '#FEF2F2' : '#F0FDF4',
-        border: lowStockItems.length > 0 ? '#FECACA' : '#BBF7D0',
-        icon: ShieldAlert,
-        orders: [],
-        navigateTab: 'Material Reorder'
-      },
-      {
-        title: `${agedOpenPOs.length} Open PO${agedOpenPOs.length === 1 ? '' : 's'} Aged > 30 Days`,
-        sub: agedOpenPOs.length > 0 ? `Pending value ${formatINRCompact(agedOpenPOs.reduce((s, p) => s + p.value, 0))}` : 'No long-pending open purchase orders',
-        badge: agedOpenPOs.length > 0 ? 'Escalate' : 'Clean',
-        color: agedOpenPOs.length > 0 ? '#2563EB' : '#059669',
-        bg: agedOpenPOs.length > 0 ? '#EFF6FF' : '#F0FDF4',
-        border: agedOpenPOs.length > 0 ? '#BFDBFE' : '#BBF7D0',
-        icon: CheckCircle2,
-        orders: agedOpenPOs
-      }
-    ];
+      .slice(0, 5)
+      .map(p => ({
+        ...p,
+        share: totalPeriodValue > 0 ? (p.value / totalPeriodValue) * 100 : 0
+      }));
+    const topProductsTotal = topProducts.reduce((s, p) => s + p.value, 0);
+    const topProductsShare = totalPeriodValue > 0 ? (topProductsTotal / totalPeriodValue) * 100 : 0;
 
     return {
-      normalizedPOs,
-      totalPOs,
-      totalValue,
-      receivedValue,
-      openValue,
-      statusSegments,
-      trendMonths,
-      top5Vendors,
-      ageingPool,
-      ageingTotalVal,
-      ageingBrackets,
-      categorySegments,
-      recentlyRaised,
-      overduePOs,
-      keyAlerts
+      periodPOs,
+      noMaterialPOs,
+      fullyReceivedPOs,
+      partiallyReceivedPOs,
+      closedPOs,
+      totalPeriodValue,
+      mdPendingPOs,
+      paymentPendingPOs,
+      deliveryPendingPOs,
+      deliveryOverdueCount,
+      grnPendingPOs,
+      grnArrivedOnTimeCount,
+      deliveredFullPOs,
+      deliveredOnTimePOs,
+      deliveredOnTimePct,
+      grnEligiblePOs,
+      grnPostedPOs,
+      grnPostedOnTimePOs,
+      grnPostedOnTimePct,
+      topVendors,
+      topVendorsTotal,
+      topVendorsShare,
+      topProducts,
+      topProductsTotal,
+      topProductsShare
     };
-  }, [poList, grnList, inventoryList]);
+  }, [poList, allPoList, grnList]);
 
-  const maxTrendVal = Math.max(1, ...analytics.trendMonths.map(m => m.value));
-  const latestTrendIdx = Math.max(0, analytics.trendMonths.length - 1);
-  const activeTrendIdx = selectedTrendIdx !== null && analytics.trendMonths[selectedTrendIdx] ? selectedTrendIdx : latestTrendIdx;
-  const activeTrend = analytics.trendMonths[activeTrendIdx] || { label: '—', value: 0, count: 0, orders: [] };
-  const peakTrend = analytics.trendMonths.reduce((best, m) => (m.value >= best.value ? m : best), analytics.trendMonths[0] || { label: '—', value: 0 });
-  const avgMonthlySpend = analytics.trendMonths.length > 0
-    ? analytics.trendMonths.reduce((s, m) => s + m.value, 0) / analytics.trendMonths.length
-    : 0;
+  const periodLabels = getPeriodSubtitle(selectedPeriod);
+  const todayLabel = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 
-  const activeStatusSeg = selectedStatus ? analytics.statusSegments.find(s => s.name === selectedStatus) : null;
-  const activeCatSeg = selectedCat ? analytics.categorySegments.find(c => c.name === selectedCat) : null;
-
-  const freshAgeVal = analytics.ageingBrackets[0]?.value || 0;
-  const midAgeVal = (analytics.ageingBrackets[1]?.value || 0) + (analytics.ageingBrackets[2]?.value || 0);
-  const oldAgeVal = (analytics.ageingBrackets[3]?.value || 0) + (analytics.ageingBrackets[4]?.value || 0);
-  const above60Val = analytics.ageingBrackets[4]?.value || 0;
-
-  const statusBadgeStyle = (stGroup) => {
-    if (stGroup === 'Fully Received') return { bg: '#ECFDF5', color: '#059669', border: '#A7F3D0' };
-    if (stGroup === 'Partially Received') return { bg: '#FFFBEB', color: '#D97706', border: '#FDE68A' };
-    if (stGroup === 'Cancelled') return { bg: '#FEF2F2', color: '#DC2626', border: '#FECACA' };
-    if (stGroup === 'GRN Pending') return { bg: '#ECFEFF', color: '#0E7490', border: '#A5F3FC' };
-    if (stGroup === 'Payment Pending') return { bg: '#EFF6FF', color: '#2563EB', border: '#BFDBFE' };
-    if (stGroup === 'Pending CEO Approval') return { bg: '#F5F3FF', color: '#7C3AED', border: '#DDD6FE' };
-    return { bg: '#F8FAFC', color: '#475569', border: '#CBD5E1' };
+  const openListPopup = (title, list) => {
+    setPopupSearch('');
+    setPoPopup({ title, list });
   };
 
+  const filteredPopupList = useMemo(() => {
+    if (!poPopup) return [];
+    const q = popupSearch.trim().toLowerCase();
+    if (!q) return poPopup.list;
+    return poPopup.list.filter(p =>
+      p.poNo.toLowerCase().includes(q) ||
+      p.vendor.toLowerCase().includes(q) ||
+      p.rawStatus.toLowerCase().includes(q)
+    );
+  }, [poPopup, popupSearch]);
+
+  const maxVendorVal = analytics.topVendors[0]?.value || 1;
+  const maxProductVal = analytics.topProducts[0]?.value || 1;
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-      {/* ROW 1: PURCHASE STATUS + PO VALUE TREND */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '16px' }}>
-        {/* 1. PURCHASE STATUS */}
-        <div style={cardStyle}>
-          <div style={cardHeaderStyle}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-              <span style={cardTitleStyle}>Purchase Status</span>
-              <span style={{
-                fontSize: '10px', fontWeight: '800', color: '#0E7490',
-                backgroundColor: '#ECFEFF', border: '1px solid #A5F3FC',
-                padding: '2px 8px', borderRadius: '999px'
-              }}>
-                {analytics.totalPOs} POs
-              </span>
-            </div>
-          </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
 
-          <div style={summaryStripStyle}>
-            <div>
-              <div style={{ fontSize: '9.5px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>Total PO Value</div>
-              <div style={{ fontSize: '14px', fontWeight: '900', color: '#0F172A' }}>{formatINRCompact(analytics.totalValue)}</div>
-            </div>
-            <div>
-              <div style={{ fontSize: '9.5px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>Received</div>
-              <div style={{ fontSize: '14px', fontWeight: '900', color: '#059669' }}>{formatINRCompact(analytics.receivedValue)}</div>
-            </div>
-            <div>
-              <div style={{ fontSize: '9.5px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>Open Value</div>
-              <div style={{ fontSize: '14px', fontWeight: '900', color: '#0E7490' }}>{formatINRCompact(analytics.openValue)}</div>
-            </div>
-          </div>
+      {/* 1. PURCHASE ORDER SUMMARY (BUSINZ CeoKpiGrid) */}
+      <BusinzSectionCard
+        title="Purchase Order Summary"
+        subtitle={periodLabels.range}
+      >
+        <CeoKpiGrid kpis={[
+          {
+            title: 'POs Placed',
+            value: `${analytics.periodPOs.length}`,
+            trend: `${analytics.noMaterialPOs.length} Awaiting`,
+            trendNeutral: true,
+            hideTrendIcon: true,
+            bottomPrefix: `${analytics.noMaterialPOs.length} `,
+            bottomHighlight: 'with no material received',
+            bottomHighlightColor: '#475569',
+            onClick: () => openListPopup('POs placed', analytics.periodPOs)
+          },
+          {
+            title: selectedPeriod === 'MTD' ? 'Monthly Purchase Value' : 'Period Purchase Value',
+            value: formatCompactINR(analytics.totalPeriodValue),
+            trend: 'Excl. GST',
+            trendNeutral: true,
+            hideTrendIcon: true,
+            bottomPrefix: 'Placed PO value · ',
+            bottomHighlight: 'Excluding GST',
+            bottomHighlightColor: '#0E7490',
+            onClick: () => openListPopup('Purchase value (excl. GST)', analytics.periodPOs)
+          },
+          {
+            title: 'Fully Received',
+            value: `${analytics.fullyReceivedPOs.length}`,
+            valColor: '#059669',
+            trend: analytics.periodPOs.length > 0 ? `${Math.round((analytics.fullyReceivedPOs.length / analytics.periodPOs.length) * 100)}%` : '0%',
+            trendUp: true,
+            hideTrendIcon: true,
+            bottomPrefix: 'All ordered material ',
+            bottomHighlight: 'received',
+            bottomHighlightColor: '#059669',
+            onClick: () => openListPopup('Fully received POs', analytics.fullyReceivedPOs)
+          },
+          {
+            title: 'Partially Received',
+            value: `${analytics.partiallyReceivedPOs.length}`,
+            valColor: '#D97706',
+            trend: 'In Progress',
+            trendNeutral: true,
+            hideTrendIcon: true,
+            bottomPrefix: 'Balance material ',
+            bottomHighlight: 'still due',
+            bottomHighlightColor: '#B45309',
+            onClick: () => openListPopup('Partially received POs', analytics.partiallyReceivedPOs)
+          },
+          {
+            title: 'POs Closed',
+            value: `${analytics.closedPOs.length}`,
+            valColor: '#059669',
+            trend: 'Closed',
+            trendUp: true,
+            hideTrendIcon: true,
+            bottomPrefix: 'BUSINZ ',
+            bottomHighlight: 'closure status',
+            bottomHighlightColor: '#059669',
+            onClick: () => openListPopup('POs closed', analytics.closedPOs)
+          }
+        ]} />
+      </BusinzSectionCard>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '18px', flex: 1, minHeight: '150px' }}>
-            <DonutChartSvg
-              segments={analytics.statusSegments}
-              centerLabel={activeStatusSeg ? activeStatusSeg.value : analytics.totalPOs}
-              centerSub={activeStatusSeg ? `${activeStatusSeg.pct}% Share` : 'Total POs'}
-              activeName={selectedStatus}
-              onSelectSegment={(name) => {
-                const seg = analytics.statusSegments.find(s => s.name === name);
-                if (!seg || seg.orders.length === 0) return;
-                setSelectedStatus(name);
-                setPopupSearch('');
-                setPoPopup({ title: `Purchase Status: ${seg.name}`, color: seg.color, orders: seg.orders });
-              }}
-            />
-            <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '4px', justifyContent: 'center' }}>
-              {analytics.statusSegments.map((seg, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  disabled={seg.orders.length === 0}
-                  onClick={() => {
-                    if (seg.orders.length === 0) return;
-                    setSelectedStatus(seg.name);
-                    setPopupSearch('');
-                    setPoPopup({ title: `Purchase Status: ${seg.name}`, color: seg.color, orders: seg.orders });
-                  }}
-                  style={{
-                    display: 'flex', flexDirection: 'column', gap: '3px',
-                    width: '100%', textAlign: 'left', padding: '4px 8px',
-                    borderRadius: '10px',
-                    border: selectedStatus === seg.name ? `1.5px solid ${seg.color}` : '1px solid transparent',
-                    backgroundColor: selectedStatus === seg.name ? '#F8FAFC' : 'transparent',
-                    cursor: seg.orders.length > 0 ? 'pointer' : 'default',
-                    transition: 'background-color 0.15s ease, border-color 0.15s ease'
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', gap: '8px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '7px', minWidth: 0 }}>
-                      <span style={{ width: '10px', height: '10px', borderRadius: '3px', backgroundColor: seg.color, flexShrink: 0 }} />
-                      <span style={{ fontWeight: '700', color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{seg.name}</span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
-                      <span style={{ fontWeight: '800', color: '#0F172A', fontSize: '12px' }}>{seg.value}</span>
-                      <span style={{ fontSize: '10px', fontWeight: '800', color: seg.color, backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', padding: '1px 6px', borderRadius: '6px' }}>
-                        {seg.pct}%
-                      </span>
-                    </div>
-                  </div>
-                  <div style={{ width: '100%', height: '5px', backgroundColor: '#F1F5F9', borderRadius: '999px', overflow: 'hidden' }}>
-                    <div style={{ width: `${Math.min(100, Math.max(seg.value > 0 ? 2 : 0, Number(seg.pct)))}%`, height: '100%', backgroundColor: seg.color, borderRadius: '999px' }} />
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* 2. PO VALUE TREND */}
-        <div style={cardStyle}>
-          <div style={cardHeaderStyle}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-              <span style={cardTitleStyle}>PO Value Trend (6 Months)</span>
-              <span style={{
-                fontSize: '10px', fontWeight: '800', color: '#059669',
-                backgroundColor: '#ECFDF5', border: '1px solid #A7F3D0',
-                padding: '2px 8px', borderRadius: '999px'
-              }}>
-                Monthly Spend & POs
-              </span>
-            </div>
-          </div>
-
-          <div style={summaryStripStyle}>
-            <div>
-              <div style={{ fontSize: '9.5px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>{activeTrend.label} Spend</div>
-              <div style={{ fontSize: '14px', fontWeight: '900', color: '#0F172A' }}>{formatINRCompact(activeTrend.value)}</div>
-            </div>
-            <div>
-              <div style={{ fontSize: '9.5px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>6-Mo Average</div>
-              <div style={{ fontSize: '14px', fontWeight: '900', color: '#0E7490' }}>{formatINRCompact(avgMonthlySpend)}</div>
-            </div>
-            <div>
-              <div style={{ fontSize: '9.5px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>Peak Month</div>
-              <div style={{ fontSize: '13px', fontWeight: '900', color: '#059669', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {peakTrend.label} ({formatINRCompact(peakTrend.value)})
-              </div>
-            </div>
-          </div>
-
-          <div style={{ position: 'relative', flex: 1, minHeight: '150px', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', paddingTop: '12px' }}>
-            <div style={{ position: 'absolute', inset: '14px 0 24px 0', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', pointerEvents: 'none' }}>
-              <div style={{ borderTop: '1px dashed #E2E8F0', width: '100%' }} />
-              <div style={{ borderTop: '1px dashed #E2E8F0', width: '100%' }} />
-              <div style={{ borderTop: '1px solid #E2E8F0', width: '100%' }} />
-            </div>
-
-            <div style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: '10px', height: '100%' }}>
-              {analytics.trendMonths.map((m, idx) => {
-                const isSelected = idx === activeTrendIdx;
-                const barH = m.value > 0 ? Math.max(18, Math.round((m.value / maxTrendVal) * 92)) : 6;
-                return (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => setSelectedTrendIdx(idx)}
-                    title={`${m.label}: ${formatINRCompact(m.value)} (${m.count} POs)`}
-                    style={{
-                      flex: 1, border: 'none',
-                      background: isSelected ? '#ECFEFF' : 'transparent',
-                      borderRadius: '10px', padding: '4px 2px',
-                      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end',
-                      gap: '5px', height: '100%', cursor: 'pointer',
-                      transition: 'background-color 0.15s ease'
-                    }}
-                  >
-                    <span style={{
-                      fontSize: '10px', fontWeight: '800',
-                      color: m.value > 0 ? (isSelected ? '#075985' : '#0E7490') : '#94A3B8',
-                      whiteSpace: 'nowrap'
-                    }}>
-                      {formatINRCompact(m.value).replace('₹ ', '')}
-                    </span>
-                    <div style={{
-                      width: '100%', maxWidth: '34px', height: `${barH}px`,
-                      background: m.value <= 0
-                        ? '#CBD5E1'
-                        : (isSelected ? 'linear-gradient(180deg, #0E7490 0%, #075985 100%)' : '#BAE6FD'),
-                      borderRadius: '6px 6px 2px 2px',
-                      boxShadow: isSelected && m.value > 0 ? '0 4px 10px rgba(14, 116, 144, 0.25)' : 'none',
-                      transition: 'all 0.18s ease'
-                    }} />
-                    <span style={{ fontSize: '10.5px', fontWeight: isSelected ? '800' : '700', color: isSelected ? '#0F172A' : '#64748B' }}>
-                      {m.label}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div style={{ marginTop: 'auto', paddingTop: '10px', borderTop: '1px dashed #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', fontSize: '11px' }}>
-            <span style={{ fontWeight: '700', color: '#475569' }}>
-              <strong style={{ color: '#0F172A' }}>{activeTrend.label}:</strong> {activeTrend.count} POs Raised
-            </span>
-            <button
-              type="button"
-              disabled={activeTrend.orders.length === 0}
-              onClick={() => {
-                if (activeTrend.orders.length === 0) return;
-                setPopupSearch('');
-                setPoPopup({ title: `POs Raised in ${activeTrend.label}`, color: '#0E7490', orders: activeTrend.orders });
-              }}
+      {/* 2. PENDING ACTIONS (BUSINZ Highlight Action Grid) */}
+      <BusinzSectionCard
+        title="Pending Actions"
+        subtitle={`All open POs as of ${todayLabel}, including prior months`}
+      >
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px' }}>
+          {[
+            {
+              title: 'MD Approval Pending',
+              count: `${analytics.mdPendingPOs.length} POs`,
+              owner: 'Owner · MD',
+              bg: '#FFFBEB',
+              border: '#FDE68A',
+              accent: '#B45309',
+              badgeBg: '#FEF3C7',
+              list: analytics.mdPendingPOs
+            },
+            {
+              title: 'Approved, Payment Pending',
+              count: `${analytics.paymentPendingPOs.length} POs`,
+              owner: 'Owner · Accounts',
+              bg: '#FFFBEB',
+              border: '#FDE68A',
+              accent: '#B45309',
+              badgeBg: '#FEF3C7',
+              list: analytics.paymentPendingPOs
+            },
+            {
+              title: 'Paid, Delivery Pending',
+              count: `${analytics.deliveryPendingPOs.length} POs`,
+              owner: `Owner · Purchase${analytics.deliveryOverdueCount > 0 ? ` | ${analytics.deliveryOverdueCount} overdue` : ''}`,
+              bg: '#FEF2F2',
+              border: '#FECACA',
+              accent: '#DC2626',
+              badgeBg: '#FEE2E2',
+              list: analytics.deliveryPendingPOs
+            },
+            {
+              title: 'Material Received, GRN Pending',
+              count: `${analytics.grnPendingPOs.length} POs`,
+              owner: `Owner · Stores${analytics.grnArrivedOnTimeCount > 0 ? ` | ${analytics.grnArrivedOnTimeCount} arrived on time` : ''}`,
+              bg: '#FEF2F2',
+              border: '#FECACA',
+              accent: '#DC2626',
+              badgeBg: '#FEE2E2',
+              list: analytics.grnPendingPOs
+            }
+          ].map((act) => (
+            <div
+              key={act.title}
+              onClick={() => openListPopup(act.title, act.list)}
+              role="button"
+              tabIndex={0}
               style={{
-                fontSize: '10px', fontWeight: '800', color: '#0E7490',
-                backgroundColor: '#ECFEFF', border: '1px solid #A5F3FC',
-                padding: '2px 8px', borderRadius: '999px',
-                cursor: activeTrend.orders.length > 0 ? 'pointer' : 'default'
+                backgroundColor: act.bg,
+                borderRadius: '16px',
+                border: `1px solid ${act.border}`,
+                padding: '12px 14px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px',
+                boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)',
+                cursor: 'pointer'
               }}
             >
-              Total: {formatINRCompact(activeTrend.value)}
-            </button>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <span style={{ fontSize: '11px', fontWeight: '800', color: act.accent, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  {act.title}
+                </span>
+                <span style={{ fontSize: '20px', fontWeight: '900', color: act.accent, letterSpacing: '-0.5px', lineHeight: 1.15 }}>
+                  {act.count}
+                </span>
+              </div>
+              <div style={{
+                backgroundColor: 'rgba(255,255,255,0.75)',
+                border: `1px solid ${act.border}`,
+                borderRadius: '10px',
+                padding: '6px 10px',
+                fontSize: '11px',
+                fontWeight: '700',
+                color: act.accent,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between'
+              }}>
+                <span>{act.owner}</span>
+                <span style={{ color: '#0E7490', fontWeight: '800', fontSize: '10.5px' }}>View →</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </BusinzSectionCard>
+
+      {/* 3. DELIVERY AND GRN PERFORMANCE (BUSINZ CeoKpiGrid) */}
+      <BusinzSectionCard
+        title="Delivery and GRN Performance"
+        subtitle={`${periodLabels.prefix} POs placed`}
+      >
+        <CeoKpiGrid kpis={[
+          {
+            title: 'POs Delivered in Full On Time',
+            value: `${analytics.deliveredOnTimePOs.length} / ${analytics.deliveredFullPOs.length}`,
+            valColor: '#059669',
+            trend: `${analytics.deliveredOnTimePct}%`,
+            trendUp: analytics.deliveredOnTimePct >= 75,
+            hideTrendIcon: true,
+            bottomPrefix: 'Full receipt by ',
+            bottomHighlight: 'committed delivery date',
+            bottomHighlightColor: '#059669',
+            onClick: () => openListPopup('POs delivered in full on time', analytics.deliveredOnTimePOs)
+          },
+          {
+            title: 'POs with GRN Posted',
+            value: `${analytics.grnPostedPOs.length} / ${analytics.grnEligiblePOs.length}`,
+            trend: analytics.grnEligiblePOs.length > 0 ? `${Math.round((analytics.grnPostedPOs.length / analytics.grnEligiblePOs.length) * 100)}%` : '0%',
+            trendNeutral: true,
+            hideTrendIcon: true,
+            bottomPrefix: 'GRNs posted for ',
+            bottomHighlight: 'recorded PO receipts',
+            bottomHighlightColor: '#0E7490',
+            onClick: () => openListPopup('POs with GRN posted', analytics.grnPostedPOs)
+          },
+          {
+            title: 'POs with GRN Posted On Time',
+            value: `${analytics.grnPostedOnTimePOs.length} / ${analytics.grnPostedPOs.length}`,
+            valColor: '#059669',
+            trend: `${analytics.grnPostedOnTimePct}%`,
+            trendUp: analytics.grnPostedOnTimePct >= 75,
+            hideTrendIcon: true,
+            bottomPrefix: 'Posted within ',
+            bottomHighlight: '1 working day of receipt',
+            bottomHighlightColor: '#059669',
+            onClick: () => openListPopup('POs with GRN posted on time', analytics.grnPostedOnTimePOs)
+          }
+        ]} />
+      </BusinzSectionCard>
+
+      {/* 4. WHERE THE PURCHASE VALUE WENT */}
+      <BusinzSectionCard
+        title="Where the Purchase Value Went"
+        subtitle={`${periodLabels.prefix} POs placed · Ranked by value excluding GST`}
+      >
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: '12px' }}>
+          {/* Top 5 vendors */}
+          <div style={{
+            backgroundColor: '#FFFFFF',
+            border: '1px solid #EAEFEF',
+            borderRadius: '16px',
+            padding: '16px 18px',
+            boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)'
+          }}>
+            <div style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A', marginBottom: '12px' }}>Top 5 Vendors</div>
+            {analytics.topVendors.length === 0 ? (
+              <div style={{ fontSize: '12px', color: '#94A3B8', padding: '18px 0', textAlign: 'center' }}>No POs recorded in this period</div>
+            ) : (
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid #E2E8F0', color: '#64748B', fontSize: '10.5px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    <th style={{ textAlign: 'left', padding: '6px 4px', width: '24px' }}>#</th>
+                    <th style={{ textAlign: 'left', padding: '6px 4px' }}>Vendor</th>
+                    <th style={{ padding: '6px 8px', width: '110px' }}></th>
+                    <th style={{ textAlign: 'right', padding: '6px 4px' }}>PO Value</th>
+                    <th style={{ textAlign: 'right', padding: '6px 4px', width: '54px' }}>Share</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {analytics.topVendors.map((v, idx) => (
+                    <tr
+                      key={v.name}
+                      onClick={() => openListPopup(`Vendor: ${v.name}`, v.pos)}
+                      style={{ borderBottom: '1px solid #F1F5F9', cursor: 'pointer' }}
+                    >
+                      <td style={{ padding: '9px 4px', color: '#0E7490', fontWeight: '800' }}>{idx + 1}</td>
+                      <td style={{ padding: '9px 4px', color: '#0F172A', fontWeight: '600', maxWidth: '170px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={v.name}>{v.name}</td>
+                      <td style={{ padding: '9px 8px' }}>
+                        <div style={{ width: '100%', height: '6px', backgroundColor: '#F1F5F9', borderRadius: '999px', overflow: 'hidden' }}>
+                          <div style={{ width: `${Math.max(6, Math.round((v.value / maxVendorVal) * 100))}%`, height: '100%', background: 'linear-gradient(90deg, #0891B2, #0E7490)', borderRadius: '999px' }} />
+                        </div>
+                      </td>
+                      <td style={{ padding: '9px 4px', textAlign: 'right', fontWeight: '800', color: '#0F172A', whiteSpace: 'nowrap' }}>{formatLakhs(v.value)}</td>
+                      <td style={{ padding: '9px 4px', textAlign: 'right', color: '#475569', fontWeight: '700' }}>{v.share.toFixed(1)}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr style={{ backgroundColor: '#F0FDFA', borderTop: '1.5px solid #A5F3FC', fontWeight: '800', color: '#0E7490' }}>
+                    <td colSpan={3} style={{ padding: '9px 6px', borderRadius: '6px 0 0 6px' }}>Top 5 Total</td>
+                    <td style={{ padding: '9px 4px', textAlign: 'right', whiteSpace: 'nowrap' }}>{formatLakhs(analytics.topVendorsTotal)}</td>
+                    <td style={{ padding: '9px 6px', textAlign: 'right', borderRadius: '0 6px 6px 0' }}>{analytics.topVendorsShare.toFixed(1)}%</td>
+                  </tr>
+                </tfoot>
+              </table>
+            )}
+          </div>
+
+          {/* Top 5 products */}
+          <div style={{
+            backgroundColor: '#FFFFFF',
+            border: '1px solid #EAEFEF',
+            borderRadius: '16px',
+            padding: '16px 18px',
+            boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)'
+          }}>
+            <div style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A', marginBottom: '12px' }}>Top 5 Products</div>
+            {analytics.topProducts.length === 0 ? (
+              <div style={{ fontSize: '12px', color: '#94A3B8', padding: '18px 0', textAlign: 'center' }}>No product lines recorded in this period</div>
+            ) : (
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid #E2E8F0', color: '#64748B', fontSize: '10.5px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    <th style={{ textAlign: 'left', padding: '6px 4px', width: '24px' }}>#</th>
+                    <th style={{ textAlign: 'left', padding: '6px 4px' }}>Product</th>
+                    <th style={{ padding: '6px 8px', width: '110px' }}></th>
+                    <th style={{ textAlign: 'right', padding: '6px 4px' }}>PO Value</th>
+                    <th style={{ textAlign: 'right', padding: '6px 4px', width: '54px' }}>Share</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {analytics.topProducts.map((p, idx) => (
+                    <tr
+                      key={p.name}
+                      onClick={() => openListPopup(`Product: ${p.name}`, p.pos)}
+                      style={{ borderBottom: '1px solid #F1F5F9', cursor: 'pointer' }}
+                    >
+                      <td style={{ padding: '9px 4px', color: '#0E7490', fontWeight: '800' }}>{idx + 1}</td>
+                      <td style={{ padding: '9px 4px', color: '#0F172A', fontWeight: '600', maxWidth: '170px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.name}>{p.name}</td>
+                      <td style={{ padding: '9px 8px' }}>
+                        <div style={{ width: '100%', height: '6px', backgroundColor: '#F1F5F9', borderRadius: '999px', overflow: 'hidden' }}>
+                          <div style={{ width: `${Math.max(6, Math.round((p.value / maxProductVal) * 100))}%`, height: '100%', background: 'linear-gradient(90deg, #0891B2, #0E7490)', borderRadius: '999px' }} />
+                        </div>
+                      </td>
+                      <td style={{ padding: '9px 4px', textAlign: 'right', fontWeight: '800', color: '#0F172A', whiteSpace: 'nowrap' }}>{formatLakhs(p.value)}</td>
+                      <td style={{ padding: '9px 4px', textAlign: 'right', color: '#475569', fontWeight: '700' }}>{p.share.toFixed(1)}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr style={{ backgroundColor: '#F0FDFA', borderTop: '1.5px solid #A5F3FC', fontWeight: '800', color: '#0E7490' }}>
+                    <td colSpan={3} style={{ padding: '9px 6px', borderRadius: '6px 0 0 6px' }}>Top 5 Total</td>
+                    <td style={{ padding: '9px 4px', textAlign: 'right', whiteSpace: 'nowrap' }}>{formatLakhs(analytics.topProductsTotal)}</td>
+                    <td style={{ padding: '9px 6px', textAlign: 'right', borderRadius: '0 6px 6px 0' }}>{analytics.topProductsShare.toFixed(1)}%</td>
+                  </tr>
+                </tfoot>
+              </table>
+            )}
           </div>
         </div>
-      </div>
+      </BusinzSectionCard>
 
-      {/* ROW 2: TOP 5 VENDORS BY PO VALUE + PO AGEING SUMMARY */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '16px' }}>
-        {/* 3. TOP 5 VENDORS BY PO VALUE */}
-        <div style={cardStyle}>
-          <div style={cardHeaderStyle}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={cardTitleStyle}>Top 5 Vendors by PO Value</span>
-              <span style={{
-                fontSize: '10px', fontWeight: '800', color: '#0E7490',
-                backgroundColor: '#ECFEFF', border: '1px solid #A5F3FC',
-                padding: '2px 8px', borderRadius: '999px'
-              }}>
-                {analytics.top5Vendors.length} Vendors
-              </span>
-            </div>
-          </div>
-          <div style={{ overflowX: 'auto', maxHeight: '260px', overflowY: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', textAlign: 'left' }}>
-              <thead>
-                <tr style={{ backgroundColor: '#F8FAFC', color: '#64748B', borderBottom: '1px solid #E2E8F0' }}>
-                  <th style={{ padding: '7px 8px' }}>Vendor Name</th>
-                  <th style={{ padding: '7px 8px', textAlign: 'right' }}>PO Value</th>
-                  <th style={{ padding: '7px 8px', textAlign: 'right' }}>% Share</th>
-                  <th style={{ padding: '7px 8px', textAlign: 'right' }}>On-Time %</th>
-                  <th style={{ padding: '7px 8px', textAlign: 'center' }}>POs</th>
-                </tr>
-              </thead>
-              <tbody>
-                {analytics.top5Vendors.length > 0 ? analytics.top5Vendors.map((v, idx) => (
-                  <tr
-                    key={idx}
-                    onClick={() => {
-                      setPopupSearch('');
-                      setPoPopup({ title: `Vendor POs: ${v.vendor}`, color: '#0E7490', orders: v.orders });
+      {/* DRILL-DOWN PO LIST MODAL */}
+      {poPopup && (
+        <div
+          onClick={() => setPoPopup(null)}
+          style={{
+            position: 'fixed', inset: 0, backgroundColor: 'rgba(15, 23, 42, 0.45)',
+            zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px'
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              backgroundColor: '#FFFFFF', borderRadius: '16px', width: '100%', maxWidth: '820px',
+              maxHeight: '82vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 50px rgba(0,0,0,0.2)', overflow: 'hidden'
+            }}
+          >
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+              <div>
+                <h4 style={{ margin: 0, fontSize: '15px', fontWeight: '800', color: '#0F172A' }}>{poPopup.title}</h4>
+                <span style={{ fontSize: '12px', color: '#64748B' }}>{filteredPopupList.length} purchase order(s)</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {onNavigateTab && (
+                  <button
+                    type="button"
+                    onClick={() => { setPoPopup(null); onNavigateTab('Purchase Orders'); }}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '6px 12px',
+                      borderRadius: '8px', border: '1px solid #0E7490', backgroundColor: '#ECFEFF',
+                      color: '#0E7490', fontSize: '12px', fontWeight: '800', cursor: 'pointer'
                     }}
-                    style={{ borderBottom: '1px solid #F1F5F9', cursor: 'pointer' }}
                   >
-                    <td style={{ padding: '6px 8px', fontWeight: '700', color: '#0E7490', textDecoration: 'underline' }}>{v.vendor}</td>
-                    <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: '800', color: '#0F172A', whiteSpace: 'nowrap' }}>{formatINRCompact(v.value)}</td>
-                    <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: '700', color: '#475569' }}>{v.pct}%</td>
-                    <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: '800', color: Number(v.onTimePct) >= 90 ? '#059669' : '#D97706' }}>{v.onTimePct}%</td>
-                    <td style={{ padding: '6px 8px', textAlign: 'center', fontWeight: '700', color: '#334155' }}>{v.count}</td>
-                  </tr>
-                )) : (
-                  <tr>
-                    <td colSpan={5} style={{ padding: '18px', textAlign: 'center', color: '#64748B' }}>
-                      No vendor PO records found.
-                    </td>
-                  </tr>
+                    <ExternalLink size={13} /> Open POs
+                  </button>
                 )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* 4. PO AGEING SUMMARY */}
-        <div style={cardStyle}>
-          <div style={cardHeaderStyle}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-              <span style={cardTitleStyle}>PO Ageing Summary (By Value)</span>
-              <span style={{
-                fontSize: '10px', fontWeight: '800',
-                color: above60Val > 0 ? '#DC2626' : '#0E7490',
-                backgroundColor: above60Val > 0 ? '#FEF2F2' : '#ECFEFF',
-                border: `1px solid ${above60Val > 0 ? '#FECACA' : '#A5F3FC'}`,
-                padding: '2px 8px', borderRadius: '999px'
-              }}>
-                {above60Val > 0 ? `60d+ Open: ${formatINRCompact(above60Val)}` : `${analytics.ageingPool.length} Open POs (Awaiting GRN)`}
-              </span>
-            </div>
-          </div>
-
-          <div style={summaryStripStyle}>
-            <div>
-              <div style={{ fontSize: '9.5px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>Fresh (0–7d)</div>
-              <div style={{ fontSize: '14px', fontWeight: '900', color: '#059669' }}>{formatINRCompact(freshAgeVal)}</div>
-            </div>
-            <div>
-              <div style={{ fontSize: '9.5px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>Mid (8–30d)</div>
-              <div style={{ fontSize: '14px', fontWeight: '900', color: '#0E7490' }}>{formatINRCompact(midAgeVal)}</div>
-            </div>
-            <div>
-              <div style={{ fontSize: '9.5px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>Aged (&gt;30d)</div>
-              <div style={{ fontSize: '14px', fontWeight: '900', color: oldAgeVal > 0 ? '#DC2626' : '#0F172A' }}>{formatINRCompact(oldAgeVal)}</div>
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '9px' }}>
-            {analytics.ageingBrackets.map((ag, idx) => {
-              const canOpen = ag.orders.length > 0;
-              return (
                 <button
-                  key={idx}
                   type="button"
-                  disabled={!canOpen}
-                  onClick={() => {
-                    if (!canOpen) return;
-                    setPopupSearch('');
-                    setPoPopup({ title: `PO Ageing: ${ag.label}`, color: ag.color, orders: ag.orders });
-                  }}
-                  style={{
-                    border: 'none', background: 'none', padding: '2px 0', width: '100%', textAlign: 'left',
-                    display: 'flex', flexDirection: 'column', gap: '4px', cursor: canOpen ? 'pointer' : 'default'
-                  }}
+                  onClick={() => setPoPopup(null)}
+                  style={{ border: 'none', background: '#F1F5F9', borderRadius: '8px', padding: '6px', cursor: 'pointer', color: '#475569' }}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11.5px', gap: '8px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
-                      <span style={{ width: '9px', height: '9px', borderRadius: '3px', backgroundColor: ag.color, flexShrink: 0 }} />
-                      <span style={{ fontWeight: '700', color: '#334155' }}>{ag.label}</span>
-                      <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748B' }}>({ag.count} {ag.count === 1 ? 'PO' : 'POs'})</span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span style={{ fontWeight: '800', color: '#0F172A' }}>{formatINRCompact(ag.value)}</span>
-                      <span style={{
-                        fontSize: '10px', fontWeight: '800', color: ag.color,
-                        backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0',
-                        padding: '1px 6px', borderRadius: '6px'
-                      }}>
-                        {ag.pct}%
-                      </span>
-                    </div>
-                  </div>
-                  <div style={{ width: '100%', height: '6px', backgroundColor: '#F1F5F9', borderRadius: '999px', overflow: 'hidden' }}>
-                    <div style={{ width: `${Math.min(100, Number(ag.pct))}%`, height: '100%', backgroundColor: ag.color, borderRadius: '999px' }} />
-                  </div>
+                  <X size={16} />
                 </button>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* ROW 3: MATERIAL CATEGORY WISE PURCHASE + RECENTLY RAISED POS */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '16px' }}>
-        {/* 5. MATERIAL CATEGORY WISE PURCHASE */}
-        <div style={cardStyle}>
-          <div style={cardHeaderStyle}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-              <span style={cardTitleStyle}>Material Category Wise Purchase</span>
-              <span style={{
-                fontSize: '10px', fontWeight: '800', color: '#0E7490',
-                backgroundColor: '#ECFEFF', border: '1px solid #A5F3FC',
-                padding: '2px 8px', borderRadius: '999px'
-              }}>
-                {analytics.categorySegments.length} Categories
-              </span>
-            </div>
-          </div>
-
-          <div style={summaryStripStyle}>
-            <div>
-              <div style={{ fontSize: '9.5px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>Total Purchase</div>
-              <div style={{ fontSize: '14px', fontWeight: '900', color: '#0F172A' }}>{formatINRCompact(analytics.totalValue)}</div>
-            </div>
-            <div>
-              <div style={{ fontSize: '9.5px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>Top Category</div>
-              <div style={{ fontSize: '13px', fontWeight: '900', color: '#059669', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {([...analytics.categorySegments].filter(c => c.value > 0).sort((a, b) => b.value - a.value)[0]?.name) || '—'}
               </div>
             </div>
-            <div>
-              <div style={{ fontSize: '9.5px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>Avg PO Value</div>
-              <div style={{ fontSize: '14px', fontWeight: '900', color: '#0E7490' }}>
-                {formatINRCompact(analytics.totalPOs > 0 ? analytics.totalValue / analytics.totalPOs : 0)}
-              </div>
-            </div>
-          </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '18px', flex: 1, minHeight: '142px' }}>
-            <DonutChartSvg
-              segments={analytics.categorySegments}
-              centerLabel={activeCatSeg ? formatINRCompact(activeCatSeg.value) : formatINRCompact(analytics.totalValue)}
-              centerSub={activeCatSeg ? `${activeCatSeg.pct}% Share` : 'Total Purchase'}
-              activeName={selectedCat}
-              onSelectSegment={(name) => {
-                const seg = analytics.categorySegments.find(c => c.name === name);
-                if (!seg || seg.orders.length === 0) return;
-                setSelectedCat(name);
-                setPopupSearch('');
-                setPoPopup({ title: `Category: ${seg.name}`, color: seg.color, orders: seg.orders });
-              }}
-            />
-            <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '6px', justifyContent: 'center' }}>
-              {analytics.categorySegments.length > 0 ? analytics.categorySegments.map((c, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  disabled={c.orders.length === 0}
-                  onClick={() => {
-                    if (c.orders.length === 0) return;
-                    setSelectedCat(c.name);
-                    setPopupSearch('');
-                    setPoPopup({ title: `Category: ${c.name}`, color: c.color, orders: c.orders });
-                  }}
-                  style={{
-                    display: 'flex', flexDirection: 'column', gap: '4px',
-                    width: '100%', textAlign: 'left', padding: '6px 8px',
-                    borderRadius: '10px',
-                    border: selectedCat === c.name ? `1.5px solid ${c.color}` : '1px solid transparent',
-                    backgroundColor: selectedCat === c.name ? '#F8FAFC' : 'transparent',
-                    cursor: c.orders.length > 0 ? 'pointer' : 'default',
-                    transition: 'background-color 0.15s ease, border-color 0.15s ease'
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', gap: '8px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '7px', minWidth: 0 }}>
-                      <span style={{ width: '10px', height: '10px', borderRadius: '3px', backgroundColor: c.color, flexShrink: 0 }} />
-                      <span style={{ fontWeight: '700', color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</span>
-                      <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', whiteSpace: 'nowrap' }}>({c.count})</span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
-                      <span style={{ fontWeight: '800', color: '#0F172A', fontSize: '12px' }}>{formatINRCompact(c.value)}</span>
-                      <span style={{ fontSize: '10px', fontWeight: '800', color: c.color, backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', padding: '1px 6px', borderRadius: '6px' }}>
-                        {c.pct}%
-                      </span>
-                    </div>
-                  </div>
-                  <div style={{ width: '100%', height: '5px', backgroundColor: '#F1F5F9', borderRadius: '999px', overflow: 'hidden' }}>
-                    <div style={{ width: `${c.value > 0 ? Math.min(100, Math.max(2, Number(c.pct))) : 0}%`, height: '100%', backgroundColor: c.color, borderRadius: '999px' }} />
-                  </div>
-                </button>
-              )) : (
-                <span style={{ fontSize: '12px', color: '#64748B' }}>No purchase category data available</span>
+            <div style={{ padding: '10px 20px', borderBottom: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Search size={14} color="#94A3B8" />
+              <input
+                type="text"
+                value={popupSearch}
+                onChange={(e) => setPopupSearch(e.target.value)}
+                placeholder="Search PO number, vendor, or status..."
+                style={{ border: 'none', outline: 'none', width: '100%', fontSize: '13px', color: '#0F172A' }}
+              />
+            </div>
+
+            <div style={{ overflowY: 'auto', padding: '8px 20px 18px 20px' }}>
+              {filteredPopupList.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '28px', color: '#94A3B8', fontSize: '13px' }}>No matching purchase orders found.</div>
+              ) : (
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid #E2E8F0', color: '#64748B', fontSize: '11px', textTransform: 'uppercase' }}>
+                      <th style={{ textAlign: 'left', padding: '8px 6px' }}>PO No</th>
+                      <th style={{ textAlign: 'left', padding: '8px 6px' }}>Vendor</th>
+                      <th style={{ textAlign: 'left', padding: '8px 6px' }}>Date</th>
+                      <th style={{ textAlign: 'right', padding: '8px 6px' }}>Value (Excl. GST)</th>
+                      <th style={{ textAlign: 'left', padding: '8px 6px' }}>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredPopupList.map((po) => (
+                      <tr key={po.poNo} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                        <td style={{ padding: '9px 6px', fontWeight: '700', color: '#0E7490' }}>{po.poNo}</td>
+                        <td style={{ padding: '9px 6px', color: '#0F172A', fontWeight: '600' }}>{po.vendor}</td>
+                        <td style={{ padding: '9px 6px', color: '#64748B' }}>{formatShortDate(po.rawDate)}</td>
+                        <td style={{ padding: '9px 6px', textAlign: 'right', fontWeight: '700', color: '#0F172A' }}>{formatLakhs(po.exclGstValue)}</td>
+                        <td style={{ padding: '9px 6px', color: '#475569' }}>{po.rawStatus}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               )}
             </div>
           </div>
         </div>
-
-        {/* 6. RECENTLY RAISED POS */}
-        <div style={cardStyle}>
-          <div style={cardHeaderStyle}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={cardTitleStyle}>Recently Raised POs</span>
-              <span style={{
-                fontSize: '10px', fontWeight: '800', color: '#0E7490',
-                backgroundColor: '#ECFEFF', border: '1px solid #A5F3FC',
-                padding: '2px 8px', borderRadius: '999px'
-              }}>
-                Latest {analytics.recentlyRaised.length}
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={() => onNavigateTab && onNavigateTab('Purchase Orders')}
-              style={{ border: 'none', background: 'none', color: '#0E7490', fontSize: '11px', fontWeight: '700', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
-            >
-              View All <ArrowRight size={11} />
-            </button>
-          </div>
-          <div style={{ overflowX: 'auto', maxHeight: '260px', overflowY: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', textAlign: 'left' }}>
-              <thead>
-                <tr style={{ backgroundColor: '#F8FAFC', color: '#64748B', borderBottom: '1px solid #E2E8F0' }}>
-                  <th style={{ padding: '7px 8px' }}>PO No.</th>
-                  <th style={{ padding: '7px 8px' }}>Vendor Name</th>
-                  <th style={{ padding: '7px 8px' }}>Date</th>
-                  <th style={{ padding: '7px 8px', textAlign: 'right' }}>Value</th>
-                  <th style={{ padding: '7px 8px' }}>Status</th>
-                  <th style={{ padding: '7px 8px' }}>Delivery Date</th>
-                </tr>
-              </thead>
-              <tbody>
-                {analytics.recentlyRaised.length > 0 ? analytics.recentlyRaised.map((po, idx) => {
-                  const badge = statusBadgeStyle(po.statusGroup);
-                  return (
-                    <tr
-                      key={idx}
-                      onClick={() => setDetailPo(po)}
-                      style={{ borderBottom: '1px solid #F1F5F9', cursor: 'pointer' }}
-                    >
-                      <td style={{ padding: '6px 8px', fontWeight: '800', color: '#0E7490', whiteSpace: 'nowrap', textDecoration: 'underline' }}>{po.poNo}</td>
-                      <td style={{ padding: '6px 8px', fontWeight: '600', color: '#0F172A' }}>{po.vendor}</td>
-                      <td style={{ padding: '6px 8px', color: '#475569', whiteSpace: 'nowrap' }}>{formatShortDate(po.rawDate)}</td>
-                      <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: '800', color: '#0F172A', whiteSpace: 'nowrap' }}>{formatINRCompact(po.value)}</td>
-                      <td style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}>
-                        <span style={{
-                          fontSize: '10px', fontWeight: '800',
-                          color: badge.color, backgroundColor: badge.bg, border: `1px solid ${badge.border}`,
-                          padding: '2px 7px', borderRadius: '999px'
-                        }}>
-                          {po.statusGroup}
-                        </span>
-                      </td>
-                      <td style={{ padding: '6px 8px', color: '#475569', whiteSpace: 'nowrap' }}>{formatShortDate(po.rawDel)}</td>
-                    </tr>
-                  );
-                }) : (
-                  <tr>
-                    <td colSpan={6} style={{ padding: '18px', textAlign: 'center', color: '#64748B' }}>
-                      No purchase orders raised yet.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
-      {/* ROW 4: OVERDUE POS + KEY ALERTS */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '16px' }}>
-        {/* 7. OVERDUE POS */}
-        <div style={cardStyle}>
-          <div style={cardHeaderStyle}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={cardTitleStyle}>Overdue POs</span>
-              <span style={{
-                fontSize: '10px', fontWeight: '800',
-                color: analytics.overduePOs.length > 0 ? '#DC2626' : '#059669',
-                backgroundColor: analytics.overduePOs.length > 0 ? '#FEF2F2' : '#ECFDF5',
-                border: `1px solid ${analytics.overduePOs.length > 0 ? '#FECACA' : '#A7F3D0'}`,
-                padding: '2px 8px', borderRadius: '999px'
-              }}>
-                {analytics.overduePOs.length} Overdue
-              </span>
-            </div>
-          </div>
-          <div style={{ overflowX: 'auto', maxHeight: '260px', overflowY: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', textAlign: 'left' }}>
-              <thead>
-                <tr style={{ backgroundColor: '#F8FAFC', color: '#64748B', borderBottom: '1px solid #E2E8F0' }}>
-                  <th style={{ padding: '7px 8px' }}>PO No.</th>
-                  <th style={{ padding: '7px 8px' }}>Vendor Name</th>
-                  <th style={{ padding: '7px 8px' }}>PO Date</th>
-                  <th style={{ padding: '7px 8px', textAlign: 'right' }}>Value</th>
-                  <th style={{ padding: '7px 8px', textAlign: 'center' }}>Delay (Days)</th>
-                  <th style={{ padding: '7px 8px' }}>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {analytics.overduePOs.length > 0 ? analytics.overduePOs.map((po, idx) => (
-                  <tr
-                    key={idx}
-                    onClick={() => setDetailPo(po)}
-                    style={{ borderBottom: '1px solid #F1F5F9', cursor: 'pointer' }}
-                  >
-                    <td style={{ padding: '6px 8px', fontWeight: '800', color: '#0E7490', whiteSpace: 'nowrap', textDecoration: 'underline' }}>{po.poNo}</td>
-                    <td style={{ padding: '6px 8px', fontWeight: '600', color: '#0F172A' }}>{po.vendor}</td>
-                    <td style={{ padding: '6px 8px', color: '#475569', whiteSpace: 'nowrap' }}>{formatShortDate(po.rawDate)}</td>
-                    <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: '800', color: '#0F172A', whiteSpace: 'nowrap' }}>{formatINRCompact(po.value)}</td>
-                    <td style={{ padding: '6px 8px', textAlign: 'center', fontWeight: '800', color: '#DC2626', whiteSpace: 'nowrap' }}>{po.delayDays}d</td>
-                    <td style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}>
-                      <span style={{
-                        fontSize: '10px', fontWeight: '800', color: '#DC2626',
-                        backgroundColor: '#FEF2F2', border: '1px solid #FECACA',
-                        padding: '2px 7px', borderRadius: '999px'
-                      }}>
-                        Overdue
-                      </span>
-                    </td>
-                  </tr>
-                )) : (
-                  <tr>
-                    <td colSpan={6} style={{ padding: '18px', textAlign: 'center', color: '#059669', fontWeight: '700' }}>
-                      No overdue purchase orders — all deliveries on track.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* 8. KEY ALERTS */}
-        <div style={cardStyle}>
-          <div style={cardHeaderStyle}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={cardTitleStyle}>Key Alerts</span>
-              <span style={{
-                fontSize: '10px', fontWeight: '800', color: '#DC2626',
-                backgroundColor: '#FEF2F2', border: '1px solid #FECACA',
-                padding: '2px 8px', borderRadius: '999px'
-              }}>
-                {analytics.keyAlerts.filter(a => a.color === '#DC2626' || a.color === '#D97706').length} Active
-              </span>
-            </div>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1, justifyContent: 'center' }}>
-            {analytics.keyAlerts.map((al, idx) => {
-              const IconComp = al.icon;
-              const canClick = al.orders.length > 0 || Boolean(al.navigateTab && onNavigateTab);
-              return (
-                <button
-                  key={idx}
-                  type="button"
-                  disabled={!canClick}
-                  onClick={() => {
-                    if (al.orders.length > 0) {
-                      setPopupSearch('');
-                      setPoPopup({ title: `Alert: ${al.title}`, color: al.color, orders: al.orders });
-                    } else if (al.navigateTab && onNavigateTab) {
-                      onNavigateTab(al.navigateTab);
-                    }
-                  }}
-                  style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    gap: '10px', width: '100%', textAlign: 'left',
-                    padding: '10px 12px', borderRadius: '10px',
-                    backgroundColor: al.bg, border: `1px solid ${al.border}`,
-                    cursor: canClick ? 'pointer' : 'default'
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
-                    <IconComp size={15} color={al.color} style={{ flexShrink: 0 }} />
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: '12px', fontWeight: '800', color: '#0F172A' }}>{al.title}</div>
-                      <div style={{ fontSize: '10.5px', fontWeight: '600', color: '#64748B' }}>{al.sub}</div>
-                    </div>
-                  </div>
-                  <span style={{
-                    fontSize: '10.5px', fontWeight: '800', color: al.color,
-                    backgroundColor: '#FFFFFF', border: `1px solid ${al.border}`,
-                    padding: '2px 8px', borderRadius: '999px', whiteSpace: 'nowrap'
-                  }}>
-                    {al.badge}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* DRILLDOWN PO POPUP MODAL */}
-      {poPopup && (() => {
-        const q = popupSearch.trim().toLowerCase();
-        const filtered = (poPopup.orders || []).filter(o =>
-          !q ||
-          String(o.poNo || '').toLowerCase().includes(q) ||
-          String(o.vendor || '').toLowerCase().includes(q) ||
-          String(o.category || '').toLowerCase().includes(q)
-        );
-        return (
-          <div
-            onClick={closePoPopup}
-            style={{
-              position: 'fixed', inset: 0, backgroundColor: 'rgba(15, 23, 42, 0.6)',
-              backdropFilter: 'blur(3px)', zIndex: 99999,
-              display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px'
-            }}
-          >
-            <div
-              onClick={(e) => e.stopPropagation()}
-              style={{
-                backgroundColor: '#FFFFFF', borderRadius: '18px', width: '780px', maxWidth: '100%',
-                maxHeight: '84vh', display: 'flex', flexDirection: 'column',
-                boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.35)', border: '1px solid #E2E8F0', overflow: 'hidden'
-              }}
-            >
-              <div style={{
-                padding: '14px 20px', borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC',
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
-                  <span style={{ width: '12px', height: '12px', borderRadius: '4px', backgroundColor: poPopup.color, flexShrink: 0 }} />
-                  <span style={{ fontSize: '14px', fontWeight: '800', color: '#0F172A' }}>{poPopup.title}</span>
-                  <span style={{
-                    fontSize: '10.5px', fontWeight: '800', color: '#0E7490',
-                    backgroundColor: '#ECFEFF', border: '1px solid #A5F3FC', padding: '2px 8px', borderRadius: '999px'
-                  }}>
-                    {filtered.length} PO{filtered.length === 1 ? '' : 's'}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={closePoPopup}
-                  style={{ border: '1px solid #E2E8F0', backgroundColor: '#FFFFFF', borderRadius: '8px', padding: '5px', cursor: 'pointer', display: 'flex', color: '#475569' }}
-                >
-                  <X size={16} />
-                </button>
-              </div>
-
-              <div style={{ padding: '10px 20px', borderBottom: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Search size={14} color="#64748B" />
-                <input
-                  type="text"
-                  value={popupSearch}
-                  onChange={(e) => setPopupSearch(e.target.value)}
-                  placeholder="Search PO number, vendor, or category..."
-                  style={{
-                    flex: 1, border: '1px solid #CBD5E1', borderRadius: '8px',
-                    padding: '6px 10px', fontSize: '12px', outline: 'none'
-                  }}
-                />
-              </div>
-
-              <div style={{ overflowY: 'auto', padding: '12px 20px', flex: 1 }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11.5px', textAlign: 'left' }}>
-                  <thead>
-                    <tr style={{ backgroundColor: '#F8FAFC', color: '#64748B', borderBottom: '1px solid #E2E8F0' }}>
-                      <th style={{ padding: '8px' }}>PO No.</th>
-                      <th style={{ padding: '8px' }}>Vendor</th>
-                      <th style={{ padding: '8px' }}>Category</th>
-                      <th style={{ padding: '8px' }}>PO Date</th>
-                      <th style={{ padding: '8px', textAlign: 'right' }}>Value</th>
-                      <th style={{ padding: '8px' }}>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filtered.length > 0 ? filtered.map((o, idx) => (
-                      <tr
-                        key={idx}
-                        onClick={() => setDetailPo(o)}
-                        style={{ borderBottom: '1px solid #F1F5F9', cursor: 'pointer' }}
-                      >
-                        <td style={{ padding: '8px', fontWeight: '800', color: '#0E7490', whiteSpace: 'nowrap', textDecoration: 'underline' }}>{o.poNo}</td>
-                        <td style={{ padding: '8px', fontWeight: '700', color: '#0F172A' }}>{o.vendor}</td>
-                        <td style={{ padding: '8px', color: '#475569' }}>{o.category}</td>
-                        <td style={{ padding: '8px', color: '#475569', whiteSpace: 'nowrap' }}>{formatShortDate(o.rawDate)}</td>
-                        <td style={{ padding: '8px', textAlign: 'right', fontWeight: '800', color: '#0F172A', whiteSpace: 'nowrap' }}>{formatINRCompact(o.value)}</td>
-                        <td style={{ padding: '8px', fontWeight: '700', color: o.delayDays > 0 ? '#DC2626' : '#059669' }}>
-                          {o.delayDays > 0 ? `${o.statusGroup} (${o.delayDays}d late)` : o.statusGroup}
-                        </td>
-                      </tr>
-                    )) : (
-                      <tr>
-                        <td colSpan={6} style={{ padding: '24px', textAlign: 'center', color: '#64748B' }}>
-                          <Package size={18} style={{ display: 'inline', marginBottom: '4px' }} /> No matching purchase orders.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* FULL PO DETAIL PAGE POPUP (Matches PurchaseOrdersView Read-Only Document Layout) */}
-      {detailPo && (() => {
-        const raw = detailPo.rawPo || {};
-        const items = (Array.isArray(raw.items) && raw.items.length > 0)
-          ? raw.items
-          : (Array.isArray(raw.line_items) ? raw.line_items : []);
-        const st = String(detailPo.rawStatus || '').trim();
-        const stLower = st.toLowerCase();
-        const isExplicitPartial = stLower.includes('partial') || String(raw.statusType || '').toLowerCase() === 'partially_received';
-        const badge = statusBadgeStyle(isExplicitPartial ? 'Partially Received' : detailPo.statusGroup);
-        const poDateStr = detailPo.rawDate ? formatShortDate(detailPo.rawDate) : '—';
-        const delDateStr = detailPo.rawDel ? formatShortDate(detailPo.rawDel) : '—';
-        const priority = raw.priority || 'Medium';
-        const paymentTerms = raw.paymentTerms === 'Advance'
-          ? `Advance (${raw.advancePaidPct || 40}% Paid / ${Math.max(0, 100 - Number(raw.advancePaidPct || 40))}% Pending)`
-          : (raw.paymentTerms || 'Immediate');
-        const purchaser = raw.purchaser || raw.createdBy || raw.issuedBy || 'Procurement Team';
-        const companyName = raw.companyName || raw.companyLocation || raw.branch || 'VRM Structures India Pvt Ltd';
-        const deliveryCompanyName = raw.deliveryCompanyName || companyName;
-        const deliveryAddress = raw.deliveryAddress || raw.delivery_address || '—';
-
-        const fmtStageStamp = (isoOrStr, fallbackDate, fallbackTime) => {
-          if (isoOrStr) {
-            const parsed = new Date(isoOrStr);
-            if (!Number.isNaN(parsed.getTime()) && String(isoOrStr).includes('T')) {
-              const dStr = parsed.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' });
-              const tStr = parsed.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' });
-              return `${dStr}, ${tStr}`;
-            }
-          }
-          if (fallbackDate && fallbackTime) return `${fallbackDate}, ${fallbackTime}`;
-          return fallbackDate || (isoOrStr ? String(isoOrStr) : '');
-        };
-
-        const normPoKey = (s) => String(s || '').replace(/[/_\-\s]/g, '').toLowerCase();
-        const detailPoKey = normPoKey(detailPo.poNo || raw.id);
-        const grnDedupMap = new Map();
-        const addGrnCandidate = (g, preferOverwrite, fallbackKey) => {
-          if (!g) return;
-          const k = normPoKey(g?.grnNo || g?.grnNumber || g?.id) || fallbackKey;
-          const existing = grnDedupMap.get(k);
-          if (!existing || preferOverwrite) {
-            const mergedItems = (Array.isArray(g.items) && g.items.length > 0)
-              ? g.items
-              : (existing?.items || []);
-            grnDedupMap.set(k, { ...(existing || {}), ...g, items: mergedItems });
-          }
-        };
-        (Array.isArray(raw.grnHistory) ? raw.grnHistory : []).forEach((g, idx) => {
-          addGrnCandidate(g, false, `hist_${idx}`);
-        });
-        (Array.isArray(grnList) ? grnList : [])
-          .filter(g => {
-            const gk = normPoKey(g?.poNumber || g?.poNo || g?.poRef || g?.poId);
-            return detailPoKey && gk === detailPoKey;
-          })
-          .forEach((g, idx) => {
-            addGrnCandidate(g, true, `live_${idx}`);
-          });
-        const matchedGrns = Array.from(grnDedupMap.values()).sort((a, b) => {
-          const ta = new Date(a?.createdAt || a?.created_at || a?.grnDate || a?.receiptDate || a?.date || 0).getTime() || 0;
-          const tb = new Date(b?.createdAt || b?.created_at || b?.grnDate || b?.receiptDate || b?.date || 0).getTime() || 0;
-          return ta - tb;
-        });
-        const firstGrn = matchedGrns[0] || null;
-        const lastGrn = matchedGrns[matchedGrns.length - 1] || null;
-
-        const poOrderedTotal = Number(raw.totalOrderedQty) || items.reduce((s, it) => s + parseAmount(it.qty ?? it.quantity ?? it.orderedQty ?? 0), 0);
-        const summedFromGrns = matchedGrns.reduce((s, g) => {
-          if (Array.isArray(g.items) && g.items.length > 0) {
-            return s + g.items.reduce((si, it) => si + (Number(it.accepted ?? it.now ?? 0) || 0), 0);
-          }
-          return s + (Number(g.acceptedQty ?? g.receivedQty ?? 0) || 0);
-        }, 0);
-        const totalRec = summedFromGrns > 0 ? summedFromGrns : Number(raw.totalReceivedQty || raw.totalReceived || 0);
-        const poRemainingTotal = Math.max(0, poOrderedTotal - totalRec);
-        const grnCount = Number(raw.grnCount || matchedGrns.length || 0);
-        const isClosed = !isExplicitPartial && (detailPo.statusGroup === 'Fully Received' || stLower.includes('closed') || stLower.includes('fully received'));
-        const recvPct = poOrderedTotal > 0 ? Math.min(100, Math.round((totalRec / poOrderedTotal) * 100)) : (isClosed ? 100 : 0);
-        const isPartial = detailPo.statusGroup === 'Partially Received' || isExplicitPartial || totalRec > 0 || grnCount > 0;
-        const isProceed = detailPo.statusGroup === 'GRN Pending' || stLower.includes('proceed') || stLower.includes('pending grn') || !!raw.proceedDetails || isPartial || isClosed;
-        const isPaymentDone = stLower.includes('payment processed') || !!raw.paymentDetails || isProceed;
-        const isMdApproved = detailPo.statusGroup === 'Payment Pending' || stLower.includes('md approved') || stLower === 'open' || isPaymentDone;
-        const isPending = (detailPo.statusGroup === 'Pending CEO Approval' || stLower.includes('pending') || stLower.includes('waiting')) && !isMdApproved;
-
-        let currentStepIndex = 0;
-        if (isClosed) currentStepIndex = 5;
-        else if (isPartial || isProceed) currentStepIndex = 4;
-        else if (isPaymentDone) currentStepIndex = 3;
-        else if (isMdApproved) currentStepIndex = 2;
-        else if (isPending) currentStepIndex = 1;
-
-        const steps = [
-          { label: '1. PO Created', timestamp: fmtStageStamp(raw.createdAt || raw.created_at, raw.poDate || raw.date, raw.createdTime) },
-          { label: '2. MD Approval', timestamp: isMdApproved ? fmtStageStamp(raw.approvedAt || raw.approved_at, raw.approvedDate || raw.approvalDate, raw.approvedTime || raw.approvalTime) : '' },
-          { label: '3. Payment Process', timestamp: isPaymentDone ? fmtStageStamp(raw.paymentDetails?.paidAt || raw.paymentDetails?.createdAt || raw.paymentDetails?.timestamp, raw.paymentDetails?.date, raw.paymentDetails?.time) : '' },
-          { label: '4. Proceed PO', timestamp: isProceed ? fmtStageStamp(raw.proceedDetails?.proceededAt || raw.proceedDetails?.emailSentAt || raw.proceedDetails?.createdAt, raw.proceedDetails?.date, raw.proceedDetails?.time) : '' },
-          { label: '5. GRN Process', timestamp: (isPartial || isClosed) ? fmtStageStamp(firstGrn?.createdAt || firstGrn?.created_at || raw.firstGrnAt || raw.lastGrnAt || raw.updatedAt, firstGrn?.grnDate || firstGrn?.receiptDate || firstGrn?.date, firstGrn?.time) : '' },
-          { label: '6. GRN Completed', timestamp: isClosed ? fmtStageStamp(lastGrn?.completedAt || lastGrn?.createdAt || lastGrn?.created_at || raw.closedAt || raw.lastGrnAt || raw.updatedAt, lastGrn?.grnDate || lastGrn?.receiptDate || lastGrn?.date, lastGrn?.time) : '' }
-        ].map((step, idx) => ({
-          ...step,
-          done: idx < currentStepIndex || (currentStepIndex === 5 && idx === 5),
-          current: idx === currentStepIndex && currentStepIndex !== 5,
-          finalDone: currentStepIndex === 5 && idx === 5
-        }));
-
-        const grandTotal = detailPo.value || parseAmount(raw.grandTotal ?? raw.total ?? 0);
-
-        return (
-          <div
-            onClick={() => setDetailPo(null)}
-            style={{
-              position: 'fixed', inset: 0, backgroundColor: 'rgba(15, 23, 42, 0.65)',
-              backdropFilter: 'blur(3px)', zIndex: 100000,
-              display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px'
-            }}
-          >
-            <div
-              onClick={(e) => e.stopPropagation()}
-              style={{
-                backgroundColor: '#F8FAFC', borderRadius: '18px', width: '940px', maxWidth: '100%',
-                maxHeight: '90vh', display: 'flex', flexDirection: 'column',
-                boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.4)', border: '1px solid #E2E8F0', overflow: 'hidden'
-              }}
-            >
-              {/* Modal Top Bar */}
-              <div style={{
-                padding: '14px 20px', borderBottom: '1px solid #E2E8F0', backgroundColor: '#FFFFFF',
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
-                  <div style={{
-                    width: '36px', height: '36px', borderRadius: '10px', backgroundColor: '#ECFEFF',
-                    border: '1px solid #A5F3FC', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
-                  }}>
-                    <FileText size={18} color="#0E7490" />
-                  </div>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: '15px', fontWeight: '800', color: '#0F172A' }}>
-                        Purchase Order: {detailPo.poNo}
-                      </span>
-                      <span style={{
-                        fontSize: '10.5px', fontWeight: '800', color: badge.color,
-                        backgroundColor: badge.bg, border: `1px solid ${badge.border}`,
-                        padding: '2px 9px', borderRadius: '999px'
-                      }}>
-                        {detailPo.rawStatus}
-                      </span>
-                    </div>
-                    <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px' }}>
-                      Vendor: <strong style={{ color: '#0F172A' }}>{detailPo.vendor}</strong> • PO Date: {poDateStr}
-                    </div>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setDetailPo(null)}
-                  style={{ border: '1px solid #E2E8F0', backgroundColor: '#FFFFFF', borderRadius: '8px', padding: '6px', cursor: 'pointer', display: 'flex', color: '#475569' }}
-                >
-                  <X size={16} />
-                </button>
-              </div>
-
-              {/* Modal Body */}
-              <div style={{ overflowY: 'auto', padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
-                {/* PO Lifecycle & Workflow History */}
-                <div style={{ padding: '18px 20px', borderRadius: '12px', backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <strong style={{ fontSize: '12.5px', color: '#1E293B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                      PO Lifecycle &amp; Workflow History
-                    </strong>
-                    <span style={{ fontSize: '11px', color: '#64748B', fontWeight: '600' }}>PO Ref: {detailPo.poNo}</span>
-                  </div>
-
-                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', position: 'relative', padding: '8px 0' }}>
-                    {steps.map((step, idx, arr) => (
-                      <React.Fragment key={idx}>
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', zIndex: 2, flex: 1 }}>
-                          <div style={{
-                            width: '28px', height: '28px', borderRadius: '50%',
-                            backgroundColor: step.current ? '#2563EB' : (step.done || step.finalDone ? '#16A34A' : '#E2E8F0'),
-                            color: (step.current || step.done || step.finalDone) ? '#FFFFFF' : '#64748B',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontSize: '11px', fontWeight: 'bold',
-                            boxShadow: step.current ? '0 0 0 4px #DBEAFE' : 'none'
-                          }}>
-                            {(step.done || step.finalDone) ? '✓' : (idx + 1)}
-                          </div>
-                          <span style={{ fontSize: '10px', fontWeight: step.current ? 'bold' : '600', color: step.current ? '#2563EB' : ((step.done || step.finalDone) ? '#16A34A' : '#64748B'), textAlign: 'center', marginTop: '2px' }}>
-                            {step.label}
-                          </span>
-                          {step.timestamp && (step.done || step.finalDone || step.current) && (
-                            <span style={{ fontSize: '9px', color: '#64748B', fontWeight: '500', textAlign: 'center', lineHeight: '1.25' }}>
-                              {step.timestamp}
-                            </span>
-                          )}
-                        </div>
-                        {idx < arr.length - 1 && (
-                          <div style={{ height: '2px', backgroundColor: step.done ? '#16A34A' : '#E2E8F0', flex: 1, marginTop: '13px' }} />
-                        )}
-                      </React.Fragment>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Official Purchase Order Document Card */}
-                <div style={{
-                  padding: '26px 28px', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '20px',
-                  borderTop: '1px solid #E2E8F0', borderRight: '1px solid #E2E8F0', borderBottom: '1px solid #E2E8F0', borderLeft: '1px solid #E2E8F0',
-                  backgroundColor: '#FFFFFF'
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap' }}>
-                    <div>
-                      <h2 style={{ fontSize: '20px', fontWeight: '800', color: '#1E293B', margin: 0, letterSpacing: '-0.4px' }}>
-                        {companyName}
-                      </h2>
-                      {(raw.companyAddress || raw.branchAddress) && (
-                        <div style={{ fontSize: '11px', color: '#64748B', marginTop: '4px' }}>
-                          {raw.companyAddress || raw.branchAddress}
-                        </div>
-                      )}
-                      {raw.companyGst && (
-                        <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>
-                          GSTIN: <strong>{raw.companyGst}</strong>
-                        </div>
-                      )}
-                    </div>
-                    <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-end' }}>
-                      <div style={{ fontSize: '19px', fontWeight: '900', color: '#0F172A', letterSpacing: '1px' }}>PURCHASE ORDER</div>
-                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                        <strong style={{ fontSize: '13px', color: '#0E7490' }}>{detailPo.poNo}</strong>
-                        <span style={{
-                          padding: '2px 8px', borderRadius: '12px', fontSize: '10px', fontWeight: 'bold',
-                          backgroundColor: (priority === 'Critical' || priority === 'High') ? '#FEE2E2' : (priority === 'Medium' ? '#FEF3C7' : '#ECFEFF'),
-                          color: (priority === 'Critical' || priority === 'High') ? '#EF4444' : (priority === 'Medium' ? '#D97706' : '#0E7490')
-                        }}>
-                          {priority} Priority
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <hr style={{ border: 'none', borderTop: '1px solid #E2E8F0', margin: 0 }} />
-
-                  {/* Info Grid */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '16px', fontSize: '11px' }}>
-                    <div>
-                      <span style={{ color: '#64748B', display: 'block', textTransform: 'uppercase', fontSize: '9px', fontWeight: 'bold' }}>PO Date</span>
-                      <strong style={{ color: '#1E293B', display: 'block', marginTop: '2px' }}>{poDateStr}</strong>
-                    </div>
-                    <div>
-                      <span style={{ color: '#64748B', display: 'block', textTransform: 'uppercase', fontSize: '9px', fontWeight: 'bold' }}>Expected Delivery Date</span>
-                      <strong style={{ color: detailPo.delayDays > 0 ? '#DC2626' : '#1E293B', display: 'block', marginTop: '2px' }}>{delDateStr}</strong>
-                    </div>
-                    <div>
-                      <span style={{ color: '#64748B', display: 'block', textTransform: 'uppercase', fontSize: '9px', fontWeight: 'bold' }}>Payment Terms</span>
-                      <strong style={{ color: '#1E293B', display: 'block', marginTop: '2px' }}>{paymentTerms}</strong>
-                    </div>
-                    <div>
-                      <span style={{ color: '#64748B', display: 'block', textTransform: 'uppercase', fontSize: '9px', fontWeight: 'bold' }}>PO Issued By</span>
-                      <strong style={{ color: '#1E293B', display: 'block', marginTop: '2px' }}>{purchaser}</strong>
-                    </div>
-                  </div>
-
-                  {/* Vendor Details & Delivery Address */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', fontSize: '11px' }}>
-                    <div style={{ border: '1px solid #F1F5F9', borderRadius: '8px', padding: '14px 16px', backgroundColor: '#F8FAFC' }}>
-                      <strong style={{ fontSize: '11px', color: '#2563EB', textTransform: 'uppercase', display: 'block', marginBottom: '8px' }}>Vendor Details</strong>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                        <strong style={{ fontSize: '13px', color: '#0F172A' }}>{detailPo.vendor}</strong>
-                        {raw.branch && <span style={{ color: '#475569' }}>Branch: {raw.branch}</span>}
-                        {raw.contactPerson && <span style={{ color: '#475569' }}>Attn: {raw.contactPerson}</span>}
-                        {(raw.contactNo || raw.vendorPhone) && <span style={{ color: '#475569' }}>Phone: {raw.contactNo || raw.vendorPhone}</span>}
-                        {(raw.email || raw.vendorEmail) && <span style={{ color: '#475569' }}>Email: {raw.email || raw.vendorEmail}</span>}
-                        {(raw.billingAddress || raw.billing_address) && (
-                          <span style={{ color: '#334155', marginTop: '4px', lineHeight: '1.4' }}>
-                            <strong style={{ color: '#0F172A' }}>Billing Address: </strong>{raw.billingAddress || raw.billing_address}
-                          </span>
-                        )}
-                        {(raw.gstNo || raw.vendorGst) && (
-                          <span style={{ color: '#475569', fontWeight: 'bold', marginTop: '2px' }}>GSTIN: {raw.gstNo || raw.vendorGst}</span>
-                        )}
-                      </div>
-                    </div>
-
-                    <div style={{ border: '1px solid #F1F5F9', borderRadius: '8px', padding: '14px 16px', backgroundColor: '#F8FAFC' }}>
-                      <strong style={{ fontSize: '11px', color: '#0E7490', textTransform: 'uppercase', display: 'block', marginBottom: '8px' }}>Delivery Address</strong>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                        <strong style={{ fontSize: '13px', color: '#0F172A' }}>{deliveryCompanyName}</strong>
-                        <span style={{ color: '#334155', lineHeight: '1.45' }}>{deliveryAddress}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Line Items Table */}
-                  <div style={{ overflowX: 'auto', width: '100%' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-                      <thead>
-                        <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
-                          <th style={{ padding: '8px', textAlign: 'center', width: '40px' }}>#</th>
-                          <th style={{ padding: '8px', textAlign: 'left' }}>Item &amp; Description</th>
-                          <th style={{ padding: '8px', textAlign: 'left' }}>Account</th>
-                          <th style={{ padding: '8px', textAlign: 'center' }}>Qty</th>
-                          <th style={{ padding: '8px', textAlign: 'center' }}>Unit</th>
-                          <th style={{ padding: '8px', textAlign: 'right' }}>Rate (₹)</th>
-                          <th style={{ padding: '8px', textAlign: 'center' }}>GST (%)</th>
-                          <th style={{ padding: '8px', textAlign: 'right' }}>Total (₹)</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {items.length > 0 ? items.map((item, idx) => {
-                          const itemTax = (item.tax !== undefined && item.tax !== '' && !isNaN(Number(item.tax))) ? Number(item.tax) : 18;
-                          const qtyNum = parseAmount(item.qty ?? item.quantity ?? item.orderedQty ?? 0);
-                          let rateNum = parseAmount(item.rate ?? item.unitPrice ?? item.unit_price ?? item.item_rate ?? item.purchaseRate ?? item.baseRate ?? item.costPrice ?? item.price ?? 0);
-                          const explicitTotal = parseAmount(item.total ?? item.amount ?? item.item_total ?? item.lineTotal ?? 0);
-                          if (rateNum === 0 && explicitTotal > 0 && qtyNum > 0) {
-                            rateNum = explicitTotal / (qtyNum * (1 + itemTax / 100));
-                          }
-                          const baseTot = qtyNum * rateNum;
-                          const finalAmt = explicitTotal > 0 ? explicitTotal : (baseTot + baseTot * (itemTax / 100));
-                          return (
-                            <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                              <td style={{ padding: '8px', textAlign: 'center', color: '#64748B' }}>{idx + 1}</td>
-                              <td style={{ padding: '8px', fontWeight: '700', color: '#0F172A' }}>{item.name || item.itemName || item.description || 'Item'}</td>
-                              <td style={{ padding: '8px', color: '#475569' }}>{item.account || 'Cost of Goods Sold'}</td>
-                              <td style={{ padding: '8px', textAlign: 'center', fontWeight: '600' }}>{qtyNum.toLocaleString('en-IN')}</td>
-                              <td style={{ padding: '8px', textAlign: 'center', color: '#475569' }}>{item.unit || item.uom || 'NOS'}</td>
-                              <td style={{ padding: '8px', textAlign: 'right' }}>₹ {rateNum.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                              <td style={{ padding: '8px', textAlign: 'center', color: '#475569' }}>{itemTax}%</td>
-                              <td style={{ padding: '8px', textAlign: 'right', fontWeight: '800', color: '#0F172A' }}>₹ {finalAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                            </tr>
-                          );
-                        }) : (
-                          <tr>
-                            <td colSpan={8} style={{ padding: '16px', textAlign: 'center', color: '#64748B' }}>No line items recorded on this PO.</td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                {/* GRN Details & Inwarding History Card */}
-                <div style={{
-                  backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '14px',
-                  padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '12px'
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                      <Package size={16} color="#0E7490" />
-                      <strong style={{ fontSize: '12.5px', color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-                        GRN Details &amp; Inwarding History
-                      </strong>
-                      <span style={{
-                        fontSize: '10.5px', fontWeight: '800', color: '#0E7490',
-                        backgroundColor: '#ECFEFF', border: '1px solid #A5F3FC', padding: '2px 8px', borderRadius: '999px'
-                      }}>
-                        {matchedGrns.length} GRN{matchedGrns.length === 1 ? '' : 's'}
-                      </span>
-                    </div>
-                    {onNavigateTab && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setDetailPo(null);
-                          setPoPopup(null);
-                          onNavigateTab('Goods Receipt Note');
-                        }}
-                        style={{
-                          border: '1px solid #0E7490', backgroundColor: '#FFFFFF', color: '#0E7490',
-                          fontSize: '11px', fontWeight: '700', padding: '4px 10px', borderRadius: '8px',
-                          cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px'
-                        }}
-                      >
-                        Open GRN Ledger <ArrowRight size={12} />
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Receiving Summary Strip */}
-                  <div style={{
-                    display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '10px',
-                    backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '10px', padding: '10px 14px'
-                  }}>
-                    <div>
-                      <div style={{ fontSize: '9.5px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>Ordered Qty</div>
-                      <div style={{ fontSize: '14px', fontWeight: '900', color: '#0F172A' }}>{poOrderedTotal.toLocaleString('en-IN')}</div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: '9.5px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>Received Qty</div>
-                      <div style={{ fontSize: '14px', fontWeight: '900', color: '#059669' }}>{totalRec.toLocaleString('en-IN')}</div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: '9.5px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>Remaining Qty</div>
-                      <div style={{ fontSize: '14px', fontWeight: '900', color: poRemainingTotal > 0 ? '#D97706' : '#059669' }}>{poRemainingTotal.toLocaleString('en-IN')}</div>
-                    </div>
-                    <div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '9.5px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>
-                        <span>Inward Progress</span>
-                        <span style={{ color: '#0E7490', fontWeight: '900' }}>{recvPct}%</span>
-                      </div>
-                      <div style={{ width: '100%', height: '6px', backgroundColor: '#E2E8F0', borderRadius: '999px', overflow: 'hidden', marginTop: '6px' }}>
-                        <div style={{ width: `${recvPct}%`, height: '100%', backgroundColor: recvPct >= 100 ? '#059669' : '#0E7490', borderRadius: '999px' }} />
-                      </div>
-                    </div>
-                  </div>
-
-                  {matchedGrns.length === 0 ? (
-                    <div style={{
-                      padding: '14px 16px', backgroundColor: '#F8FAFC', borderRadius: '10px',
-                      border: '1px dashed #CBD5E1', textAlign: 'center', fontSize: '12px', color: '#64748B', fontWeight: '600'
-                    }}>
-                      No GRN inwarded yet for this PO — awaiting material receipt at Store.
-                    </div>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      {matchedGrns.map((g, gIdx) => {
-                        const gSt = String(g.status || '').toUpperCase();
-                        const isFullyRec = gSt.includes('FULLY') || gSt.includes('CLOSED') || gSt.includes('COMPLETED') || g.forceClosePO === true;
-                        const recQty = (Array.isArray(g.items) && g.items.length > 0)
-                          ? g.items.reduce((s, it) => s + (Number(it.accepted ?? it.now ?? 0) || 0), 0)
-                          : (Number(g.acceptedQty ?? g.receivedQty ?? 0) || 0);
-                        const rejQty = (Array.isArray(g.items) && g.items.length > 0)
-                          ? g.items.reduce((s, it) => s + (Number(it.rejected ?? 0) || 0), 0)
-                          : (Number(g.rejectedQty ?? 0) || 0);
-                        const grnWhen = fmtStageStamp(g.createdAt || g.created_at, g.grnDate || g.receiptDate || g.date, g.time) || g.date || '—';
-                        const grnItemsList = (Array.isArray(g.items) && g.items.length > 0)
-                          ? g.items
-                          : items.map(it => {
-                              const ord = parseAmount(it.qty ?? it.quantity ?? it.orderedQty ?? 0);
-                              return {
-                                name: it.name || it.itemName || it.description || 'Material Item',
-                                uom: it.unit || it.uom || 'NOS',
-                                ordered: ord,
-                                accepted: (items.length === 1 && recQty > 0) ? recQty : ord,
-                                rejected: 0,
-                                date: g.grnDate || g.receiptDate || g.date || '—'
-                              };
-                            });
-
-                        return (
-                          <div key={gIdx} style={{
-                            backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '10px',
-                            padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '10px'
-                          }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-                              <div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                                  <strong style={{ fontSize: '12.5px', color: '#0F172A' }}>{g.grnNo || g.grnNumber || g.id || `GRN-${gIdx + 1}`}</strong>
-                                  <span style={{
-                                    fontSize: '10px', fontWeight: '800', padding: '2px 8px', borderRadius: '999px',
-                                    backgroundColor: isFullyRec ? '#DCFCE7' : '#FEF3C7',
-                                    color: isFullyRec ? '#166534' : '#B45309',
-                                    border: isFullyRec ? '1px solid #86EFAC' : '1px solid #FDE68A'
-                                  }}>
-                                    {isFullyRec ? 'Fully Received' : 'Partially Received'}
-                                  </span>
-                                </div>
-                                <div style={{ fontSize: '11px', color: '#64748B', marginTop: '3px' }}>
-                                  Date: <strong style={{ color: '#334155' }}>{grnWhen}</strong> • DC / Inv No: <strong style={{ color: '#334155' }}>{g.challanNo || g.invoiceNo || '—'}</strong> • Received by: <strong style={{ color: '#334155' }}>{g.receivedBy || g.inspectorName || g.createdBy || 'Store Inwarder'}</strong>
-                                </div>
-                              </div>
-                              <div style={{ textAlign: 'right', fontSize: '11.5px' }}>
-                                <div>
-                                  <strong style={{ color: '#0E7490' }}>{recQty.toLocaleString('en-IN')} Units</strong> Received
-                                  {rejQty > 0 && <span style={{ color: '#DC2626', fontWeight: '700', marginLeft: '6px' }}>({rejQty} rejected)</span>}
-                                </div>
-                                <div style={{ fontSize: '10.5px', color: '#166534', fontWeight: '700', marginTop: '2px' }}>
-                                  ✓ Inwarded into Live Inventory
-                                </div>
-                              </div>
-                            </div>
-
-                            {grnItemsList.length > 0 && (
-                              <div style={{ overflowX: 'auto', backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '8px' }}>
-                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11.5px', textAlign: 'left' }}>
-                                  <thead>
-                                    <tr style={{ backgroundColor: '#F8FAFC', color: '#475569', borderBottom: '1px solid #E2E8F0' }}>
-                                      <th style={{ padding: '7px 10px', fontWeight: '700' }}>Product Name</th>
-                                      <th style={{ padding: '7px 10px', fontWeight: '700', textAlign: 'center' }}>UOM</th>
-                                      <th style={{ padding: '7px 10px', fontWeight: '700', textAlign: 'right' }}>Ordered Qty</th>
-                                      <th style={{ padding: '7px 10px', fontWeight: '700', textAlign: 'right' }}>Received Qty</th>
-                                      <th style={{ padding: '7px 10px', fontWeight: '700', textAlign: 'right' }}>Rejected</th>
-                                      <th style={{ padding: '7px 10px', fontWeight: '700', textAlign: 'right' }}>Date</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {grnItemsList.map((it, itIdx) => {
-                                      const itemName = it.name || it.itemName || it.item_name || it.productName || it.description || 'Material Item';
-                                      const itemUom = it.uom || it.unit || 'NOS';
-                                      const ordVal = it.ordered ?? it.orderedQty ?? it.poQty ?? it.qty ?? it.quantity ?? '—';
-                                      const recVal = it.accepted ?? it.now ?? it.receivedQty ?? ordVal;
-                                      const rejVal = Number(it.rejected || 0);
-                                      const itemDt = it.date || it.receivedDate || g.grnDate || g.receiptDate || g.date || '—';
-                                      return (
-                                        <tr key={itIdx} style={{ borderBottom: itIdx < grnItemsList.length - 1 ? '1px solid #F1F5F9' : 'none' }}>
-                                          <td style={{ padding: '7px 10px', fontWeight: '700', color: '#0F172A' }}>{itemName}</td>
-                                          <td style={{ padding: '7px 10px', textAlign: 'center', color: '#64748B' }}>{itemUom}</td>
-                                          <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: '600', color: '#334155' }}>{ordVal}</td>
-                                          <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: '800', color: '#0E7490' }}>{recVal}</td>
-                                          <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: '700', color: rejVal > 0 ? '#DC2626' : '#94A3B8' }}>{rejVal}</td>
-                                          <td style={{ padding: '7px 10px', textAlign: 'right', color: '#64748B' }}>{itemDt}</td>
-                                        </tr>
-                                      );
-                                    })}
-                                  </tbody>
-                                </table>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Modal Bottom Bar */}
-              <div style={{
-                padding: '12px 20px', borderTop: '1px solid #E2E8F0', backgroundColor: '#FFFFFF',
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap'
-              }}>
-                <div style={{ fontSize: '13px', fontWeight: '700', color: '#475569' }}>
-                  Grand Total:{' '}
-                  <strong style={{ fontSize: '15px', fontWeight: '900', color: '#0E7490' }}>
-                    ₹ {grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                  </strong>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <button
-                    type="button"
-                    onClick={() => setDetailPo(null)}
-                    style={{
-                      border: '1px solid #CBD5E1', backgroundColor: '#FFFFFF', color: '#334155',
-                      fontSize: '12px', fontWeight: '700', padding: '7px 14px', borderRadius: '8px', cursor: 'pointer'
-                    }}
-                  >
-                    Close
-                  </button>
-                  {onNavigateTab && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setDetailPo(null);
-                        setPoPopup(null);
-                        onNavigateTab('Purchase Orders');
-                      }}
-                      style={{
-                        border: 'none', backgroundColor: '#0E7490', color: '#FFFFFF',
-                        fontSize: '12px', fontWeight: '800', padding: '7px 14px', borderRadius: '8px',
-                        cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px'
-                      }}
-                    >
-                      Manage in Purchase Orders <ArrowRight size={13} />
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
+      )}
     </div>
   );
 }

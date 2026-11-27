@@ -1,1430 +1,723 @@
 import React, { useMemo, useState } from 'react';
-import {
-  Truck, Clock, AlertTriangle, ShieldAlert, FileCheck,
-  Package, CheckCircle, X, Search, Calendar, SlidersHorizontal
-} from 'lucide-react';
-import { getBomActiveStage } from './bom/bomStageHelpers.js';
+import { Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { getBomActiveStage, isBomAddressProofPending } from './bom/bomStageHelpers.js';
+import CeoKpiGrid from '../ceoDashboard/CeoKpiGrid';
 
-const formatINRCompact = (val) => {
-  const n = Number(val) || 0;
-  if (n >= 10000000) return `₹ ${(n / 10000000).toFixed(2)} Cr`;
-  if (n >= 100000) return `₹ ${(n / 100000).toFixed(2)} L`;
-  return `₹ ${Math.round(n).toLocaleString('en-IN')}`;
+const parseDateMs = (d) => {
+  if (!d) return null;
+  if (d instanceof Date) return isNaN(d.getTime()) ? null : d.getTime();
+  const s = String(d).trim();
+  if (!s || s === '—' || s === '-') return null;
+  const parsed = Date.parse(s);
+  if (!isNaN(parsed)) return parsed;
+  const m = s.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})/);
+  if (m) {
+    const day = Number(m[1]);
+    const mon = Number(m[2]) - 1;
+    const yr = Number(m[3]) < 100 ? 2000 + Number(m[3]) : Number(m[3]);
+    const dt = new Date(yr, mon, day);
+    return isNaN(dt.getTime()) ? null : dt.getTime();
+  }
+  return null;
 };
 
-const cardStyle = {
-  backgroundColor: '#FFFFFF',
-  borderRadius: '16px',
-  border: '1px solid #EAEFEF',
-  padding: '18px 20px',
-  display: 'flex',
-  flexDirection: 'column',
-  gap: '14px',
-  boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)'
+const startOfDayMs = (ts) => {
+  const d = new Date(ts);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
 };
 
-const cardHeaderStyle = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  borderBottom: '1px solid #F1F5F9',
-  paddingBottom: '8px'
+const formatShortDate = (ts) => {
+  if (!ts) return '—';
+  return new Date(ts).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 };
 
-const cardTitleStyle = {
-  fontSize: '11.5px',
-  fontWeight: '800',
-  color: '#0F172A',
-  textTransform: 'uppercase',
-  letterSpacing: '0.4px'
+const formatDateTime = (ts) => {
+  if (!ts) return '—';
+  const d = new Date(ts);
+  const datePart = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  const timePart = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }).toUpperCase();
+  return `${datePart}, ${timePart}`;
 };
 
-const summaryStripStyle = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-  gap: '8px',
-  backgroundColor: '#F8FAFC',
-  border: '1px solid #E2E8F0',
-  borderRadius: '10px',
-  padding: '8px 12px'
+const STATUS_BADGE = {
+  Overdue: { bg: '#FEF2F2', color: '#DC2626', border: '#FECACA' },
+  Pending: { bg: '#FFFBEB', color: '#B45309', border: '#FDE68A' },
+  'On time': { bg: '#ECFDF5', color: '#059669', border: '#A7F3D0' },
+  'Dispatched late': { bg: '#FEF3C7', color: '#B45309', border: '#FDE68A' }
 };
 
-const DonutChartSvg = ({ segments = [], centerLabel, centerSub, activeName = null, onSelectSegment = null }) => {
-  const size = 136;
-  const stroke = 19;
-  const radius = (size - stroke) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const total = segments.reduce((s, seg) => s + (seg.value || 0), 0) || 1;
+/**
+ * Resolves the sequential dispatch blocker for the CEO Dispatch table:
+ * - Packed & sent to accounts: check payment proof first; if missing, show "Payment Proof is pending" instead of "Accounts Verification Pending".
+ * - Accounts verified: check if delivery address differs without proof; if missing, show "Address Proof is pending" instead of "Invoice Pending".
+ */
+const resolveDispatchBlocker = (b, stage) => {
+  const stageName = String(stage?.name || '');
+  const isPackedSentToAccounts =
+    stageName === 'Accounts Verification Pending' ||
+    stageName === 'Payment Proof Pending (Sales)' ||
+    stageName === 'Address Proof Pending (Sales)';
 
-  let offset = 0;
-  return (
-    <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ transform: 'rotate(-90deg)' }}>
-        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#F1F5F9" strokeWidth={stroke} />
-        {segments.map((seg, idx) => {
-          const pct = (seg.value || 0) / total;
-          const dash = pct * circumference;
-          const curOffset = offset;
-          offset += dash;
-          if (dash <= 0) return null;
-          const isSelected = activeName && seg.name === activeName;
-          const isDimmed = activeName && seg.name !== activeName;
-          return (
-            <circle
-              key={idx}
-              cx={size / 2}
-              cy={size / 2}
-              r={radius}
-              fill="none"
-              stroke={seg.color}
-              strokeWidth={isSelected ? stroke + 3 : stroke}
-              strokeDasharray={`${dash} ${circumference}`}
-              strokeDashoffset={-curOffset}
-              opacity={isDimmed ? 0.35 : 1}
-              style={{ cursor: onSelectSegment ? 'pointer' : 'default', transition: 'opacity 0.18s ease, stroke-width 0.18s ease' }}
-              onClick={() => onSelectSegment && onSelectSegment(seg.name)}
-            />
-          );
-        })}
-      </svg>
-      <div style={{
-        position: 'absolute',
-        inset: 0,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        textAlign: 'center',
-        pointerEvents: 'none',
-        padding: '0 18px'
-      }}>
-        <div style={{ fontSize: '14px', fontWeight: '900', color: '#0F172A', lineHeight: 1.1 }}>{centerLabel}</div>
-        <div style={{ fontSize: '9.5px', fontWeight: '600', color: '#64748B', marginTop: '2px' }}>{centerSub}</div>
-      </div>
+  if (isPackedSentToAccounts) {
+    const payType = String(
+      b.paymentType ||
+      b.paymentTerms ||
+      b.payments?.paymentType ||
+      b.payments?.paymentTerms ||
+      b.salesPoDetails?.paymentTerms || ''
+    ).toLowerCase();
+    const isCreditTerms = payType.includes('credit') || payType.includes('net ') || payType.includes('net30') || Number(b.creditDays || 0) > 0;
+    const isPartialPaidTerms = !isCreditTerms && (payType.includes('partial') || (payType.includes('50%') && !payType.includes('100%')));
+
+    const rawProof =
+      b.paymentProofDoc ||
+      b.payments?.proofDocObj ||
+      b.payments?.proofDoc ||
+      b.proofDoc ||
+      b.proofDocData ||
+      b.salesPoDetails?.proofDocObj;
+    const hasDocInList = Array.isArray(b.uploadedDocuments) && b.uploadedDocuments.some((d) =>
+      String(d?.category || '').toLowerCase().includes('payment') ||
+      String(d?.type || '').toLowerCase().includes('payment')
+    );
+    const hasPaymentProof = Boolean(
+      (typeof rawProof === 'string' && rawProof.trim().length > 0) ||
+      (rawProof && typeof rawProof === 'object' && (rawProof.url || rawProof.dataUrl || rawProof.fileData || rawProof.storagePath || rawProof.name)) ||
+      b.paymentProofDocName ||
+      b.paymentProofAttached ||
+      b.hasPaymentProof ||
+      hasDocInList ||
+      (Array.isArray(b.paymentProofDocs) && b.paymentProofDocs.length > 0) ||
+      b.creditSettled ||
+      b.paymentSettled ||
+      b.accountsVerification?.creditSettled
+    );
+    const hasBalanceProof = Boolean(
+      b.balancePaymentProofDoc ||
+      b.balanceProofDoc ||
+      (Array.isArray(b.balancePaymentProofDocs) && b.balancePaymentProofDocs.length > 0) ||
+      b.payments?.balanceProofDocObj ||
+      b.payments?.balanceProofDoc ||
+      b.payments?.balanceUploaded ||
+      b.payments?.balanceSettled ||
+      b.payments?.dispatch50Uploaded ||
+      b.paymentProofAttached ||
+      b.creditSettled ||
+      b.paymentSettled ||
+      b.accountsVerification?.creditSettled ||
+      b.accountsVerification?.paymentStatus === 'Payment Proof Attached' ||
+      b.accountsVerification?.paymentStatus === 'Payment Proof Attached by Sales' ||
+      (b.balanceAmount !== undefined && b.balanceAmount !== null && Number(b.balanceAmount) <= 0 && Number(b.partialAmount) > 0 && hasPaymentProof)
+    );
+
+    if (!isCreditTerms && (isPartialPaidTerms ? !hasBalanceProof : !hasPaymentProof)) {
+      return 'Payment Proof is pending';
+    }
+    return 'Accounts Verification Pending';
+  }
+
+  if (stageName === 'Invoice Pending') {
+    return isBomAddressProofPending(b) ? 'Address Proof is pending' : 'Invoice Pending';
+  }
+
+  return stageName || 'Pending';
+};
+
+const BusinzSectionCard = ({ title, subtitle, rightNode, children }) => (
+  <div style={{
+    backgroundColor: '#F8FAFC',
+    border: '1px solid #EAEFEF',
+    borderRadius: '16px',
+    overflow: 'hidden',
+    boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)'
+  }}>
+    <div style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px',
+      padding: '12px 18px', backgroundColor: '#FFFFFF', borderBottom: '1px solid #EAEFEF'
+    }}>
+      <h3 style={{ margin: 0, fontSize: '14px', fontWeight: '800', color: '#0F172A', letterSpacing: '-0.2px' }}>{title}</h3>
+      {rightNode || (subtitle && (
+        <span style={{
+          fontSize: '11px', fontWeight: '700', color: '#475569',
+          backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0',
+          padding: '3px 10px', borderRadius: '999px'
+        }}>
+          {subtitle}
+        </span>
+      ))}
     </div>
-  );
-};
+    <div style={{ padding: '14px' }}>
+      {children}
+    </div>
+  </div>
+);
 
 export default function CeoDispatchAnalyticsSection({
   bomList = [],
+  allBomList = [],
   dispatchesList = [],
-  challansList = [],
-  invList = [],
-  inventoryList = [],
-  onOpenBom = null,
-  onNavigateTab = null
+  onOpenBom
 }) {
-  const [selectedStatus, setSelectedStatus] = useState(null);
-  const [selectedDayIdx, setSelectedDayIdx] = useState(null);
-  const [ordersPopup, setOrdersPopup] = useState(null);
-  const [popupSearch, setPopupSearch] = useState('');
-  const [selectedProductNames, setSelectedProductNames] = useState(() => {
-    try {
-      const saved = typeof window !== 'undefined' ? localStorage.getItem('businz_ceo_dispatch_selected_products') : null;
-      const parsed = saved ? JSON.parse(saved) : null;
-      return Array.isArray(parsed) && parsed.length > 0 ? parsed.slice(0, 5) : null;
-    } catch (_) {
-      return null;
-    }
-  });
-  const [productFilterOpen, setProductFilterOpen] = useState(false);
-  const [productFilterSearch, setProductFilterSearch] = useState('');
-
-  const updateSelectedProducts = (next) => {
-    setSelectedProductNames(next);
-    try {
-      if (next === null) localStorage.removeItem('businz_ceo_dispatch_selected_products');
-      else localStorage.setItem('businz_ceo_dispatch_selected_products', JSON.stringify(next));
-    } catch (_) {}
-  };
-
-  const closePopup = () => {
-    setOrdersPopup(null);
-    setPopupSearch('');
-    setSelectedStatus(null);
-  };
+  const [activeFilter, setActiveFilter] = useState('today_overdue');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [page, setPage] = useState(1);
+  const pageSize = 6;
 
   const analytics = useMemo(() => {
     const now = new Date();
-    const formatLocalIso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    const todayIso = formatLocalIso(now);
-    const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const todayStart = startOfDayMs(now.getTime());
+    const todayEnd = todayStart + 86400000 - 1;
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999).getTime();
 
-    const toDateObj = (raw) => {
-      if (!raw) return null;
-      if (raw instanceof Date) return isNaN(raw.getTime()) ? null : raw;
-      const str = String(raw).trim();
-      if (!str) return null;
-      const ymd = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-      if (ymd) {
-        const dt = new Date(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3]));
-        return isNaN(dt.getTime()) ? null : dt;
-      }
-      const dmy = str.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
-      if (dmy) {
-        const dt = new Date(Number(dmy[3]), Number(dmy[2]) - 1, Number(dmy[1]));
-        return isNaN(dt.getTime()) ? null : dt;
-      }
-      const d = new Date(str);
-      return isNaN(d.getTime()) ? null : d;
-    };
-    const toIsoDate = (raw) => {
-      const d = toDateObj(raw);
-      return d ? formatLocalIso(d) : null;
-    };
+    const sourceBoms = (allBomList && allBomList.length > 0) ? allBomList : (bomList || []);
+    const periodBoms = (bomList && bomList.length > 0) ? bomList : [];
 
-    const invMap = new Map();
-    for (const inv of (invList || [])) {
-      [inv?.bomCode, inv?.bomNo, inv?.bomRef, inv?.poNo, inv?.bomId, inv?.orderNo].forEach(val => {
-        const k = String(val || '').trim().toLowerCase();
-        if (k) invMap.set(k, inv);
-      });
-    }
-
-    const challanMap = new Map();
-    for (const ch of (challansList || [])) {
-      [ch?.bomCode, ch?.bomNo, ch?.orderNo, ch?.poNo].forEach(val => {
-        const k = String(val || '').trim().toLowerCase();
-        if (k) challanMap.set(k, ch);
-      });
-    }
-
-    const dispatchMap = new Map();
-    for (const disp of (dispatchesList || [])) {
-      [disp?.bomCode, disp?.bomNo, disp?.orderNo, disp?.poNo, disp?.id].forEach(val => {
-        const k = String(val || '').trim().toLowerCase();
-        if (k) dispatchMap.set(k, disp);
-      });
-    }
-
-    let orders = (bomList || []).filter(Boolean).map((b, idx) => {
-      const code = b.bomCode || b.code || b.id || `BOM-${idx + 1}`;
-      const matchKeys = [b.bomCode, b.code, b.id, code].map(v => String(v || '').trim().toLowerCase()).filter(Boolean);
-      const customer = b.customerName || b.companyName || b.vendor || b.clientName || 'Customer';
-      const st = String(b.status || '').toLowerCase();
-      const matchedInv = matchKeys.map(k => invMap.get(k)).find(Boolean) || null;
-      const matchedChallan = matchKeys.map(k => challanMap.get(k)).find(Boolean) || null;
-      const matchedDispatch = matchKeys.map(k => dispatchMap.get(k)).find(Boolean) || null;
-
-      const isCancelled = Boolean(b.cancelled || b.status === 'Cancelled & Stock Restored' || st.includes('cancel'));
-      const invSt = String(matchedInv?.status || '').toLowerCase();
-      const dispSt = String(matchedDispatch?.status || '').toLowerCase();
-      const isDispatched = !isCancelled && Boolean(
-        b.fullyCompleted ||
-        b.vehicleLoadingVerified ||
+    const normalizeOrder = (b, idx) => {
+      const code = String(b.bomCode || b.code || b.id || `BOM-${idx + 1}`).trim();
+      const customer = String(b.companyName || b.customerName || b.vendor || 'Customer').trim();
+      const stage = getBomActiveStage(b);
+      const stLower = String(b.status || '').toLowerCase();
+      const isCancelled = Boolean(b.cancelled || stLower.includes('cancel'));
+      const isDispatched = Boolean(
+        stage.name === 'Dispatched' ||
         b.dispatchedAt ||
-        b.finalDispatchedAt ||
-        b.completedAt ||
-        b.vehicleLoading?.fullyCompleted ||
-        b.vehicleLoading?.completedAt ||
         b.vehicleLoading?.loadedAt ||
-        b.vehicleLoading?.verifiedAt ||
-        st === 'dispatched' ||
-        st === 'closed' ||
-        st === 'completed' ||
-        (st.includes('dispatched') && !st.includes('sent to dispatch') && !st.includes('ready for dispatch') && !st.includes('awaiting dispatch')) ||
-        invSt.includes('dispatched') ||
-        invSt.includes('delivered') ||
-        (matchedDispatch && !dispSt.includes('cancel'))
-      );
-      const isInvoiceConfirmed = !isCancelled && Boolean(
-        b.invoiceConfirmed ||
-        st.includes('invoice confirmed') ||
-        st.includes('awaiting vehicle') ||
-        (st.includes('ready for dispatch') && !st.includes('packed')) ||
-        invSt === 'invoice confirmed' ||
-        invSt === 'confirmed' ||
-        invSt === 'completed' ||
-        String(matchedInv?.pay || '').toLowerCase().includes('completed')
-      );
-      const isAccountsDone = !isCancelled && Boolean(
-        b.accountsVerified ||
-        b.isAccountsDone ||
-        b.accountsVerification?.verified ||
-        st.includes('accounts verified') ||
-        st.includes('passed to invoice') ||
-        isInvoiceConfirmed ||
-        isDispatched
-      );
-      const isPacked = !isCancelled && Boolean(
-        b.dispatchPackingVerified ||
-        b.packingVerified ||
-        st.includes('packed') ||
-        st.includes('awaiting accounts') ||
-        st.includes('awaiting sales payment') ||
-        st.includes('ready for payment') ||
-        st.includes('payment uploaded') ||
-        isAccountsDone
+        b.fullyCompleted ||
+        stLower === 'completed' ||
+        stLower === 'closed' ||
+        stLower.includes('dispatched')
       );
 
-      let bucket = 'Dispatch Pending';
-      if (isCancelled) bucket = 'Cancelled';
-      else if (isDispatched) bucket = 'Dispatched';
-      else if (isInvoiceConfirmed) bucket = 'Dispatch Pending';
-      else if (isAccountsDone) bucket = 'Invoice Pending';
-      else if (isPacked) {
-        const activeStg = getBomActiveStage(b);
-        if (activeStg.name === 'Payment Proof Pending (Sales)') {
-          bucket = 'Payment Slip Pending';
-        } else if (activeStg.name === 'Address Proof Pending (Sales)') {
-          bucket = 'Address Proof Pending';
-        } else {
-          bucket = 'Accounts Pending';
-        }
-      }
-      else bucket = 'Dispatch Pending';
-
-      const createdD = toDateObj(b.salesConfirmedAt || b.confirmedAt || b.date || b.bomDate || b.createdAt);
-      const dispatchedD = isDispatched
-        ? toDateObj(
-            b.finalDispatchedAt ||
-            b.dispatchedAt ||
-            b.completedAt ||
-            b.vehicleLoading?.completedAt ||
-            b.vehicleLoading?.loadedAt ||
-            b.vehicleLoading?.verifiedAt ||
-            b.vehicleLoading?.dispatchDate ||
-            b.vehicleLoading?.date ||
-            matchedDispatch?.dispatchedAt ||
-            matchedDispatch?.completedAt ||
-            matchedDispatch?.date ||
-            matchedInv?.dispatchedAt ||
-            matchedInv?.vehicleLoading?.loadedAt ||
-            matchedInv?.completedAt ||
-            matchedInv?.updatedAt ||
-            b.updatedAt ||
-            b.date ||
-            b.bomDate ||
-            b.createdAt
-          )
+      const promisedTs = parseDateMs(b.deliveryDate || b.promisedDispatchDate || b.expectedDeliveryDate || b.date || b.createdAt);
+      const promisedDayStart = promisedTs ? startOfDayMs(promisedTs) : null;
+      const actualTs = isDispatched
+        ? parseDateMs(b.dispatchedAt || b.vehicleLoading?.loadedAt || b.updatedAt || b.date)
         : null;
-      const expectedD = toDateObj(b.deliveryDate || b.expectedDispatchDate || b.expectedDate);
-      const plannedIso = (expectedD ? formatLocalIso(expectedD) : null) || toIsoDate(b.date || b.bomDate || b.createdAt) || todayIso;
-      const createdIso = createdD ? formatLocalIso(createdD) : null;
-      const dispatchedIso = dispatchedD ? formatLocalIso(dispatchedD) : null;
+      const actualDayStart = actualTs ? startOfDayMs(actualTs) : null;
 
-      const ageDays = createdD ? Math.max(0, Math.floor((now.getTime() - createdD.getTime()) / 86400000)) : 0;
-      const delayDays = (!isCancelled && !isDispatched)
-        ? (expectedD
-            ? Math.max(0, Math.floor((now.getTime() - expectedD.getTime()) / 86400000))
-            : Math.max(0, ageDays - 2))
-        : 0;
-      const dispatchedOnTime = isDispatched && (!expectedD || !dispatchedIso || (dispatchedIso <= plannedIso));
+      let dispatchStatus = 'Pending';
+      let delayDays = 0;
 
-      let delayReason = 'Pending Processing';
-      if (!isPacked) delayReason = 'Packing Pending';
-      else if (!isAccountsDone) {
-        const activeStg = getBomActiveStage(b);
-        if (activeStg.name === 'Payment Proof Pending (Sales)') delayReason = 'Sales Payment Slip Missing';
-        else if (activeStg.name === 'Address Proof Pending (Sales)') delayReason = 'Sales Address Proof Missing';
-        else delayReason = 'Accounts Verification Pending';
+      if (isDispatched) {
+        if (promisedDayStart && actualDayStart && actualDayStart > promisedDayStart) {
+          dispatchStatus = 'Dispatched late';
+          delayDays = Math.max(1, Math.round((actualDayStart - promisedDayStart) / 86400000));
+        } else {
+          dispatchStatus = 'On time';
+        }
+      } else if (promisedDayStart && promisedDayStart < todayStart) {
+        dispatchStatus = 'Overdue';
+        delayDays = Math.max(1, Math.round((todayStart - promisedDayStart) / 86400000));
+      } else {
+        dispatchStatus = 'Pending';
       }
-      else if (!isInvoiceConfirmed) delayReason = 'Invoice Pending';
-      else delayReason = 'Vehicle Loading Pending';
 
-      const grandTotal = Number(b.grandTotal || matchedInv?.grandTotal || b.subTotal || 0) || 0;
-      const itemsArr = Array.isArray(b.items) ? b.items : [];
-      const totalQty = itemsArr.reduce((s, it) => s + (parseFloat(it.qty || it.bomQty || it.quantity || 0) || 0), 0);
-      const firstProd = b.presetName || b.preset || itemsArr[0]?.name || itemsArr[0]?.description || 'Solar Structure Kit';
+      const reason = b.delayReason || b.blockerReason || (
+        isDispatched
+          ? (dispatchStatus === 'Dispatched late' ? (b.remarks || 'Dispatched past promised date') : '—')
+          : resolveDispatchBlocker(b, stage)
+      );
 
-      const hasInvoice = Boolean(isInvoiceConfirmed || b.invoiceNo || matchedInv);
-      const hasEwayBill = Boolean(b.ewayBillNo || b.ewayBillDoc || matchedInv?.ewayBillNo || matchedInv?.ewayBillDoc);
-      const hasLrOrDc = Boolean(b.lrNumber || b.lrDoc || b.lrCopyDoc || matchedChallan || b.docType === 'DC');
-      const hasPackingList = isPacked;
+      const isDueToday = Boolean(promisedDayStart && promisedDayStart === todayStart);
+      const isDispatchedToday = Boolean(isDispatched && actualTs && actualTs >= todayStart && actualTs <= todayEnd);
+      const isOverdueNow = Boolean(!isDispatched && !isCancelled && promisedDayStart && promisedDayStart < todayStart);
 
       return {
-        rawBom: b,
+        raw: b,
         code,
         customer,
-        bucket,
+        promisedTs,
+        promisedDayStart,
+        actualTs,
+        dispatchStatus,
+        delayDays,
+        reason,
         isCancelled,
         isDispatched,
-        isPacked,
-        isAccountsDone,
-        isInvoiceConfirmed,
-        createdIso,
-        dispatchedIso,
-        plannedIso,
-        delayDays,
-        dispatchedOnTime,
-        delayReason,
-        grandTotal,
-        totalQty,
-        firstProd,
-        itemsArr,
-        hasInvoice,
-        hasEwayBill,
-        hasLrOrDc,
-        hasPackingList
+        isDueToday,
+        isDispatchedToday,
+        isOverdueNow
       };
-    });
-
-    // Localhost-only preview when local orders are empty (NEVER runs on dev/live servers)
-    const isLocalhostPreview =
-      typeof window !== 'undefined' &&
-      ['localhost', '127.0.0.1'].includes(window.location.hostname) &&
-      orders.length === 0;
-
-    if (isLocalhostPreview) {
-      const dayIso = (ago) => {
-        const dt = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ago);
-        return formatLocalIso(dt);
-      };
-      orders = [
-        { code: 'VRMS/BOM/26-27/718', customer: 'Softrays Power Solutions', bucket: 'Dispatched', isCancelled: false, isDispatched: true, isPacked: true, isAccountsDone: true, isInvoiceConfirmed: true, createdIso: dayIso(1), dispatchedIso: dayIso(0), plannedIso: dayIso(0), delayDays: 0, delayReason: 'On Schedule', grandTotal: 287271, totalQty: 144, firstProd: 'HAT Purlin 2x5 (1200x1800)', itemsArr: [{ name: 'HAT Purlin 2x5 (1200x1800)', qty: 144, total: 287271 }], hasInvoice: true, hasEwayBill: true, hasLrOrDc: true, hasPackingList: true },
-        { code: 'VRMS/BOM/26-27/719', customer: 'Green Infra Ltd', bucket: 'Dispatched', isCancelled: false, isDispatched: true, isPacked: true, isAccountsDone: true, isInvoiceConfirmed: true, createdIso: dayIso(2), dispatchedIso: dayIso(1), plannedIso: dayIso(1), delayDays: 0, delayReason: 'On Schedule', grandTotal: 540000, totalQty: 320, firstProd: 'Mono Rail 4200 mm (AL)', itemsArr: [{ name: 'Mono Rail 4200 mm (AL)', qty: 320, total: 540000 }], hasInvoice: true, hasEwayBill: true, hasLrOrDc: true, hasPackingList: true },
-        { code: 'VRMS/BOM/26-27/720', customer: 'ABC Solar Pvt Ltd', bucket: 'Dispatched', isCancelled: false, isDispatched: true, isPacked: true, isAccountsDone: true, isInvoiceConfirmed: true, createdIso: dayIso(4), dispatchedIso: dayIso(2), plannedIso: dayIso(2), delayDays: 0, delayReason: 'On Schedule', grandTotal: 785000, totalQty: 500, firstProd: 'LEG 1500 mm (HDG)', itemsArr: [{ name: 'LEG 1500 mm (HDG)', qty: 500, total: 785000 }], hasInvoice: true, hasEwayBill: true, hasLrOrDc: true, hasPackingList: true },
-        { code: 'VRMS/BOM/26-27/721', customer: 'Sun Power EPC', bucket: 'Dispatch Pending', isCancelled: false, isDispatched: false, isPacked: true, isAccountsDone: true, isInvoiceConfirmed: true, createdIso: dayIso(4), dispatchedIso: null, plannedIso: dayIso(0), delayDays: 2, delayReason: 'Vehicle Loading Pending', grandTotal: 420000, totalQty: 260, firstProd: 'Mid Clamp 35mm Anodized', itemsArr: [{ name: 'Mid Clamp 35mm Anodized', qty: 260, total: 420000 }], hasInvoice: true, hasEwayBill: true, hasLrOrDc: false, hasPackingList: true },
-        { code: 'VRMS/BOM/26-27/722', customer: 'Bright Energy', bucket: 'Invoice Pending', isCancelled: false, isDispatched: false, isPacked: true, isAccountsDone: true, isInvoiceConfirmed: false, createdIso: dayIso(5), dispatchedIso: null, plannedIso: dayIso(0), delayDays: 3, delayReason: 'Invoice Pending', grandTotal: 365000, totalQty: 180, firstProd: 'Rafter 4300 mm (GAL)', itemsArr: [{ name: 'Rafter 4300 mm (GAL)', qty: 180, total: 365000 }], hasInvoice: false, hasEwayBill: false, hasLrOrDc: false, hasPackingList: true },
-        { code: 'VRMS/BOM/26-27/723', customer: 'Voltix Solutions', bucket: 'Accounts Pending', isCancelled: false, isDispatched: false, isPacked: true, isAccountsDone: false, isInvoiceConfirmed: false, createdIso: dayIso(6), dispatchedIso: null, plannedIso: dayIso(0), delayDays: 4, delayReason: 'Accounts Verification Pending', grandTotal: 195000, totalQty: 120, firstProd: 'End Clamp L-Foot Kit', itemsArr: [{ name: 'End Clamp L-Foot Kit', qty: 120, total: 195000 }], hasInvoice: false, hasEwayBill: false, hasLrOrDc: false, hasPackingList: true },
-        { code: 'VRMS/BOM/26-27/724', customer: 'KPR Mill Solar', bucket: 'Dispatched', isCancelled: false, isDispatched: true, isPacked: true, isAccountsDone: true, isInvoiceConfirmed: true, createdIso: dayIso(5), dispatchedIso: dayIso(3), plannedIso: dayIso(3), delayDays: 0, delayReason: 'On Schedule', grandTotal: 615000, totalQty: 410, firstProd: 'HAT Purlin 2x5 (1200x1800)', itemsArr: [{ name: 'HAT Purlin 2x5 (1200x1800)', qty: 410, total: 615000 }], hasInvoice: true, hasEwayBill: true, hasLrOrDc: true, hasPackingList: true }
-      ];
-    }
-
-    const totalOrders = orders.length;
-    const dispatchedCount = orders.filter(o => o.isDispatched).length;
-    const inQueueCount = orders.filter(o => !o.isCancelled && !o.isDispatched).length;
-
-    // 1. DISPATCH STATUS
-    const statusDefs = [
-      { name: 'Dispatch Pending', color: '#0E7490' },
-      { name: 'Payment Slip Pending', color: '#D97706' },
-      { name: 'Address Proof Pending', color: '#EA580C' },
-      { name: 'Accounts Pending', color: '#7C3AED' },
-      { name: 'Invoice Pending', color: '#2563EB' },
-      { name: 'Dispatched', color: '#059669' },
-      { name: 'Cancelled', color: '#DC2626' }
-    ];
-    const statusSegments = statusDefs.map(sd => {
-      const list = orders.filter(o => o.bucket === sd.name);
-      return {
-        ...sd,
-        value: list.length,
-        orders: list,
-        pct: totalOrders > 0 ? ((list.length / totalOrders) * 100).toFixed(1) : '0.0'
-      };
-    });
-
-    // 2. DAILY DISPATCH TREND (Last 7 Days — configured with BOM Expected Date `deliveryDate`)
-    const monthShort = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const dailyTrend = [];
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
-      const iso = formatLocalIso(d);
-      const label = `${String(d.getDate()).padStart(2, '0')} ${monthShort[d.getMonth()]}`;
-      const dayDispatched = orders.filter(o => o.isDispatched && (o.dispatchedIso === iso || (!o.dispatchedIso && o.plannedIso === iso)));
-      const dayExpected = orders.filter(o => !o.isCancelled && o.plannedIso === iso);
-      const onTimeCount = dayDispatched.filter(o => o.dispatchedOnTime !== false).length;
-      const onTimePct = dayDispatched.length > 0
-        ? Math.round((onTimeCount / dayDispatched.length) * 100)
-        : (dayExpected.length > 0 ? 0 : 100);
-      dailyTrend.push({
-        iso,
-        label,
-        dispatchedCount: dayDispatched.length,
-        plannedCount: dayExpected.length,
-        onTimePct,
-        valueSum: dayDispatched.reduce((s, o) => s + o.grandTotal, 0),
-        orders: dayDispatched,
-        expectedOrders: dayExpected
-      });
-    }
-
-    // 3. TOP 5 DELAYED DISPATCH ORDERS
-    const delayedOrders = orders
-      .filter(o => !o.isCancelled && !o.isDispatched && o.delayDays > 0)
-      .sort((a, b) => b.delayDays - a.delayDays)
-      .slice(0, 5);
-
-    // 4. DISPATCH BY PRODUCT / PROFILE (MTD)
-    const mtdDispatched = orders.filter(o =>
-      o.isDispatched && ((o.dispatchedIso || o.createdIso || '').startsWith(currentMonthKey))
-    );
-    const prodSource = mtdDispatched.length > 0 ? mtdDispatched : orders.filter(o => o.isDispatched);
-    const prodMap = new Map();
-    for (const o of prodSource) {
-      if (o.itemsArr.length > 0) {
-        for (const it of o.itemsArr) {
-          const pName = it.name || it.description || o.firstProd;
-          const q = parseFloat(it.qty || it.bomQty || it.quantity || 0) || 0;
-          const v = parseFloat(it.total || it.amount || (q * (parseFloat(it.rate || it.price || 0) || 0))) || 0;
-          const cur = prodMap.get(pName) || { name: pName, ordersMap: new Map(), qty: 0, value: 0 };
-          cur.ordersMap.set(o.code, o);
-          cur.qty += q;
-          cur.value += v;
-          prodMap.set(pName, cur);
-        }
-      } else {
-        const cur = prodMap.get(o.firstProd) || { name: o.firstProd, ordersMap: new Map(), qty: 0, value: 0 };
-        cur.ordersMap.set(o.code, o);
-        cur.qty += o.totalQty;
-        cur.value += o.grandTotal;
-        prodMap.set(o.firstProd, cur);
-      }
-    }
-    // Seed all known products from BOMs & inventoryList so the Filter popup lists every product
-    for (const o of orders) {
-      if (o.itemsArr.length > 0) {
-        for (const it of o.itemsArr) {
-          const pName = it.name || it.description || o.firstProd;
-          if (pName && !prodMap.has(pName)) {
-            prodMap.set(pName, { name: pName, ordersMap: new Map(), qty: 0, value: 0 });
-          }
-        }
-      } else if (o.firstProd && !prodMap.has(o.firstProd)) {
-        prodMap.set(o.firstProd, { name: o.firstProd, ordersMap: new Map(), qty: 0, value: 0 });
-      }
-    }
-    for (const invIt of (inventoryList || [])) {
-      const pName = invIt?.name || invIt?.itemName || invIt?.description;
-      if (pName && !prodMap.has(pName)) {
-        prodMap.set(pName, { name: pName, ordersMap: new Map(), qty: 0, value: 0 });
-      }
-    }
-
-    const productBreakdown = Array.from(prodMap.values())
-      .map(p => ({ name: p.name, orders: p.ordersMap.size, orderList: Array.from(p.ordersMap.values()), qty: p.qty, value: p.value }))
-      .sort((a, b) => (b.value - a.value) || String(a.name).localeCompare(String(b.name)));
-
-    // 5. TODAY'S DISPATCH PLAN
-    const todaysPlan = orders
-      .filter(o => !o.isCancelled && (o.plannedIso === todayIso || o.dispatchedIso === todayIso || o.bucket === 'Dispatch Pending'))
-      .slice(0, 8);
-
-    // 6. DOCUMENT CHECKLIST (Today)
-    const docBase = todaysPlan.length > 0 ? todaysPlan : orders.filter(o => !o.isCancelled).slice(0, 20);
-    const reqCount = docBase.length;
-    const mkDocRow = (label, fn) => {
-      const done = docBase.filter(fn).length;
-      const pendingOrders = docBase.filter(o => !fn(o));
-      const pct = reqCount > 0 ? Math.round((done / reqCount) * 100) : 100;
-      return { label, required: reqCount, completed: done, pending: pendingOrders.length, pendingOrders, pct };
     };
-    const docChecklist = [
-      mkDocRow('Invoice', o => o.hasInvoice),
-      mkDocRow('E-Way Bill', o => o.hasEwayBill),
-      mkDocRow('LR / Delivery Challan', o => o.hasLrOrDc),
-      mkDocRow('Packing List', o => o.hasPackingList)
-    ];
 
-    // 7. KEY ALERTS
-    const overdueOrders = orders.filter(o => !o.isCancelled && !o.isDispatched && o.delayDays > 0);
-    const invPendingOrders = orders.filter(o => o.bucket === 'Invoice Pending');
-    const packingPendingOrders = orders.filter(o => !o.isCancelled && !o.isDispatched && !o.hasPackingList);
-    const vehiclePendingOrders = orders.filter(o => !o.isCancelled && !o.isDispatched && o.isInvoiceConfirmed);
+    const allOrders = sourceBoms.filter(Boolean).map(normalizeOrder).filter(o => !o.isCancelled);
+    const periodOrders = periodBoms.filter(Boolean).map(normalizeOrder).filter(o => !o.isCancelled);
 
-    const keyAlerts = [
-      {
-        title: 'Overdue Dispatches',
-        sub: `${overdueOrders.length} orders past SLA (>2 days)`,
-        badge: `${overdueOrders.length} Orders`,
-        color: '#DC2626',
-        bg: '#FEF2F2',
-        border: '#FECACA',
-        icon: ShieldAlert,
-        orders: overdueOrders
-      },
-      {
-        title: 'Invoices Pending',
-        sub: `${invPendingOrders.length} orders awaiting billing`,
-        badge: `${invPendingOrders.length} Orders`,
-        color: '#D97706',
-        bg: '#FFFBEB',
-        border: '#FDE68A',
-        icon: FileCheck,
-        orders: invPendingOrders
-      },
-      {
-        title: 'Packing Pending',
-        sub: `${packingPendingOrders.length} orders awaiting packing`,
-        badge: `${packingPendingOrders.length} Orders`,
-        color: '#7C3AED',
-        bg: '#F5F3FF',
-        border: '#DDD6FE',
-        icon: Package,
-        orders: packingPendingOrders
-      },
-      {
-        title: 'Vehicle Loading Pending',
-        sub: `${vehiclePendingOrders.length} invoiced orders waiting vehicle`,
-        badge: `${vehiclePendingOrders.length} Orders`,
-        color: '#0E7490',
-        bg: '#ECFEFF',
-        border: '#A5F3FC',
-        icon: Truck,
-        orders: vehiclePendingOrders
+    const pendingTodayList = allOrders.filter(o => !o.isDispatched && o.isDueToday);
+    const dispatchedTodayList = allOrders.filter(o => o.isDispatchedToday);
+    const overdueNowList = allOrders.filter(o => o.isOverdueNow);
+
+    // Month / Period metrics
+    const dueInPeriodList = periodOrders.length > 0
+      ? periodOrders
+      : allOrders.filter(o => o.promisedTs && o.promisedTs >= monthStart && o.promisedTs <= monthEnd);
+    const dispatchedPeriodList = dueInPeriodList.filter(o => o.isDispatched);
+    const pendingPeriodList = dueInPeriodList.filter(o => !o.isDispatched);
+    const overdueInPeriodCount = pendingPeriodList.filter(o => o.isOverdueNow).length;
+
+    const onTimePeriodList = dispatchedPeriodList.filter(o => o.dispatchStatus === 'On time');
+    const latePeriodList = dispatchedPeriodList.filter(o => o.dispatchStatus === 'Dispatched late');
+    const onTimePct = dispatchedPeriodList.length > 0
+      ? ((onTimePeriodList.length / dispatchedPeriodList.length) * 100).toFixed(1)
+      : '0.0';
+
+    // Weekly breakdown (1-7, 8-14, 15-21, 22-end of current month)
+    const monthShort = now.toLocaleDateString('en-GB', { month: 'short' });
+    const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    const weekBuckets = [
+      { label: `1–7 ${monthShort}`, start: 1, end: 7 },
+      { label: `8–14 ${monthShort}`, start: 8, end: 14 },
+      { label: `15–21 ${monthShort}`, start: 15, end: 21 },
+      { label: `22–${Math.min(now.getDate(), lastDayOfMonth)} ${monthShort}`, start: 22, end: 31 }
+    ].map(w => {
+      const completedInWeek = dispatchedPeriodList.filter(o => {
+        const refTs = o.promisedTs || o.actualTs;
+        if (!refTs) return false;
+        const day = new Date(refTs).getDate();
+        return day >= w.start && day <= w.end;
+      });
+      const onTimeInWeek = completedInWeek.filter(o => o.dispatchStatus === 'On time').length;
+      return {
+        label: w.label,
+        onTime: onTimeInWeek,
+        completed: completedInWeek.length
+      };
+    });
+
+    // Dispatch-related customer complaints (from BOMs or dispatchesList if any tickets/complaints exist)
+    const complaints = [];
+    allOrders.forEach((o) => {
+      const list = Array.isArray(o.raw.complaints) ? o.raw.complaints : [];
+      list.forEach((c, cIdx) => {
+        complaints.push({
+          ticketId: c.ticketId || c.id || `CMP-${o.code.slice(-3)}-${cIdx + 1}`,
+          orderId: o.code,
+          customer: o.customer,
+          complaint: c.description || c.reason || c.title || 'Dispatch issue reported',
+          status: c.status || 'Open',
+          rawBom: o.raw
+        });
+      });
+      if (o.raw.complaintText || o.raw.customerComplaint) {
+        complaints.push({
+          ticketId: o.raw.complaintTicketId || `CMP-${o.code.slice(-3)}`,
+          orderId: o.code,
+          customer: o.customer,
+          complaint: o.raw.complaintText || o.raw.customerComplaint,
+          status: o.raw.complaintStatus || 'Open',
+          rawBom: o.raw
+        });
       }
-    ];
+    });
+    (dispatchesList || []).forEach((d, dIdx) => {
+      if (d && (d.complaint || d.complaintText)) {
+        complaints.push({
+          ticketId: d.ticketId || `CMP-${100 + dIdx}`,
+          orderId: d.bomCode || d.orderId || '—',
+          customer: d.customerName || d.customer || 'Customer',
+          complaint: d.complaint || d.complaintText,
+          status: d.complaintStatus || 'Open',
+          rawBom: null
+        });
+      }
+    });
+
+    const openComplaintsCount = complaints.filter(c => String(c.status).toLowerCase() !== 'resolved' && String(c.status).toLowerCase() !== 'closed').length;
+    const resolvedComplaintsCount = complaints.length - openComplaintsCount;
+
+    const todayOverdueList = allOrders.filter(o => o.isOverdueNow || o.isDueToday || o.isDispatchedToday);
 
     return {
-      totalOrders,
-      dispatchedCount,
-      inQueueCount,
-      statusSegments,
-      dailyTrend,
-      delayedOrders,
-      productBreakdown,
-      todaysPlan,
-      docChecklist,
-      keyAlerts
+      allOrders,
+      dueInPeriodList,
+      pendingTodayList,
+      dispatchedTodayList,
+      overdueNowList,
+      todayOverdueList,
+      dispatchedPeriodList,
+      pendingPeriodList,
+      overdueInPeriodCount,
+      onTimePeriodList,
+      latePeriodList,
+      onTimePct,
+      weekBuckets,
+      complaints,
+      openComplaintsCount,
+      resolvedComplaintsCount,
+      monthRangeLabel: `1–${now.getDate()} ${monthShort} ${now.getFullYear()}`
     };
-  }, [bomList, dispatchesList, challansList, invList, inventoryList]);
+  }, [allBomList, bomList, dispatchesList]);
 
-  const maxDailyCount = Math.max(1, ...analytics.dailyTrend.map(d => d.dispatchedCount));
-  const peakDay = analytics.dailyTrend.reduce((best, d) => (d.dispatchedCount >= best.dispatchedCount ? d : best), analytics.dailyTrend[0] || { label: '—', dispatchedCount: 0 });
-  const activeDayIdx = selectedDayIdx !== null && analytics.dailyTrend[selectedDayIdx]
-    ? selectedDayIdx
-    : Math.max(0, analytics.dailyTrend.length - 1);
-  const activeDay = analytics.dailyTrend[activeDayIdx] || { label: '—', dispatchedCount: 0, plannedCount: 0, onTimePct: 100, valueSum: 0 };
-  const activeStatusSeg = selectedStatus ? analytics.statusSegments.find(s => s.name === selectedStatus) || null : null;
+  const filterOptions = [
+    { id: 'today_overdue', label: 'Today + Overdue', list: analytics.todayOverdueList },
+    { id: 'pending_today', label: 'Pending Today', list: analytics.pendingTodayList },
+    { id: 'dispatched_today', label: 'Dispatched Today', list: analytics.dispatchedTodayList },
+    { id: 'overdue', label: 'Overdue', list: analytics.overdueNowList },
+    { id: 'mtd', label: 'Month to Date', list: analytics.dueInPeriodList }
+  ];
 
-  const statusBadgeStyle = (bucket) => {
-    if (bucket === 'Dispatched') return { bg: '#DCFCE7', fg: '#15803D', border: '#BBF7D0' };
-    if (bucket === 'Dispatch Pending') return { bg: '#ECFEFF', fg: '#0E7490', border: '#A5F3FC' };
-    if (bucket === 'Payment Slip Pending') return { bg: '#FFFBEB', fg: '#B45309', border: '#FDE68A' };
-    if (bucket === 'Address Proof Pending') return { bg: '#FFF7ED', fg: '#C2410C', border: '#FFEDD5' };
-    if (bucket === 'Accounts Pending') return { bg: '#F5F3FF', fg: '#7C3AED', border: '#DDD6FE' };
-    if (bucket === 'Invoice Pending') return { bg: '#EFF6FF', fg: '#1D4ED8', border: '#BFDBFE' };
-    if (bucket === 'Cancelled') return { bg: '#FEE2E2', fg: '#DC2626', border: '#FECACA' };
-    return { bg: '#ECFEFF', fg: '#0E7490', border: '#A5F3FC' };
-  };
+  const filteredOrders = useMemo(() => {
+    const active = filterOptions.find(f => f.id === activeFilter) || filterOptions[0];
+    const q = searchTerm.trim().toLowerCase();
+    const list = active.list;
+    if (!q) return list;
+    return list.filter(o =>
+      o.code.toLowerCase().includes(q) ||
+      o.customer.toLowerCase().includes(q) ||
+      o.reason.toLowerCase().includes(q)
+    );
+  }, [activeFilter, searchTerm, analytics]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredOrders.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const visibleOrders = filteredOrders.slice((safePage - 1) * pageSize, safePage * pageSize);
+
+  const totalBar = Math.max(1, analytics.dueInPeriodList.length);
+  const onTimeBarPct = Math.round((analytics.onTimePeriodList.length / totalBar) * 100);
+  const lateBarPct = Math.round((analytics.latePeriodList.length / totalBar) * 100);
+  const pendingBarPct = Math.max(0, 100 - onTimeBarPct - lateBarPct);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-      {/* 🚀 BUSINZ Track: LIVE CUSTOMER ORDER TRACKING EXECUTIVE RIBBON */}
-      <div style={{
-        backgroundColor: '#FFFFFF',
-        borderRadius: '16px',
-        border: '1px solid #E2E8F0',
-        padding: '16px 20px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        flexWrap: 'wrap',
-        gap: '16px',
-        boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+
+      {/* 1. TOP 6 DISPATCH KPI CARDS (BUSINZ CeoKpiGrid) */}
+      <CeoKpiGrid kpis={[
+        {
+          title: 'Pending Today',
+          value: `${analytics.pendingTodayList.length}`,
+          valColor: '#D97706',
+          trend: 'Due Today',
+          trendNeutral: true,
+          hideTrendIcon: true,
+          bottomPrefix: 'Due today and ',
+          bottomHighlight: 'still open',
+          bottomHighlightColor: '#B45309',
+          onClick: () => { setActiveFilter('pending_today'); setPage(1); }
+        },
+        {
+          title: 'Dispatched Today',
+          value: `${analytics.dispatchedTodayList.length}`,
+          valColor: '#059669',
+          trend: 'Completed',
+          trendUp: true,
+          hideTrendIcon: true,
+          bottomPrefix: 'Orders fully ',
+          bottomHighlight: 'dispatched today',
+          bottomHighlightColor: '#059669',
+          onClick: () => { setActiveFilter('dispatched_today'); setPage(1); }
+        },
+        {
+          title: 'Overdue Now',
+          value: `${analytics.overdueNowList.length}`,
+          valColor: '#DC2626',
+          highlightCard: analytics.overdueNowList.length > 0,
+          trend: analytics.overdueNowList.length > 0 ? 'Action' : 'Clear',
+          trendUp: analytics.overdueNowList.length === 0,
+          hideTrendIcon: true,
+          bottomPrefix: 'Past promised date ',
+          bottomHighlight: 'and still open',
+          bottomHighlightColor: '#DC2626',
+          onClick: () => { setActiveFilter('overdue'); setPage(1); }
+        },
+        {
+          title: 'Dispatched This Month',
+          value: `${analytics.dispatchedPeriodList.length}`,
+          trend: `${analytics.dueInPeriodList.length} Due`,
+          trendNeutral: true,
+          hideTrendIcon: true,
+          bottomPrefix: `Of ${analytics.dueInPeriodList.length} orders `,
+          bottomHighlight: 'due this period',
+          bottomHighlightColor: '#0E7490',
+          onClick: () => { setActiveFilter('mtd'); setPage(1); }
+        },
+        {
+          title: 'Pending This Month',
+          value: `${analytics.pendingPeriodList.length}`,
+          valColor: '#D97706',
+          trend: `${analytics.overdueInPeriodCount} Overdue`,
+          trendNeutral: true,
+          hideTrendIcon: true,
+          bottomPrefix: `Includes ${analytics.overdueInPeriodCount} `,
+          bottomHighlight: 'already overdue',
+          bottomHighlightColor: '#B45309',
+          onClick: () => { setActiveFilter('mtd'); setPage(1); }
+        },
+        {
+          title: 'On-Time Dispatch',
+          value: `${analytics.onTimePct}%`,
+          valColor: '#059669',
+          trend: `${analytics.onTimePeriodList.length}/${analytics.dispatchedPeriodList.length}`,
+          trendUp: Number(analytics.onTimePct) >= 80,
+          hideTrendIcon: true,
+          bottomPrefix: `${analytics.onTimePeriodList.length} of ${analytics.dispatchedPeriodList.length} `,
+          bottomHighlight: 'completed on time',
+          bottomHighlightColor: '#059669',
+          onClick: () => { setActiveFilter('mtd'); setPage(1); }
+        }
+      ]} />
+
+      {/* 2. DISPATCH ORDERS TABLE (Option 2 Section Card) */}
+      <BusinzSectionCard
+        title="Dispatch Orders"
+        rightNode={
           <div style={{
-            width: '36px',
-            height: '36px',
-            borderRadius: '10px',
-            backgroundColor: '#0E7490',
-            color: '#FFFFFF',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
+            display: 'flex', alignItems: 'center', gap: '7px',
+            backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0',
+            borderRadius: '8px', padding: '5px 10px', minWidth: '230px'
           }}>
-            <Truck size={18} />
-          </div>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-                Live Customer Order Tracking
-              </span>
-              <span style={{ fontSize: '10px', fontWeight: '800', backgroundColor: '#ECFDF5', color: '#059669', padding: '2px 8px', borderRadius: '12px' }}>
-                Real-Time SSE
-              </span>
-            </div>
-            <div style={{ fontSize: '12px', color: '#64748B' }}>
-              Active WhatsApp customer tracking links & live dispatch progression
-            </div>
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '24px', flexWrap: 'wrap' }}>
-          <div>
-            <div style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>Tracked Orders</div>
-            <div style={{ fontSize: '15px', fontWeight: '900', color: '#0F172A' }}>{analytics.totalOrders}</div>
-          </div>
-          <div>
-            <div style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>In Transit</div>
-            <div style={{ fontSize: '15px', fontWeight: '900', color: '#2563EB' }}>{analytics.dispatchedCount}</div>
-          </div>
-          <div>
-            <div style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>Packing Queue</div>
-            <div style={{ fontSize: '15px', fontWeight: '900', color: '#D97706' }}>{analytics.inQueueCount}</div>
-          </div>
-
-          <button
-            onClick={() => onNavigateTab && onNavigateTab('Customer Order Tracking')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '8px 14px',
-              borderRadius: '8px',
-              backgroundColor: '#0E7490',
-              color: '#FFFFFF',
-              border: 'none',
-              fontSize: '12px',
-              fontWeight: '700',
-              cursor: 'pointer'
-            }}
-          >
-            <span>Open Tracking Console</span>
-            <span style={{ fontSize: '13px' }}>›</span>
-          </button>
-        </div>
-      </div>
-
-      {/* ROW 1: DISPATCH STATUS (DONUT) + DAILY DISPATCH TREND (ORDERS) */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '16px' }}>
-        {/* 1. DISPATCH STATUS */}
-        <div style={cardStyle}>
-          <div style={cardHeaderStyle}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-              <span style={cardTitleStyle}>Dispatch Status</span>
-              <span style={{
-                fontSize: '10px', fontWeight: '800', color: '#0E7490',
-                backgroundColor: '#ECFEFF', border: '1px solid #A5F3FC',
-                padding: '2px 8px', borderRadius: '999px'
-              }}>
-                {analytics.totalOrders} Total Orders
-              </span>
-            </div>
-          </div>
-
-          <div style={summaryStripStyle}>
-            <div>
-              <div style={{ fontSize: '9.5px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>Total Orders</div>
-              <div style={{ fontSize: '14px', fontWeight: '900', color: '#0F172A' }}>{analytics.totalOrders}</div>
-            </div>
-            <div>
-              <div style={{ fontSize: '9.5px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>Dispatched</div>
-              <div style={{ fontSize: '14px', fontWeight: '900', color: '#059669' }}>{analytics.dispatchedCount}</div>
-            </div>
-            <div>
-              <div style={{ fontSize: '9.5px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>In Queue</div>
-              <div style={{ fontSize: '14px', fontWeight: '900', color: '#D97706' }}>{analytics.inQueueCount}</div>
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '18px', flex: 1, minHeight: '150px' }}>
-            <DonutChartSvg
-              segments={analytics.statusSegments}
-              centerLabel={activeStatusSeg ? activeStatusSeg.value : analytics.totalOrders}
-              centerSub={activeStatusSeg ? `${activeStatusSeg.pct}% Share` : 'Total Orders'}
-              activeName={selectedStatus}
-              onSelectSegment={(name) => {
-                const seg = analytics.statusSegments.find(s => s.name === name);
-                setSelectedStatus(name);
-                if (seg) {
-                  setPopupSearch('');
-                  setOrdersPopup({ title: `Dispatch Status: ${seg.name}`, color: seg.color, orders: seg.orders });
-                }
-              }}
+            <Search size={13} color="#94A3B8" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }}
+              placeholder="Search Order ID or customer"
+              style={{ border: 'none', outline: 'none', backgroundColor: 'transparent', fontSize: '12px', color: '#0F172A', width: '100%' }}
             />
-            <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '5px', justifyContent: 'center' }}>
-              {analytics.statusSegments.map((seg, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={() => {
-                    setSelectedStatus(seg.name);
-                    setPopupSearch('');
-                    setOrdersPopup({ title: `Dispatch Status: ${seg.name}`, color: seg.color, orders: seg.orders });
-                  }}
-                  style={{
-                    display: 'flex', flexDirection: 'column', gap: '3px',
-                    width: '100%', textAlign: 'left', padding: '5px 8px',
-                    borderRadius: '8px',
-                    border: selectedStatus === seg.name ? `1.5px solid ${seg.color}` : '1px solid transparent',
-                    backgroundColor: selectedStatus === seg.name ? '#F8FAFC' : 'transparent',
-                    cursor: 'pointer'
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11.5px', gap: '6px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
-                      <span style={{ width: '9px', height: '9px', borderRadius: '3px', backgroundColor: seg.color, flexShrink: 0 }} />
-                      <span style={{ fontWeight: '700', color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{seg.name}</span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
-                      <span style={{ fontWeight: '800', color: '#0F172A' }}>{seg.value}</span>
-                      <span style={{ fontSize: '10px', fontWeight: '800', color: seg.color, backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', padding: '1px 6px', borderRadius: '6px' }}>
-                        {seg.pct}%
-                      </span>
-                    </div>
-                  </div>
-                  <div style={{ width: '100%', height: '4px', backgroundColor: '#F1F5F9', borderRadius: '999px', overflow: 'hidden' }}>
-                    <div style={{ width: `${Math.min(100, Math.max(seg.value > 0 ? 3 : 0, Number(seg.pct)))}%`, height: '100%', backgroundColor: seg.color, borderRadius: '999px' }} />
-                  </div>
-                </button>
-              ))}
-            </div>
           </div>
+        }
+      >
+        {/* Filter Pills */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginBottom: '12px' }}>
+          {filterOptions.map((opt) => {
+            const isSel = activeFilter === opt.id;
+            return (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => { setActiveFilter(opt.id); setPage(1); }}
+                style={{
+                  padding: '5px 12px',
+                  borderRadius: '999px',
+                  fontSize: '11.5px',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  border: isSel ? '1px solid #0E7490' : '1px solid #E2E8F0',
+                  backgroundColor: isSel ? '#ECFEFF' : '#FFFFFF',
+                  color: isSel ? '#0E7490' : '#475569'
+                }}
+              >
+                {opt.label} ({opt.list.length})
+              </button>
+            );
+          })}
         </div>
 
-        {/* 2. DAILY DISPATCH TREND (Orders) */}
-        <div style={cardStyle}>
-          <div style={cardHeaderStyle}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-              <span style={cardTitleStyle}>Daily Dispatch Trend (Orders)</span>
-              <span style={{
-                fontSize: '10px', fontWeight: '800', color: '#059669',
-                backgroundColor: '#ECFDF5', border: '1px solid #A7F3D0',
-                padding: '2px 8px', borderRadius: '999px'
-              }}>
-                BOM Expected Date
-              </span>
-            </div>
-          </div>
-
-          <div style={summaryStripStyle}>
-            <div>
-              <div style={{ fontSize: '9.5px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>{activeDay.label} Orders</div>
-              <div style={{ fontSize: '14px', fontWeight: '900', color: '#0F172A' }}>{activeDay.dispatchedCount}</div>
-            </div>
-            <div>
-              <div style={{ fontSize: '9.5px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>On-Time %</div>
-              <div style={{ fontSize: '14px', fontWeight: '900', color: '#059669' }}>{activeDay.onTimePct}%</div>
-            </div>
-            <div>
-              <div style={{ fontSize: '9.5px', fontWeight: '700', color: '#64748B', textTransform: 'uppercase' }}>7-Day Peak</div>
-              <div style={{ fontSize: '13px', fontWeight: '900', color: '#0E7490' }}>{peakDay.label} ({peakDay.dispatchedCount})</div>
-            </div>
-          </div>
-
-          <div style={{ position: 'relative', flex: 1, minHeight: '150px', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', paddingTop: '12px' }}>
-            <div style={{ position: 'absolute', inset: '14px 0 24px 0', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', pointerEvents: 'none' }}>
-              <div style={{ borderTop: '1px dashed #E2E8F0', width: '100%' }} />
-              <div style={{ borderTop: '1px dashed #E2E8F0', width: '100%' }} />
-              <div style={{ borderTop: '1px solid #E2E8F0', width: '100%' }} />
-            </div>
-
-            <div style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: '8px', height: '100%' }}>
-              {analytics.dailyTrend.map((d, idx) => {
-                const isSelected = idx === activeDayIdx;
-                const barH = d.dispatchedCount > 0 ? Math.max(18, Math.round((d.dispatchedCount / maxDailyCount) * 86)) : 6;
-                return (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => setSelectedDayIdx(idx)}
-                    style={{
-                      flex: 1, border: 'none',
-                      background: isSelected ? '#ECFEFF' : 'transparent',
-                      borderRadius: '10px', padding: '4px 2px',
-                      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end',
-                      gap: '4px', height: '100%', cursor: 'pointer'
-                    }}
-                  >
-                    <span style={{ fontSize: '9.5px', fontWeight: '800', color: '#059669' }}>{d.onTimePct}%</span>
-                    <div style={{
-                      width: '100%', maxWidth: '30px', height: `${barH}px`,
-                      background: d.dispatchedCount <= 0 ? '#CBD5E1' : (isSelected ? 'linear-gradient(180deg, #0E7490 0%, #075985 100%)' : '#93C5FD'),
-                      borderRadius: '6px 6px 2px 2px',
-                      boxShadow: isSelected && d.dispatchedCount > 0 ? '0 4px 10px rgba(14, 116, 144, 0.25)' : 'none'
-                    }} />
-                    <span style={{ fontSize: '10px', fontWeight: '800', color: '#0F172A' }}>{d.dispatchedCount}</span>
-                    <span style={{ fontSize: '9.5px', fontWeight: isSelected ? '800' : '600', color: isSelected ? '#0E7490' : '#64748B' }}>{d.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div style={{ marginTop: 'auto', paddingTop: '8px', borderTop: '1px dashed #E2E8F0', display: 'flex', justifyContent: 'space-between', fontSize: '11px', flexWrap: 'wrap', gap: '6px' }}>
-            <span style={{ fontWeight: '700', color: '#475569' }}>
-              <strong style={{ color: '#0F172A' }}>{activeDay.label}:</strong> {activeDay.dispatchedCount} Dispatched • {activeDay.plannedCount} Expected (BOM)
-            </span>
-            <span style={{ fontWeight: '800', color: '#059669' }}>
-              Value: {formatINRCompact(activeDay.valueSum)}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* ROW 2: TOP 5 DELAYED DISPATCH ORDERS + DISPATCH BY PRODUCT / PROFILE (MTD) */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '16px' }}>
-        {/* 3. TOP 5 DELAYED DISPATCH ORDERS */}
-        <div style={cardStyle}>
-          <div style={cardHeaderStyle}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={cardTitleStyle}>Top 5 Delayed Dispatch Orders</span>
-              <span style={{
-                fontSize: '10px', fontWeight: '800',
-                color: analytics.delayedOrders.length > 0 ? '#DC2626' : '#059669',
-                backgroundColor: analytics.delayedOrders.length > 0 ? '#FEF2F2' : '#ECFDF5',
-                border: `1px solid ${analytics.delayedOrders.length > 0 ? '#FECACA' : '#A7F3D0'}`,
-                padding: '2px 8px', borderRadius: '999px'
-              }}>
-                {analytics.delayedOrders.length} Delayed
-              </span>
-            </div>
-          </div>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', textAlign: 'left' }}>
-              <thead>
-                <tr style={{ backgroundColor: '#F8FAFC', color: '#64748B', borderBottom: '1px solid #E2E8F0' }}>
-                  <th style={{ padding: '7px 6px' }}>Order No.</th>
-                  <th style={{ padding: '7px 6px' }}>Customer</th>
-                  <th style={{ padding: '7px 6px', textAlign: 'center' }}>Delay</th>
-                  <th style={{ padding: '7px 6px' }}>Reason</th>
-                  <th style={{ padding: '7px 6px', textAlign: 'center' }}>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {analytics.delayedOrders.length > 0 ? analytics.delayedOrders.map((o, idx) => (
-                  <tr
-                    key={idx}
-                    onClick={() => {
-                      if (onOpenBom) {
-                        onOpenBom(o.rawBom || { bomCode: o.code, code: o.code, customerName: o.customer, status: o.bucket, grandTotal: o.grandTotal, items: o.itemsArr, deliveryDate: o.plannedIso });
-                      } else {
-                        setPopupSearch('');
-                        setOrdersPopup({ title: `Delayed Order: ${o.code}`, color: '#DC2626', orders: [o] });
-                      }
-                    }}
-                    style={{ borderBottom: '1px solid #F1F5F9', cursor: 'pointer' }}
-                  >
-                    <td style={{ padding: '7px 6px', fontWeight: '800', color: '#0E7490', whiteSpace: 'nowrap', textDecoration: 'underline' }}>{o.code}</td>
-                    <td style={{ padding: '7px 6px', fontWeight: '700', color: '#0F172A' }}>{o.customer}</td>
-                    <td style={{ padding: '7px 6px', textAlign: 'center', fontWeight: '800', color: '#DC2626' }}>{o.delayDays}d</td>
-                    <td style={{ padding: '7px 6px', color: '#475569' }}>{o.delayReason}</td>
-                    <td style={{ padding: '7px 6px', textAlign: 'center' }}>
-                      <span style={{
-                        fontSize: '9.5px', fontWeight: '800', padding: '2px 7px', borderRadius: '999px',
-                        backgroundColor: o.delayDays >= 3 ? '#FEE2E2' : '#FEF3C7',
-                        color: o.delayDays >= 3 ? '#DC2626' : '#B45309'
-                      }}>
-                        {o.delayDays >= 3 ? 'Overdue' : 'Pending'}
-                      </span>
-                    </td>
-                  </tr>
-                )) : (
-                  <tr>
-                    <td colSpan={5} style={{ padding: '22px', textAlign: 'center', color: '#059669', fontWeight: '700' }}>
-                      No delayed dispatch orders — all orders on schedule.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* 4. DISPATCH BY PRODUCT / PROFILE (MTD) */}
-        {(() => {
-          const defaultTop5 = analytics.productBreakdown.slice(0, 5);
-          const visibleProducts = selectedProductNames !== null
-            ? analytics.productBreakdown.filter(p => selectedProductNames.includes(p.name)).slice(0, 5)
-            : defaultTop5;
-          const activeCount = selectedProductNames !== null ? visibleProducts.length : defaultTop5.length;
-
-          return (
-            <div style={cardStyle}>
-              <div style={cardHeaderStyle}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                  <span style={cardTitleStyle}>Dispatch by Product / Profile (MTD)</span>
-                  <span style={{
-                    fontSize: '10px', fontWeight: '800', color: '#0E7490',
-                    backgroundColor: '#ECFEFF', border: '1px solid #A5F3FC',
-                    padding: '2px 8px', borderRadius: '999px'
-                  }}>
-                    Top {activeCount} of {analytics.productBreakdown.length}
-                  </span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setProductFilterSearch('');
-                      setProductFilterOpen(true);
-                    }}
-                    style={{
-                      display: 'inline-flex', alignItems: 'center', gap: '5px',
-                      border: '1px solid #A5F3FC', backgroundColor: '#ECFEFF', color: '#0E7490',
-                      fontSize: '10.5px', fontWeight: '800', padding: '4px 10px',
-                      borderRadius: '8px', cursor: 'pointer'
-                    }}
-                  >
-                    <SlidersHorizontal size={12} />
-                    Filter ({activeCount}/5)
-                  </button>
-                </div>
-              </div>
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', textAlign: 'left' }}>
-                  <thead>
-                    <tr style={{ backgroundColor: '#F8FAFC', color: '#64748B', borderBottom: '1px solid #E2E8F0' }}>
-                      <th style={{ padding: '7px 6px' }}>Product / Profile</th>
-                      <th style={{ padding: '7px 6px', textAlign: 'right' }}>Orders</th>
-                      <th style={{ padding: '7px 6px', textAlign: 'right' }}>Qty</th>
-                      <th style={{ padding: '7px 6px', textAlign: 'right' }}>Value (₹)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {visibleProducts.length > 0 ? visibleProducts.map((p, idx) => (
-                      <tr
-                        key={idx}
-                        onClick={() => {
-                          setPopupSearch('');
-                          setOrdersPopup({ title: `Product: ${p.name}`, color: '#0E7490', orders: p.orderList });
-                        }}
-                        style={{ borderBottom: '1px solid #F1F5F9', cursor: 'pointer' }}
-                      >
-                        <td style={{ padding: '7px 6px', fontWeight: '700', color: '#0F172A' }}>{p.name}</td>
-                        <td style={{ padding: '7px 6px', textAlign: 'right', fontWeight: '700', color: '#0E7490' }}>{p.orders}</td>
-                        <td style={{ padding: '7px 6px', textAlign: 'right', color: '#475569', fontWeight: '600' }}>{p.qty.toLocaleString('en-IN')}</td>
-                        <td style={{ padding: '7px 6px', textAlign: 'right', fontWeight: '800', color: '#0F172A' }}>{formatINRCompact(p.value)}</td>
-                      </tr>
-                    )) : (
-                      <tr>
-                        <td colSpan={4} style={{ padding: '22px', textAlign: 'center', color: '#64748B', fontWeight: '600' }}>
-                          {analytics.productBreakdown.length > 0
-                            ? 'No products selected — click Filter to choose up to 5 products.'
-                            : 'No dispatched product profiles recorded yet.'}
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          );
-        })()}
-      </div>
-
-      {/* ROW 3: TODAY'S DISPATCH PLAN (FULL WIDTH) */}
-      <div style={cardStyle}>
-        <div style={cardHeaderStyle}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={cardTitleStyle}>Today&apos;s Dispatch Plan</span>
-            <span style={{
-              fontSize: '10px', fontWeight: '800', color: '#0E7490',
-              backgroundColor: '#ECFEFF', border: '1px solid #A5F3FC',
-              padding: '2px 8px', borderRadius: '999px'
-            }}>
-              {analytics.todaysPlan.length} Orders
-            </span>
-          </div>
-        </div>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11.5px', textAlign: 'left' }}>
+        {/* Orders Table */}
+        <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #EAEFEF', borderRadius: '12px', overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
             <thead>
-              <tr style={{ backgroundColor: '#F8FAFC', color: '#64748B', borderBottom: '1px solid #E2E8F0' }}>
-                <th style={{ padding: '8px 8px' }}>Order No.</th>
-                <th style={{ padding: '8px 8px' }}>Customer</th>
-                <th style={{ padding: '8px 8px' }}>Product / Item</th>
-                <th style={{ padding: '8px 8px', textAlign: 'right' }}>Qty (Nos)</th>
-                <th style={{ padding: '8px 8px', textAlign: 'right' }}>Value</th>
-                <th style={{ padding: '8px 8px', textAlign: 'center' }}>Planned Date</th>
-                <th style={{ padding: '8px 8px', textAlign: 'center' }}>Status</th>
+              <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#64748B', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                <th style={{ textAlign: 'left', padding: '10px 14px' }}>Order ID</th>
+                <th style={{ textAlign: 'left', padding: '10px 14px' }}>Customer</th>
+                <th style={{ textAlign: 'left', padding: '10px 14px' }}>Promised Dispatch</th>
+                <th style={{ textAlign: 'left', padding: '10px 14px' }}>Actual Dispatch</th>
+                <th style={{ textAlign: 'left', padding: '10px 14px' }}>Status</th>
+                <th style={{ textAlign: 'left', padding: '10px 14px' }}>Delay</th>
+                <th style={{ textAlign: 'left', padding: '10px 14px' }}>Reason / Current Blocker</th>
               </tr>
             </thead>
             <tbody>
-              {analytics.todaysPlan.length > 0 ? analytics.todaysPlan.map((o, idx) => {
-                const badge = statusBadgeStyle(o.bucket);
-                return (
-                  <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                    <td style={{ padding: '8px 8px', fontWeight: '800', color: '#0E7490', whiteSpace: 'nowrap' }}>{o.code}</td>
-                    <td style={{ padding: '8px 8px', fontWeight: '700', color: '#0F172A' }}>{o.customer}</td>
-                    <td style={{ padding: '8px 8px', color: '#475569' }}>{o.firstProd}</td>
-                    <td style={{ padding: '8px 8px', textAlign: 'right', fontWeight: '700' }}>{o.totalQty.toLocaleString('en-IN')}</td>
-                    <td style={{ padding: '8px 8px', textAlign: 'right', fontWeight: '800', color: '#0F172A' }}>{formatINRCompact(o.grandTotal)}</td>
-                    <td style={{ padding: '8px 8px', textAlign: 'center', color: '#64748B', fontWeight: '600' }}>{o.plannedIso}</td>
-                    <td style={{ padding: '8px 8px', textAlign: 'center' }}>
-                      <span style={{
-                        fontSize: '10px', fontWeight: '800', padding: '2px 8px', borderRadius: '999px',
-                        backgroundColor: badge.bg, color: badge.fg, border: `1px solid ${badge.border}`
-                      }}>
-                        {o.bucket}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              }) : (
+              {visibleOrders.length === 0 ? (
                 <tr>
-                  <td colSpan={7} style={{ padding: '22px', textAlign: 'center', color: '#64748B', fontWeight: '600' }}>
-                    No dispatch orders scheduled for today.
+                  <td colSpan={7} style={{ textAlign: 'center', padding: '24px', color: '#94A3B8', fontSize: '12.5px' }}>
+                    No dispatch orders match the active filter.
                   </td>
                 </tr>
+              ) : (
+                visibleOrders.map((ord) => {
+                  const st = STATUS_BADGE[ord.dispatchStatus] || STATUS_BADGE.Pending;
+                  return (
+                    <tr
+                      key={ord.code}
+                      onClick={() => onOpenBom && onOpenBom(ord.raw)}
+                      style={{ borderBottom: '1px solid #F1F5F9', cursor: onOpenBom ? 'pointer' : 'default' }}
+                    >
+                      <td style={{ padding: '10px 14px', fontWeight: '800', color: '#0E7490', whiteSpace: 'nowrap' }}>{ord.code}</td>
+                      <td style={{ padding: '10px 14px', color: '#0F172A', fontWeight: '600' }}>{ord.customer}</td>
+                      <td style={{ padding: '10px 14px', color: '#475569', whiteSpace: 'nowrap' }}>{formatShortDate(ord.promisedTs)}</td>
+                      <td style={{ padding: '10px 14px', color: '#475569', whiteSpace: 'nowrap' }}>{ord.actualTs ? formatDateTime(ord.actualTs) : '—'}</td>
+                      <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
+                        <span style={{
+                          display: 'inline-block',
+                          padding: '2px 9px',
+                          borderRadius: '999px',
+                          fontSize: '11px',
+                          fontWeight: '800',
+                          backgroundColor: st.bg,
+                          color: st.color,
+                          border: `1px solid ${st.border}`
+                        }}>
+                          {ord.dispatchStatus}
+                        </span>
+                      </td>
+                      <td style={{ padding: '10px 14px', color: ord.delayDays > 0 ? '#DC2626' : '#64748B', fontWeight: ord.delayDays > 0 ? '700' : '500', whiteSpace: 'nowrap' }}>
+                        {ord.delayDays > 0 ? `${ord.delayDays} day${ord.delayDays > 1 ? 's' : ''}` : '—'}
+                      </td>
+                      <td style={{ padding: '10px 14px', color: '#334155' }}>{ord.reason}</td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
-        </div>
-      </div>
 
-      {/* ROW 4: DOCUMENT CHECKLIST (TODAY) + KEY ALERTS */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '16px' }}>
-        {/* 6. DOCUMENT CHECKLIST (Today) */}
-        <div style={cardStyle}>
-          <div style={cardHeaderStyle}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={cardTitleStyle}>Document Checklist (Today)</span>
-              <span style={{
-                fontSize: '10px', fontWeight: '800', color: '#059669',
-                backgroundColor: '#ECFDF5', border: '1px solid #A7F3D0',
-                padding: '2px 8px', borderRadius: '999px'
-              }}>
-                Compliance Audit
-              </span>
+          {/* Pagination Footer */}
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '10px 14px', borderTop: '1px solid #F1F5F9', fontSize: '11.5px', color: '#64748B', fontWeight: '600'
+          }}>
+            <span>
+              Showing {filteredOrders.length === 0 ? 0 : ((safePage - 1) * pageSize + 1)}–{Math.min(safePage * pageSize, filteredOrders.length)} of {filteredOrders.length} orders
+            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <button
+                type="button"
+                disabled={safePage <= 1}
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                style={{
+                  border: '1px solid #E2E8F0', backgroundColor: '#FFFFFF', borderRadius: '6px',
+                  padding: '3px 7px', cursor: safePage <= 1 ? 'not-allowed' : 'pointer', opacity: safePage <= 1 ? 0.45 : 1
+                }}
+              >
+                <ChevronLeft size={13} />
+              </button>
+              <span style={{ color: '#0F172A', fontWeight: '800' }}>{safePage} / {totalPages}</span>
+              <button
+                type="button"
+                disabled={safePage >= totalPages}
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                style={{
+                  border: '1px solid #E2E8F0', backgroundColor: '#FFFFFF', borderRadius: '6px',
+                  padding: '3px 7px', cursor: safePage >= totalPages ? 'not-allowed' : 'pointer', opacity: safePage >= totalPages ? 0.45 : 1
+                }}
+              >
+                <ChevronRight size={13} />
+              </button>
             </div>
           </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', flex: 1, justifyContent: 'center' }}>
-            {analytics.docChecklist.map((doc, idx) => {
-              const canOpen = doc.pendingOrders.length > 0;
-              return (
-                <button
-                  key={idx}
-                  type="button"
-                  disabled={!canOpen}
-                  onClick={() => {
-                    if (!canOpen) return;
-                    setPopupSearch('');
-                    setOrdersPopup({ title: `Missing Document: ${doc.label}`, color: '#DC2626', orders: doc.pendingOrders });
-                  }}
-                  style={{
-                    border: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', borderRadius: '10px',
-                    padding: '9px 12px', width: '100%', textAlign: 'left',
-                    display: 'flex', flexDirection: 'column', gap: '6px',
-                    cursor: canOpen ? 'pointer' : 'default'
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11.5px', gap: '8px' }}>
-                    <span style={{ fontWeight: '800', color: '#0F172A' }}>{doc.label}</span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '10.5px', fontWeight: '700', color: '#059669' }}>{doc.completed}/{doc.required} Done</span>
-                      <span style={{
-                        fontSize: '10px', fontWeight: '800', padding: '1px 7px', borderRadius: '999px',
-                        backgroundColor: doc.pending > 0 ? '#FEF2F2' : '#ECFDF5',
-                        color: doc.pending > 0 ? '#DC2626' : '#059669',
-                        border: `1px solid ${doc.pending > 0 ? '#FECACA' : '#A7F3D0'}`
-                      }}>
-                        {doc.pending > 0 ? `${doc.pending} Pending` : '100% Ready'}
-                      </span>
-                    </div>
-                  </div>
-                  <div style={{ width: '100%', height: '6px', backgroundColor: '#E2E8F0', borderRadius: '999px', overflow: 'hidden' }}>
-                    <div style={{ width: `${doc.pct}%`, height: '100%', backgroundColor: doc.pending > 0 ? '#0E7490' : '#059669', borderRadius: '999px' }} />
-                  </div>
-                </button>
-              );
-            })}
-          </div>
         </div>
+      </BusinzSectionCard>
 
-        {/* 7. KEY ALERTS */}
-        <div style={cardStyle}>
-          <div style={cardHeaderStyle}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={cardTitleStyle}>Key Alerts</span>
-              <span style={{
-                fontSize: '10px', fontWeight: '800', color: '#DC2626',
-                backgroundColor: '#FEF2F2', border: '1px solid #FECACA',
-                padding: '2px 8px', borderRadius: '999px'
-              }}>
-                {analytics.keyAlerts.reduce((s, a) => s + a.orders.length, 0)} Alerts
-              </span>
+      {/* 3. BOTTOM 2-COLUMN SECTION: MONTHLY PERFORMANCE + DISPATCH COMPLAINTS */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: '14px' }}>
+
+        {/* Monthly Dispatch Performance */}
+        <BusinzSectionCard
+          title="Monthly Dispatch Performance"
+          subtitle={analytics.monthRangeLabel}
+        >
+          <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #EAEFEF', borderRadius: '12px', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', fontSize: '12.5px', fontWeight: '800' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+                <span style={{ color: '#059669' }}>{analytics.onTimePeriodList.length} on time</span>
+                <span style={{ color: '#DC2626' }}>{analytics.latePeriodList.length} dispatched late</span>
+                <span style={{ color: '#D97706' }}>{analytics.pendingPeriodList.length} pending</span>
+              </div>
+              <span style={{ color: '#64748B', fontSize: '11.5px', fontWeight: '700' }}>{analytics.dueInPeriodList.length} orders due</span>
+            </div>
+
+            {/* Segmented Bar */}
+            <div style={{ width: '100%', height: '10px', borderRadius: '999px', overflow: 'hidden', display: 'flex', backgroundColor: '#E2E8F0' }}>
+              {onTimeBarPct > 0 && <div style={{ width: `${onTimeBarPct}%`, backgroundColor: '#059669' }} />}
+              {lateBarPct > 0 && <div style={{ width: `${lateBarPct}%`, backgroundColor: '#DC2626' }} />}
+              {pendingBarPct > 0 && <div style={{ width: `${pendingBarPct}%`, backgroundColor: '#D97706' }} />}
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11.5px', color: '#475569', fontWeight: '700' }}>
+              <span>Weekly dispatch completion</span>
+              <span style={{ color: '#64748B', fontWeight: '600' }}>On time / completed</span>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '8px' }}>
+              {analytics.weekBuckets.map((wk) => (
+                <div key={wk.label} style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '10px', padding: '10px 12px' }}>
+                  <div style={{ fontSize: '11px', color: '#64748B', fontWeight: '600', marginBottom: '4px' }}>{wk.label}</div>
+                  <div style={{ fontSize: '15px', fontWeight: '800', color: '#0F172A' }}>{wk.onTime} / {wk.completed}</div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ fontSize: '11px', color: '#64748B', lineHeight: 1.45, borderTop: '1px solid #F1F5F9', paddingTop: '8px' }}>
+              On-time rate = orders dispatched by the promised date ÷ completed orders.<br />
+              Monthly counts use the promised dispatch date.
             </div>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1, justifyContent: 'center' }}>
-            {analytics.keyAlerts.map((al, idx) => {
-              const IconComp = al.icon;
-              const canOpen = al.orders.length > 0;
-              return (
-                <button
-                  key={idx}
-                  type="button"
-                  disabled={!canOpen}
-                  onClick={() => {
-                    if (!canOpen) return;
-                    setPopupSearch('');
-                    setOrdersPopup({ title: `Alert: ${al.title}`, color: al.color, orders: al.orders });
-                  }}
-                  style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    gap: '10px', width: '100%', textAlign: 'left',
-                    padding: '9px 12px', borderRadius: '10px',
-                    backgroundColor: al.bg, border: `1px solid ${al.border}`,
-                    cursor: canOpen ? 'pointer' : 'default'
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
-                    <IconComp size={15} color={al.color} style={{ flexShrink: 0 }} />
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: '12px', fontWeight: '800', color: '#0F172A' }}>{al.title}</div>
-                      <div style={{ fontSize: '10.5px', fontWeight: '600', color: '#64748B' }}>{al.sub}</div>
-                    </div>
-                  </div>
-                  <span style={{
-                    fontSize: '10.5px', fontWeight: '800', color: al.color,
-                    backgroundColor: '#FFFFFF', border: `1px solid ${al.border}`,
-                    padding: '2px 8px', borderRadius: '999px', whiteSpace: 'nowrap'
-                  }}>
-                    {al.badge}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </div>
+        </BusinzSectionCard>
 
-      {/* PRODUCT / PROFILE FILTER MODAL (MAX 5) */}
-      {productFilterOpen && (() => {
-        const currentList = selectedProductNames !== null
-          ? selectedProductNames
-          : analytics.productBreakdown.slice(0, 5).map(p => p.name);
-        const pq = productFilterSearch.trim().toLowerCase();
-        const filteredProds = analytics.productBreakdown.filter(p =>
-          !pq || String(p.name || '').toLowerCase().includes(pq)
-        );
-        const toggleProd = (name) => {
-          if (currentList.includes(name)) {
-            updateSelectedProducts(currentList.filter(n => n !== name));
-          } else if (currentList.length < 5) {
-            updateSelectedProducts([...currentList, name]);
+        {/* Dispatch-Related Customer Complaints */}
+        <BusinzSectionCard
+          title="Dispatch-Related Customer Complaints"
+          rightNode={
+            <span style={{
+              fontSize: '11px', fontWeight: '800', color: analytics.openComplaintsCount > 0 ? '#B45309' : '#059669',
+              backgroundColor: analytics.openComplaintsCount > 0 ? '#FEF3C7' : '#ECFDF5',
+              border: `1px solid ${analytics.openComplaintsCount > 0 ? '#FDE68A' : '#A7F3D0'}`,
+              padding: '3px 10px', borderRadius: '999px'
+            }}>
+              {analytics.openComplaintsCount} open
+            </span>
           }
-        };
-
-        return (
-          <div
-            onClick={() => setProductFilterOpen(false)}
-            style={{
-              position: 'fixed', inset: 0, backgroundColor: 'rgba(15, 23, 42, 0.6)',
-              backdropFilter: 'blur(3px)', zIndex: 99999,
-              display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px'
-            }}
-          >
-            <div
-              onClick={(e) => e.stopPropagation()}
-              style={{
-                backgroundColor: '#FFFFFF', borderRadius: '18px', width: '560px', maxWidth: '100%',
-                maxHeight: '82vh', display: 'flex', flexDirection: 'column',
-                boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.35)', border: '1px solid #E2E8F0', overflow: 'hidden'
-              }}
-            >
-              <div style={{
-                padding: '14px 20px', borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC',
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px'
-              }}>
-                <div>
-                  <div style={{ fontSize: '14px', fontWeight: '900', color: '#0F172A' }}>
-                    Select Products / Profiles (Max 5)
-                  </div>
-                  <div style={{ fontSize: '11px', color: '#64748B', fontWeight: '600', marginTop: '2px' }}>
-                    {currentList.length} / 5 selected — deselect one to add another
-                  </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <button
-                    type="button"
-                    onClick={() => updateSelectedProducts(null)}
-                    style={{
-                      border: '1px solid #CBD5E1', backgroundColor: '#FFFFFF', color: '#475569',
-                      fontSize: '10.5px', fontWeight: '700', padding: '5px 10px', borderRadius: '8px', cursor: 'pointer'
-                    }}
-                  >
-                    Reset Top 5
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setProductFilterOpen(false)}
-                    style={{
-                      border: 'none', backgroundColor: '#E2E8F0', color: '#475569',
-                      width: '30px', height: '30px', borderRadius: '8px',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer'
-                    }}
-                  >
-                    <X size={16} />
-                  </button>
-                </div>
-              </div>
-
-              <div style={{ padding: '12px 20px', borderBottom: '1px solid #F1F5F9' }}>
-                <div style={{
-                  display: 'flex', alignItems: 'center', gap: '8px',
-                  backgroundColor: '#F8FAFC', border: '1px solid #CBD5E1', borderRadius: '10px', padding: '7px 12px'
-                }}>
-                  <Search size={14} color="#64748B" />
-                  <input
-                    type="text"
-                    value={productFilterSearch}
-                    onChange={(e) => setProductFilterSearch(e.target.value)}
-                    placeholder="Search product / profile name..."
-                    style={{ border: 'none', background: 'none', outline: 'none', width: '100%', fontSize: '12px', color: '#0F172A', fontWeight: '600' }}
-                  />
-                </div>
-              </div>
-
-              <div style={{ overflowY: 'auto', padding: '10px 20px 16px 20px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                {filteredProds.length > 0 ? filteredProds.map((p, idx) => {
-                  const isChecked = currentList.includes(p.name);
-                  const isDisabled = !isChecked && currentList.length >= 5;
-                  return (
-                    <label
-                      key={idx}
-                      style={{
-                        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px',
-                        padding: '8px 12px', borderRadius: '10px',
-                        border: isChecked ? '1.5px solid #0E7490' : '1px solid #E2E8F0',
-                        backgroundColor: isChecked ? '#ECFEFF' : (isDisabled ? '#F8FAFC' : '#FFFFFF'),
-                        opacity: isDisabled ? 0.55 : 1,
-                        cursor: isDisabled ? 'not-allowed' : 'pointer'
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          disabled={isDisabled}
-                          onChange={() => toggleProd(p.name)}
-                          style={{ accentColor: '#0E7490', width: '15px', height: '15px', cursor: isDisabled ? 'not-allowed' : 'pointer' }}
-                        />
-                        <div style={{ minWidth: 0 }}>
-                          <div style={{ fontSize: '12px', fontWeight: '700', color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {p.name}
-                          </div>
-                          <div style={{ fontSize: '10.5px', color: '#64748B', fontWeight: '600' }}>
-                            {p.orders} {p.orders === 1 ? 'Order' : 'Orders'} • {p.qty.toLocaleString('en-IN')} Qty
-                          </div>
-                        </div>
-                      </div>
-                      <span style={{ fontSize: '12px', fontWeight: '800', color: '#0E7490', flexShrink: 0 }}>
-                        {formatINRCompact(p.value)}
-                      </span>
-                    </label>
-                  );
-                }) : (
-                  <div style={{ textAlign: 'center', padding: '24px 0', color: '#64748B', fontSize: '12px', fontWeight: '600' }}>
-                    No matching products found.
-                  </div>
-                )}
-              </div>
+        >
+          <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #EAEFEF', borderRadius: '12px', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div style={{ fontSize: '11.5px', color: '#64748B', fontWeight: '600' }}>
+              {analytics.complaints.length} complaints logged this month · {analytics.resolvedComplaintsCount} resolved
             </div>
-          </div>
-        );
-      })()}
 
-      {/* ORDERS DRILLDOWN POPUP MODAL */}
-      {ordersPopup && (() => {
-        const q = popupSearch.trim().toLowerCase();
-        const filtered = (ordersPopup.orders || []).filter(o =>
-          !q ||
-          String(o.code || '').toLowerCase().includes(q) ||
-          String(o.customer || '').toLowerCase().includes(q) ||
-          String(o.firstProd || '').toLowerCase().includes(q)
-        );
-        return (
-          <div
-            onClick={closePopup}
-            style={{
-              position: 'fixed', inset: 0, backgroundColor: 'rgba(15, 23, 42, 0.6)',
-              backdropFilter: 'blur(3px)', zIndex: 99999,
-              display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px'
-            }}
-          >
-            <div
-              onClick={(e) => e.stopPropagation()}
-              style={{
-                backgroundColor: '#FFFFFF', borderRadius: '18px', width: '820px', maxWidth: '100%',
-                maxHeight: '84vh', display: 'flex', flexDirection: 'column',
-                boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.35)', border: '1px solid #E2E8F0', overflow: 'hidden'
-              }}
-            >
-              <div style={{
-                padding: '14px 20px', borderBottom: '1px solid #E2E8F0', backgroundColor: '#F8FAFC',
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <span style={{ width: '11px', height: '11px', borderRadius: '4px', backgroundColor: ordersPopup.color }} />
-                  <span style={{ fontSize: '15px', fontWeight: '900', color: '#0F172A' }}>{ordersPopup.title}</span>
-                  <span style={{
-                    fontSize: '10.5px', fontWeight: '800', color: ordersPopup.color,
-                    backgroundColor: '#FFFFFF', border: '1px solid #CBD5E1', padding: '2px 8px', borderRadius: '999px'
-                  }}>
-                    {ordersPopup.orders.length} Orders
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={closePopup}
-                  style={{
-                    border: 'none', backgroundColor: '#E2E8F0', color: '#475569',
-                    width: '30px', height: '30px', borderRadius: '8px',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer'
-                  }}
-                >
-                  <X size={16} />
-                </button>
-              </div>
-
-              <div style={{ padding: '12px 20px', borderBottom: '1px solid #F1F5F9' }}>
-                <div style={{
-                  display: 'flex', alignItems: 'center', gap: '8px',
-                  backgroundColor: '#F8FAFC', border: '1px solid #CBD5E1', borderRadius: '10px', padding: '7px 12px'
-                }}>
-                  <Search size={14} color="#64748B" />
-                  <input
-                    type="text"
-                    value={popupSearch}
-                    onChange={(e) => setPopupSearch(e.target.value)}
-                    placeholder="Search order no, customer, or product..."
-                    style={{ border: 'none', background: 'none', outline: 'none', width: '100%', fontSize: '12px', color: '#0F172A', fontWeight: '600' }}
-                  />
-                </div>
-              </div>
-
-              <div style={{ overflowY: 'auto', padding: '12px 20px 18px 20px' }}>
-                {filtered.length > 0 ? (
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-                    <thead>
-                      <tr style={{ borderBottom: '1.5px solid #E2E8F0', color: '#64748B', fontSize: '10px', textTransform: 'uppercase' }}>
-                        <th style={{ textAlign: 'left', padding: '8px 6px' }}>Order No.</th>
-                        <th style={{ textAlign: 'left', padding: '8px 6px' }}>Customer</th>
-                        <th style={{ textAlign: 'left', padding: '8px 6px' }}>Product / Kit</th>
-                        <th style={{ textAlign: 'right', padding: '8px 6px' }}>Qty</th>
-                        <th style={{ textAlign: 'right', padding: '8px 6px' }}>Value</th>
-                        <th style={{ textAlign: 'center', padding: '8px 6px' }}>Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filtered.map((o, idx) => {
-                        const badge = statusBadgeStyle(o.bucket);
-                        const handleOpenOrderBom = () => {
-                          if (!onOpenBom) return;
-                          closePopup();
-                          onOpenBom(o.rawBom || { bomCode: o.code, code: o.code, customerName: o.customer, status: o.bucket, grandTotal: o.grandTotal, items: o.itemsArr, deliveryDate: o.plannedIso });
-                        };
-                        return (
-                          <tr
-                            key={idx}
-                            onClick={handleOpenOrderBom}
-                            style={{ borderBottom: '1px solid #F1F5F9', cursor: onOpenBom ? 'pointer' : 'default' }}
-                          >
-                            <td style={{ padding: '8px 6px', fontWeight: '800', color: '#0E7490', whiteSpace: 'nowrap', textDecoration: onOpenBom ? 'underline' : 'none' }}>
-                              {o.code}
-                            </td>
-                            <td style={{ padding: '8px 6px', fontWeight: '700', color: '#0F172A' }}>{o.customer}</td>
-                            <td style={{ padding: '8px 6px', color: '#475569' }}>{o.firstProd}</td>
-                            <td style={{ padding: '8px 6px', textAlign: 'right', fontWeight: '700' }}>{o.totalQty.toLocaleString('en-IN')}</td>
-                            <td style={{ padding: '8px 6px', textAlign: 'right', fontWeight: '800' }}>{formatINRCompact(o.grandTotal)}</td>
-                            <td style={{ padding: '8px 6px', textAlign: 'center' }}>
-                              <span style={{
-                                fontSize: '10px', fontWeight: '800', padding: '2px 8px', borderRadius: '999px',
-                                backgroundColor: badge.bg, color: badge.fg, border: `1px solid ${badge.border}`
-                              }}>
-                                {o.bucket}
-                              </span>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+              <thead>
+                <tr style={{ backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#64748B', fontSize: '10.5px', fontWeight: '800', textTransform: 'uppercase' }}>
+                  <th style={{ textAlign: 'left', padding: '8px 8px' }}>Ticket ID</th>
+                  <th style={{ textAlign: 'left', padding: '8px 8px' }}>Order ID</th>
+                  <th style={{ textAlign: 'left', padding: '8px 8px' }}>Customer</th>
+                  <th style={{ textAlign: 'left', padding: '8px 8px' }}>Complaint</th>
+                  <th style={{ textAlign: 'left', padding: '8px 8px' }}>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {analytics.complaints.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} style={{ textAlign: 'center', padding: '22px', color: '#94A3B8', fontSize: '12px' }}>
+                      No dispatch-related customer complaints logged in this period.
+                    </td>
+                  </tr>
                 ) : (
-                  <div style={{ textAlign: 'center', padding: '24px 0', color: '#64748B', fontSize: '12.5px', fontWeight: '600' }}>
-                    No matching orders found.
-                  </div>
+                  analytics.complaints.slice(0, 6).map((c) => {
+                    const isOpen = String(c.status).toLowerCase() === 'open';
+                    return (
+                      <tr
+                        key={c.ticketId}
+                        onClick={() => c.rawBom && onOpenBom && onOpenBom(c.rawBom)}
+                        style={{ borderBottom: '1px solid #F1F5F9', cursor: c.rawBom && onOpenBom ? 'pointer' : 'default' }}
+                      >
+                        <td style={{ padding: '9px 8px', fontWeight: '800', color: '#0E7490', whiteSpace: 'nowrap' }}>{c.ticketId}</td>
+                        <td style={{ padding: '9px 8px', color: '#334155', fontWeight: '600', whiteSpace: 'nowrap' }}>{c.orderId}</td>
+                        <td style={{ padding: '9px 8px', color: '#0F172A', fontWeight: '600' }}>{c.customer}</td>
+                        <td style={{ padding: '9px 8px', color: '#475569' }}>{c.complaint}</td>
+                        <td style={{ padding: '9px 8px' }}>
+                          <span style={{
+                            padding: '2px 8px', borderRadius: '999px', fontSize: '10.5px', fontWeight: '800',
+                            backgroundColor: isOpen ? '#FFFBEB' : '#ECFEFF',
+                            color: isOpen ? '#B45309' : '#0E7490',
+                            border: `1px solid ${isOpen ? '#FDE68A' : '#A5F3FC'}`
+                          }}>
+                            {c.status}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
-              </div>
+              </tbody>
+            </table>
+
+            <div style={{ fontSize: '11px', color: '#64748B', borderTop: '1px solid #F1F5F9', paddingTop: '8px' }}>
+              Open complaints are linked to the originating order.
             </div>
           </div>
-        );
-      })()}
+        </BusinzSectionCard>
+      </div>
     </div>
   );
 }

@@ -3377,72 +3377,35 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
       {/* ======================================================== */}
       {/* CATEGORY 2: CRM & LEADS DASHBOARD                        */}
       {/* ======================================================== */}
-      {activeSubTab === 'crm-dashboard' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          {/* Category 2 Top KPIs (BUSINZ DESIGN SYSTEM) */}
-          <CeoKpiGrid kpis={[
-            {
-              title: 'TOTAL LEADS',
-              value: `${leadsList.length} Leads`,
-              trend: leadsList.length > 0 ? `${leadsList.length} In-Flow` : '0 Leads',
-              trendUp: leadsList.length > 0,
-              icon: Users,
-              iconColor: '#0E7490',
-              iconBg: '#ECFEFF',
-              bottomPrefix: 'Source mix ',
-              bottomHighlight: 'IndiaMART & Meta',
-              onClick: () => onNavigateTab && onNavigateTab('Leads')
-            },
-            {
-              title: 'INACTIVE LEADS',
-              value: `${inactiveLeadsCount} Leads`,
-              trend: inactiveLeadsCount > 0 ? `${inactiveLeadsCount} Inactive` : 'All Active',
-              trendUp: inactiveLeadsCount === 0,
-              highlightCard: inactiveLeadsCount > 0,
-              icon: Clock,
-              iconColor: inactiveLeadsCount > 0 ? '#EA580C' : '#16A34A',
-              iconBg: inactiveLeadsCount > 0 ? '#FFF7ED' : '#F0FDF4',
-              bottomPrefix: 'Pipeline status ',
-              bottomHighlight: inactiveLeadsCount > 0 ? 'Unattended / Inactive Stage' : 'All Leads Active',
-              onClick: () => onNavigateTab && onNavigateTab('Leads')
-            },
-            {
-              title: 'NEW CUSTOMERS',
-              value: `${newCustomersCount} Accounts`,
-              trend: `${newCustomersCount} New`,
-              trendUp: true,
-              icon: Building2,
-              iconColor: '#2563EB',
-              iconBg: '#EFF6FF',
-              bottomPrefix: 'Client base ',
-              bottomHighlight: 'Verified B2B & EPC Clients',
-              onClick: () => onNavigateTab && onNavigateTab('Customers')
-            },
-            {
-              title: 'ACTIVE QUOTATIONS',
-              value: `${activeQuotesCount} Quotes`,
-              trend: activeQuotesCount > 0 ? `${activeQuotesCount} Active` : '0 Quotes',
-              trendUp: activeQuotesCount > 0,
-              icon: FileText,
-              iconColor: '#16A34A',
-              iconBg: '#F0FDF4',
-              bottomPrefix: 'Commercial stage ',
-              bottomHighlight: 'In Follow-up',
-              onClick: () => onNavigateTab && onNavigateTab('Quotations')
-            }
-          ]} />
-
+      {activeSubTab === 'crm-dashboard' && (() => {
+        const actualTaxInvoices = (allInvList || []).filter((inv) => {
+          if (!inv || inv.cancelled) return false;
+          const st = String(inv.status || '').toLowerCase();
+          if (st.includes('cancel') || st === 'draft' || st === 'on hold') return false;
+          const code = String(inv.taxInvoiceNo || inv.invNo || inv.invoiceNo || inv.code || inv.id || '').trim();
+          if (!code || /^PI[-/]/i.test(code) || /^INV-(POST|STAGING|USER|MOCK)/i.test(code)) return false;
+          return true;
+        });
+        const periodInvoices = actualTaxInvoices.filter((r) => matchesSelectedPeriod(r, selectedPeriod));
+        return (
           <CeoSalesAnalyticsSection
             leadsList={leadsList}
+            allLeadsList={allLeadsList}
             quotesList={quotesList}
+            allQuotesList={allQuotesList}
             piList={piList}
             bomList={bomList}
-            invList={invList}
+            invList={periodInvoices}
+            allInvList={actualTaxInvoices}
+            paymentsList={paymentsList}
+            customersList={customersList}
             companyTarget={ceoTargetStore?.monthlyCompanyTarget || 18000000}
+            repTargets={ceoTargetStore?.repTargets || {}}
+            selectedPeriod={selectedPeriod}
             onNavigateTab={onNavigateTab}
           />
-        </div>
-      )}
+        );
+      })()}
 
       {/* ======================================================== */}
       {/* VIEW 2: PERSON-WISE PERFORMANCE HUB (THE REQUESTED FEATURE)*/}
@@ -3489,80 +3452,14 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
       {/* ======================================================== */}
       {activeSubTab === 'procurement' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          
-          {/* Procurement Top Ribbon (BUSINZ DESIGN SYSTEM - DISPATCH LIFECYCLE PARITY) */}
-          <CeoKpiGrid kpis={[
-            {
-              title: 'TOTAL POS TODAY',
-              value: `${todayPoCount} Raised Today`,
-              trend: todayPoCount > 0 ? `${todayDraftCount} Pending · ${todayApprovedCount} Active` : '0 Today',
-              trendUp: todayPoCount > 0,
-              icon: Calendar,
-              iconColor: '#0E7490',
-              iconBg: '#ECFEFF',
-              bottomPrefix: "Today's PO spend ",
-              bottomHighlight: todayPoSpendFormatted,
-              onClick: () => handleNavigateWithPoFilter('Today', 'All')
-            },
-            {
-              title: 'TOTAL PO SPEND HANDLED',
-              value: `₹ ${totalPoSpendCr} Cr`,
-              trend: `${poList.length} Active POs`,
-              trendUp: poList.length > 0,
-              icon: ShoppingCart,
-              iconColor: '#2563EB',
-              iconBg: '#EFF6FF',
-              bottomPrefix: 'Spend authorized ',
-              bottomHighlight: totalPoSpendFormatted,
-              onClick: () => handleNavigateWithPoFilter(selectedPeriod, 'All')
-            },
-            {
-              title: 'PENDING MD APPROVALS',
-              value: `${pendingMdPOs.length} Awaiting MD`,
-              trend: pendingMdPOs.length > 0 ? `${pendingMdPOs.length} In Queue` : 'All Approved',
-              trendUp: pendingMdPOs.length === 0,
-              highlightCard: pendingMdPOs.length > 0,
-              icon: AlertCircle,
-              iconColor: pendingMdPOs.length > 0 ? '#DC2626' : '#16A34A',
-              iconBg: pendingMdPOs.length > 0 ? '#FEF2F2' : '#F0FDF4',
-              bottomPrefix: 'Value pending ',
-              bottomHighlight: pendingMdPOs.length > 0 ? `${pendingMdPoValFormatted} Awaiting CEO / MD` : 'Fully Authorized (₹ 0)',
-              onClick: () => handleNavigateWithPoFilter(selectedPeriod, 'Draft')
-            },
-            {
-              title: 'PENDING GRN',
-              value: `${pendingGrnCount} Inward Queue`,
-              trend: pendingGrnCount > 0 ? `${pendingGrnCount} In Transit` : 'All Inwarded',
-              trendUp: pendingGrnCount === 0,
-              highlightCard: pendingGrnCount > 0,
-              icon: Package,
-              iconColor: pendingGrnCount > 0 ? '#D97706' : '#16A34A',
-              iconBg: pendingGrnCount > 0 ? '#FFFBEB' : '#F0FDF4',
-              bottomPrefix: 'Pending inward ',
-              bottomHighlight: pendingGrnCount > 0 ? `${pendingGrnPoValFormatted} Awaiting Delivery` : 'All Inwarded (₹ 0)',
-              onClick: () => onNavigateTab && onNavigateTab('Goods Receipt Note')
-            },
-            {
-              title: 'COMPLETED GRN',
-              value: `${completedGrnCount} Inwarded`,
-              trend: `${completedGrnCount} Verified`,
-              trendUp: true,
-              icon: CheckCircle2,
-              iconColor: '#16A34A',
-              iconBg: '#F0FDF4',
-              bottomPrefix: 'Received value ',
-              bottomHighlight: `${completedGrnPoValFormatted} Inwarded & Stock Updated`,
-              onClick: () => onNavigateTab && onNavigateTab('Goods Receipt Note')
-            }
-          ]} />
-
           <CeoProcurementAnalyticsSection
-            poList={allPoList}
+            poList={poList}
+            allPoList={allPoList}
             grnList={allGrnList}
+            selectedPeriod={selectedPeriod}
             inventoryList={inventoryList}
             onNavigateTab={onNavigateTab}
           />
-
         </div>
       )}
 
@@ -3638,35 +3535,16 @@ export default function CeoExecutiveDashboardView({ userRole = 'CEO', onNavigate
       {/* ======================================================== */}
       {(activeSubTab === 'bom' || activeSubTab === 'bom-workflow') && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          
-          {/* Order-to-Cash Lifecycle KPIs (BUSINZ DESIGN SYSTEM) */}
-          <CeoKpiGrid kpis={funnelStages.map(stage => {
-            return {
-              title: stage.stage.toUpperCase(),
-              value: stage.primaryMetric,
-              trend: stage.statusBadge,
-              trendUp: true,
-              trendNeutral: false,
-              hideTrendIcon: true,
-              icon: stage.icon,
-              iconColor: stage.color,
-              iconBg: stage.bg,
-              bottomPrefix: `${stage.valueLabel} `,
-              bottomHighlight: stage.value,
-              onClick: () => handleNavigateFunnelStage(stage)
-            };
-          })} />
-
           <CeoDispatchAnalyticsSection
             bomList={bomList}
+            allBomList={allBomList}
             dispatchesList={dispatchesList}
             challansList={challansList}
             invList={invList}
-            inventoryList={inventoryList}
+            selectedPeriod={selectedPeriod}
             onOpenBom={setViewingBomModal}
             onNavigateTab={onNavigateTab}
           />
-
         </div>
       )}
 
