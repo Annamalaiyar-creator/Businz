@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import * as Sentry from '@sentry/react'
 import './index.css'
 import App from './App.jsx'
+import { installGlobalFileDrop } from './utils/globalFileDrop.js'
 
 // Bulletproof LocalStorage Quota Guard:
 // Automatically intercepts setItem to evict disposable caches and prevent QuotaExceededError
@@ -219,6 +220,8 @@ window.addEventListener('vite:preloadError', (event) => {
   console.warn('[BUSINZ] New bundle version detected on server. Automatically reloading page...', event);
   window.location.reload();
 });
+
+installGlobalFileDrop();
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>

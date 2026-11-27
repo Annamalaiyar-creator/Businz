@@ -630,6 +630,7 @@ export default function ConfirmingBomModal({
                 <option value="100% Paid">100% Paid</option>
                 <option value="Partial Paid">Partial Paid</option>
                 <option value="Payment While Dispatch">Payment While Dispatch</option>
+                <option value="Cash">Cash (No Proof)</option>
                 <option value="Credit Payment">Credit Payment</option>
               </select>
             )}

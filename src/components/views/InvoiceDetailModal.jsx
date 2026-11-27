@@ -889,7 +889,13 @@ export default function InvoiceDetailModal({
         setBomStore(prev => {
           const updated = (prev || []).map(b =>
             (b.bomCode === bomRefText || b.code === bomRefText)
-              ? { ...b, invoiceNo: finalConfirmedInvNo, invoiceConfirmed: true }
+              ? {
+                ...b,
+                invoiceNo: finalConfirmedInvNo,
+                invoiceConfirmed: true,
+                // Mirror the server: after invoice confirmation the order waits for vehicle loading
+                status: /complete|dispatched|delivered/i.test(String(b.status || '')) ? b.status : 'Awaiting Vehicle Loading & Dispatch'
+              }
               : b
           );
           try {
@@ -980,6 +986,11 @@ export default function InvoiceDetailModal({
                   }}>
                     <FileText size={12} strokeWidth={2.2} />
                     <span>TAX INVOICE</span>
+                  </span>
+                )}
+                {(inv?.docType === 'DC' || matchingBom?.docType === 'DC') && (
+                  <span title={inv?.dcRemarks || matchingBom?.dcRemarks || ''} style={{ color: '#FDE68A', fontSize: '12px', fontWeight: '700', maxWidth: '360px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    DC Remarks: {inv?.dcRemarks || matchingBom?.dcRemarks || '—'}
                   </span>
                 )}
                 {['Invoice Confirmed', 'CLOSED', 'Completed', 'Confirmed'].includes(inv.status) ? (

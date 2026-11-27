@@ -1635,6 +1635,9 @@ export default function ProductionViewsEngine(props) {
       if (activeTab === 'Accounts Verification' && cleanGroup === 'awaitingpaymentproof') {
         return matchesDate && cleanSub === 'awaitingpaymentproof';
       }
+      if (activeTab === 'Accounts Verification' && cleanGroup === 'modulespredispatch') {
+        return cleanSub === 'modulespredispatch';
+      }
 
       const matchesTab = cleanSub === 'all' ||
         cleanSub === 'allboms' ||
@@ -2324,7 +2327,7 @@ export default function ProductionViewsEngine(props) {
                   setPendingDcModal(targetRow);
                 } else if (activeTab === 'Accounts Verification') {
                   setAccountsVerificationModal(targetRow);
-                  setIsAccountsViewOnly(isCancelledRow ? true : false);
+                  setIsAccountsViewOnly(isCancelledRow || targetRow.isModulesPreview ? true : false);
                 } else {
                   setConfirmingBomModal(isCancelledRow ? { ...targetRow, isEditMode: false } : { ...targetRow, isEditMode: true });
                 }

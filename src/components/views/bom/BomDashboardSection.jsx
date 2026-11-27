@@ -910,6 +910,11 @@ export default function BomDashboardSection({ ctx }) {
                             <span>DC (Delivery Challan)</span>
                           </span>
                         )}
+                        {row.docType === 'DC' && row.dcRemarks && (
+                          <span title={row.dcRemarks} style={{ fontSize: '11px', fontWeight: '700', color: '#92400E', maxWidth: '280px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            DC Remarks: {row.dcRemarks}
+                          </span>
+                        )}
 
                         <span style={{ color: '#CBD5E1', fontSize: '12px', fontWeight: '700' }}>·</span>
 

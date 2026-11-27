@@ -970,6 +970,11 @@ export default function BomConfirmAuditSection({ ctx }) {
       alert(`⚠️ Payment Attachment / Slip is strictly mandatory for "${normalizedPayType}"!\n\nPlease attach the bank slip/advice before sending this BOM to Dispatch.`);
       return;
     }
+    if (isDcOrder && !String(confirmingBomModal.dcRemarks || '').trim()) {
+      alert('⚠️ DC Remarks are mandatory.\n\nPlease enter why this order is going on a Delivery Challan (DC) before sending it to Dispatch.');
+      document.getElementById('reconfirm-bom-dc-remarks')?.focus();
+      return;
+    }
     if (!isDcOrder && normalizedPayType === 'Credit Payment' && !reconfirmCreditEval.canUseCredit) {
       alert(`⛔ Credit Payment Blocked\n\n${reconfirmCreditEval.reason}`);
       return;
@@ -1290,6 +1295,25 @@ export default function BomConfirmAuditSection({ ctx }) {
                   <option value="DC">DC (Delivery Challan)</option>
                 </select>
               )}
+              {isDcOrder && (isAlreadyForwarded ? (
+                <div style={{ marginTop: '6px', fontSize: '12px', color: '#92400E' }}>
+                  <strong>DC Remarks:</strong> {confirmingBomModal.dcRemarks || '—'}
+                </div>
+              ) : (
+                <textarea
+                  id="reconfirm-bom-dc-remarks"
+                  name="dcRemarks"
+                  aria-label="DC Remarks"
+                  placeholder="DC Remarks (required): why is this order going on a Delivery Challan?"
+                  value={confirmingBomModal.dcRemarks || ''}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setConfirmingBomModal(prev => ({ ...prev, dcRemarks: val }));
+                  }}
+                  rows={2}
+                  style={{ width: '100%', marginTop: '6px', borderRadius: '8px', border: String(confirmingBomModal.dcRemarks || '').trim() ? '1.5px solid #F59E0B' : '1.5px solid #EF4444', backgroundColor: '#FFFBEB', padding: '8px 10px', fontSize: '12.5px', color: '#92400E', boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit' }}
+                />
+              ))}
             </div>
 
             <div>
@@ -3577,6 +3601,7 @@ export default function BomConfirmAuditSection({ ctx }) {
                     <option value="100% Paid">100% Paid</option>
                     <option value="Partial Paid">Partial Paid</option>
                     <option value="Payment While Dispatch">Payment While Dispatch</option>
+                    <option value="Cash">Cash (No Proof)</option>
                     {reconfirmCreditEval.approved && (
                       <option value="Credit Payment">Credit Payment</option>
                     )}

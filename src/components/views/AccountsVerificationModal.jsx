@@ -410,6 +410,8 @@ export default function AccountsVerificationModal({
     payTypeLower.includes('net 45') || 
     payTypeLower.includes('net 60') ||
     Number(accountsVerificationModal?.creditDays || 0) > 0;
+  // Cash orders carry no payment proof; Accounts records the cash received and must confirm the full amount.
+  const isCashTerms = currentPayStatus === 'Cash' || payTypeLower === 'cash';
   // Delivery Challan orders carry no customer payment, so no slip/date/amount is required in Accounts.
   const isDcOrder = ['docType', 'documentType', 'invoiceType'].some(k => {
     const v = String(accountsVerificationModal?.[k] || '').toUpperCase();
@@ -476,6 +478,12 @@ export default function AccountsVerificationModal({
     isPartialPaidTerms ? !hasBalancePaymentProof : (requiresPaymentProofForApproval && !hasUploadedPaymentProof)
   );
 
+  // Accounts may push Partial Paid / Payment While Dispatch orders forward when payment is received but proof is not attached
+  const canForcePushWithoutProof = Boolean(
+    isMissingRequiredPaymentProof && (isPartialPaidTerms || isWhileDispatch) &&
+    /account/i.test(String(userRole || '')) && !isAccountsViewOnly
+  );
+
   const isVerified = Boolean(
     currentPayStatus && 
     (isCreditTerms || isDcOrder || (currentPayDate && effectiveTotalAmountNum > 0)) &&
@@ -490,12 +498,20 @@ export default function AccountsVerificationModal({
     'Payment Received — 50%': { bg: '#FEF3C7', color: '#B45309', label: 'Partial Paid', icon: <Clock style={{ width: '18px', height: '18px' }} /> },
     'Payment While Dispatch': { bg: '#FEF9C3', color: '#854D0E', label: 'Payment While Dispatch', icon: <Clock style={{ width: '18px', height: '18px' }} /> },
     'Credit Payment': { bg: '#DBEAFE', color: '#1E40AF', label: 'Credit Payment', icon: <Receipt style={{ width: '18px', height: '18px' }} /> },
+    'Cash': { bg: '#ECFDF5', color: '#047857', label: 'Cash', icon: <Receipt style={{ width: '18px', height: '18px' }} /> },
   };
   const currentPayConfig = (currentPayStatus && payStatusConfig[currentPayStatus]) || { bg: '#F1F5F9', color: '#475569', label: 'Pending Verification', icon: <Clock style={{ width: '18px', height: '18px' }} /> };
 
-  const completeVerification = async () => {
-    if (isMissingRequiredPaymentProof) {
+  const completeVerification = async (forcePushReason = '') => {
+    const forcePushMeta = forcePushReason
+      ? { forcePushedWithoutProof: true, forcePushReason, forcePushedByRole: userRole || 'Accounts', forcePushedAt: new Date().toISOString() }
+      : {};
+    if (isMissingRequiredPaymentProof && !forcePushReason) {
       alert(`⛔ CANNOT APPROVE — PAYMENT PROOF PENDING\n\nThis order has payment terms "${payType || 'Payment While Dispatch / Partial Payment'}". The required ${isPartialPaidTerms ? 'remaining balance ' : ''}payment proof slip has NOT been uploaded by the Sales person yet.\n\nBy strict company policy, this order remains in Payment Proof Pending until the Sales person attaches the payment proof receipt.`);
+      return;
+    }
+    if (isCashTerms && accVerif.cashFullAmountReceived !== 'Yes') {
+      alert('⚠️ Cash order: please confirm "Have you received the full amount?" as Yes before completing verification.');
       return;
     }
     if (!isCreditTerms && !isDcOrder && !currentPayDate) {
@@ -567,6 +583,7 @@ export default function AccountsVerificationModal({
         verified: true,
         verifiedBy: verifiedBOM.accountsVerification?.verifiedBy || 'Accounts Executive (Venkatesh)',
         verifiedByRole: 'Accounts Team Lead',
+        ...forcePushMeta,
         verifiedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short', year: 'numeric' })
       },
       proofDoc: verifiedBOM.payments?.proofDoc || verifiedBOM.paymentProofDoc?.name || null,
@@ -666,7 +683,9 @@ export default function AccountsVerificationModal({
         orderTotal: targetOrderAmt,
         balanceAmount: balanceDue,
         hardCopyReceived: hardCopy,
-        verified: true
+        verified: true,
+        ...(isCashTerms ? { cashFullAmountReceived: accVerif.cashFullAmountReceived || '', cashChallanNo: String(accVerif.cashChallanNo || '').trim() } : {}),
+        ...forcePushMeta
       },
       proofDoc: verifiedBOM.payments?.proofDoc || verifiedBOM.paymentProofDoc?.name || null,
       proofDocData: verifiedBOM.payments?.proofDocData || verifiedBOM.paymentProofDoc?.dataUrl || null,
@@ -863,6 +882,11 @@ export default function AccountsVerificationModal({
                 <FileText size={13} strokeWidth={2.2} />
                 <span>Tax Invoice</span>
               </span>
+            )}
+            {accountsVerificationModal?.docType === 'DC' && (
+              <div style={{ marginTop: '4px', fontSize: '12px', color: '#92400E', fontWeight: '600' }}>
+                <strong>DC Remarks:</strong> {accountsVerificationModal?.dcRemarks || '—'}
+              </div>
             )}
           </div>
         </div>
@@ -1247,6 +1271,60 @@ export default function AccountsVerificationModal({
                    />
                 </div>
               </div>
+
+              {/* Cash order: confirm full amount received + optional challan number */}
+              {isCashTerms && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', backgroundColor: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: '10px', padding: '12px 14px' }}>
+                  <div>
+                    <div style={{ fontSize: '12px', fontWeight: '700', color: '#065F46', marginBottom: '6px' }}>
+                      Have you received the full amount? <span style={{ color: '#EF4444' }}>*</span>
+                    </div>
+                    <div style={{ display: 'flex', gap: '16px' }}>
+                      {['Yes', 'No'].map(opt => (
+                        <label key={opt} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: '700', color: '#0F172A', cursor: isAlreadyCompleted ? 'not-allowed' : 'pointer' }}>
+                          <input
+                            type="radio"
+                            name="cashFullAmountReceived"
+                            value={opt}
+                            disabled={isAlreadyCompleted}
+                            checked={accVerif.cashFullAmountReceived === opt}
+                            onChange={() => setAccountsVerificationModal(prev => prev ? ({
+                              ...prev,
+                              accountsVerification: { ...(prev.accountsVerification || {}), cashFullAmountReceived: opt }
+                            }) : null)}
+                          />
+                          {opt}
+                        </label>
+                      ))}
+                    </div>
+                    {accVerif.cashFullAmountReceived === 'No' && (
+                      <div style={{ fontSize: '11px', color: '#B91C1C', fontWeight: '700', marginTop: '6px' }}>
+                        This order cannot move to the next step until the full cash amount is received.
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <label htmlFor="accounts-cash-challan-no" style={{ fontSize: '12px', fontWeight: '700', color: '#065F46', display: 'block', marginBottom: '6px' }}>
+                      Challan Number (optional)
+                    </label>
+                    <input
+                      id="accounts-cash-challan-no"
+                      name="cashChallanNo"
+                      type="text"
+                      disabled={isAlreadyCompleted}
+                      value={accVerif.cashChallanNo || ''}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setAccountsVerificationModal(prev => prev ? ({
+                          ...prev,
+                          accountsVerification: { ...(prev.accountsVerification || {}), cashChallanNo: val }
+                        }) : null);
+                      }}
+                      style={{ width: '100%', height: '40px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', fontWeight: '600', color: '#0F172A', boxSizing: 'border-box', backgroundColor: isAlreadyCompleted ? '#F1F5F9' : '#FFFFFF' }}
+                    />
+                  </div>
+                </div>
+              )}
 
               {/* Adjust Payment (Accounts Only — Only visible if enabled by Accounts person or if an amount was entered) */}
               {(() => {
@@ -2789,9 +2867,38 @@ export default function AccountsVerificationModal({
                   Notify Sales / Send Alert
                 </button>
               )}
+              {canForcePushWithoutProof && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const reason = window.prompt('Force push without payment proof\n\nConfirm the payment IS received and only the proof attachment is missing.\nEnter a reason / reference (required):', '');
+                    if (reason === null) return;
+                    if (!reason.trim()) { alert('A reason is required to force push without payment proof.'); return; }
+                    completeVerification(reason.trim());
+                  }}
+                  style={{
+                    height: '40px',
+                    padding: '0 18px',
+                    borderRadius: '8px',
+                    backgroundColor: '#7C2D12',
+                    border: 'none',
+                    color: '#FFFFFF',
+                    fontSize: '13px',
+                    fontWeight: '800',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}
+                  title="Accounts confirms payment is received; proof attachment is still pending"
+                >
+                  <CheckCircle style={{ width: '15px', height: '15px' }} />
+                  Force Push (Payment Received)
+                </button>
+              )}
               <button
                 type="button"
-                onClick={completeVerification}
+                onClick={() => completeVerification()}
                 style={{
                   height: '40px',
                   borderRadius: '8px',

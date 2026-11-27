@@ -645,6 +645,10 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
               const isNotArchivedBom = (b) => Boolean(b && !b.archived && String(b.bomCode || b.code || b.id || '').trim().toUpperCase() !== 'VRM-BOM-2026-07');
               const allAccountsBoms = (bomStore || []).filter(b => isNotArchivedBom(b) && isAccountsEligible(b)).sort(compareBomDescending);
               const attachedAccountsBoms = allAccountsBoms.filter(b => !isPaymentProofPendingOrder(b));
+              // Solar Modules BOMs (product name starts with "Modules") are visible to Accounts before Dispatch, view-only, for manual Zoho invoicing
+              const hasModuleItem = (b) => (Array.isArray(b.items) ? b.items : []).some(it => /^\s*modules?\b/i.test(String(it?.name || it?.productName || it?.itemName || '')));
+              const isCancelledBom = (b) => Boolean(b.cancelled || String(b.status || '').toLowerCase().includes('cancel'));
+              const modulesPreDispatchBoms = (bomStore || []).filter(b => isNotArchivedBom(b) && !isCancelledBom(b) && !isAccountsEligible(b) && hasModuleItem(b)).sort(compareBomDescending);
               const paymentProofPendingBoms = allAccountsBoms.filter(b => isPaymentProofPendingOrder(b));
 
               // Helper to check if a BOM's credit has been settled (hoisted outside map)
@@ -691,7 +695,8 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                   { id: 'All', label: 'All Accounts Orders', count: attachedAccountsBoms.length, bg: '#e2e8f0', fg: '#475569' },
                   { id: 'Pending', label: 'Pending Verification', count: attachedAccountsBoms.filter(b => !isAccVerifiedOrder(b)).length, bg: '#FEF3C7', fg: '#B45309' },
                   { id: 'AwaitingPaymentProof', label: 'Payment Proof Pending', count: paymentProofPendingBoms.length, bg: '#FFEDD5', fg: '#C2410C' },
-                  { id: 'Verified', label: 'Verified', count: attachedAccountsBoms.filter(b => isAccVerifiedOrder(b)).length, bg: '#DCFCE7', fg: '#166534' }
+                  { id: 'Verified', label: 'Verified', count: attachedAccountsBoms.filter(b => isAccVerifiedOrder(b)).length, bg: '#DCFCE7', fg: '#166534' },
+                  { id: 'ModulesPreDispatch', label: 'Modules — Pre-Dispatch', count: modulesPreDispatchBoms.length, bg: '#E0F2FE', fg: '#0369A1' }
                 ],
                 headers: ['BOM Code', 'Customer Name', 'Received Date', 'Document', 'Payment Type', 'Credit Amount', 'Status'],
                 rows: allAccountsBoms.map(b => {
@@ -895,7 +900,24 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                     isAccountsDone: isVerified,
                     tabGroup: tabGroup
                   };
-                })
+                }).concat(modulesPreDispatchBoms.map(b => ({
+                  ...b,
+                  code: b.bomCode || b.code || b.id || '',
+                  bomCode: b.bomCode || b.code || b.id || '',
+                  c2: b.customerName || b.companyName || b.c2 || 'Customer',
+                  c3: { date: '—', time: '' },
+                  c4: (String(b.docType || '').toUpperCase() === 'DC') ? 'DC' : 'Invoice',
+                  c5: b.paymentType || b.paymentTerms || '100% Paid',
+                  c6: '—',
+                  paymentStatusText: 'Not yet at Accounts',
+                  packingProgressText: null,
+                  status: 'MODULES — PRE-DISPATCH (VIEW ONLY)',
+                  stBg: '#E0F2FE',
+                  stFg: '#0369A1',
+                  stBorder: '1px solid #BAE6FD',
+                  isModulesPreview: true,
+                  tabGroup: 'ModulesPreDispatch'
+                })))
               };
             })() : undefined,
             'Dispatch Orders': shouldBuild('Dispatch Orders') ? (() => {

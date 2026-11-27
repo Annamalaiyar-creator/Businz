@@ -48,6 +48,9 @@ export const STANDARD_PAYMENT_TERMS = [
 export const normalizePaymentTerm = (term) => {
   if (!term) return '100% Paid';
   const s = String(term).trim().toLowerCase();
+  if (s === 'cash' || s.startsWith('cash ')) {
+    return 'Cash';
+  }
   if (s.startsWith('partial') || s === 'partial paid' || s === 'partial payment') {
     return 'Partial Paid';
   }

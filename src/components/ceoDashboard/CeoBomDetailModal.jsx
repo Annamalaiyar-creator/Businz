@@ -287,6 +287,11 @@ export default function CeoBomDetailModal({
                     <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px' }}>
                       Customer Project: <strong>{customer}</strong> • Date: {bomDate} • Rep: {salesPerson}
                     </div>
+                    {String(bom.docType || '').toUpperCase() === 'DC' && (
+                      <div style={{ fontSize: '11.5px', color: '#92400E', marginTop: '2px', fontWeight: '700' }}>
+                        DC (Delivery Challan) • DC Remarks: {bom.dcRemarks || '—'}
+                      </div>
+                    )}
                   </div>
                 </div>
 
