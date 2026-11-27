@@ -263,8 +263,8 @@ class RealtimeNotificationService {
       if (!isAlias) return;
     }
 
-    // BOM Cancellation Safeguard: If targeted to a specific salesperson by name, block on other users' devices (including CEO)
-    if (String(notif.event_type || '').toUpperCase().trim() === 'BOM_CANCELLED') {
+    // Owner-only Safeguard (BOM Cancelled, Order Dispatched): if targeted to a specific salesperson by name, block on other users' devices (including CEO/MD)
+    if (['BOM_CANCELLED', 'ORDER_DISPATCHED'].includes(String(notif.event_type || '').toUpperCase().trim())) {
       const targetUser = String(notif.recipient_user_name || notif.metadata?.recipientUserName || notif.metadata?.salesPerson || '').toLowerCase().trim();
       if (targetUser && targetUser !== 'all' && targetUser !== 'sales executive' && targetUser !== 'sales' && targetUser !== 'system') {
         const matchesUser = Boolean(

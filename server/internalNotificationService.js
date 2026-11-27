@@ -84,7 +84,8 @@ function isClientRecipient(client, notification) {
   const targetEmp = String(notification.recipient_emp_code || '').toUpperCase().trim();
   const targetUser = String(notification.recipient_user_name || notification.metadata?.recipientUserName || notification.metadata?.salesPerson || '').toLowerCase().trim();
   const targetRole = String(notification.recipient_role || '').toLowerCase().trim();
-  const isBomCancelled = String(notification.event_type || '').toUpperCase().trim() === 'BOM_CANCELLED';
+  // Owner-only events: delivered to the order's own salesperson only, never to CEO/MD oversight
+  const isBomCancelled = ['BOM_CANCELLED', 'ORDER_DISPATCHED'].includes(String(notification.event_type || '').toUpperCase().trim());
 
   // Specific user targeted by employee code: ONLY that specific employee (or CEO/MD, except BOM_CANCELLED) receives it
   if (targetEmp && targetEmp !== 'ALL') {
