@@ -75,16 +75,11 @@ export default function CeoMonthlyCustomersByRepView({ userRole = 'CEO', onNavig
     const cEmpId = String(c?.createdById || c?.assignedSalespersonCode || c?.salesPersonCode || '').toLowerCase().trim();
     const myEmpId = loggedInEmpId.toLowerCase().trim();
 
-    if (myEmpId && cEmpId && (cEmpId === myEmpId || (myEmpId === 'se-001' && cEmpId === 'se-1000') || (myEmpId === 'se-1000' && cEmpId === 'se-001'))) {
+    if (myEmpId && cEmpId && cEmpId === myEmpId) {
       return true;
     }
-    if (uName && (rName.includes(uName) || uName.includes(rName))) {
-      return true;
-    }
-    if (uName.includes('sales') && (rName.includes('sales') || rName.includes('annamalaiyar'))) {
-      return true;
-    }
-    return false;
+    // Exact rep name only: substring matching credited other reps' customers (e.g. "Ram" vs "Ramesh", empty rep names)
+    return Boolean(uName && rName && rName.trim() === uName.trim());
   };
 
   // Load customer data

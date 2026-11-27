@@ -189,6 +189,9 @@ export default function createCustomerRouter(dependencies) {
   const dbRowIdByCode = new Map();
   let nextCounter = localCustomers.length + 1;
 
+  // "Add Customer" (single record flagged isNew) must never silently overwrite an existing customer
+  const rejectedNew = [];
+
   incomingList.forEach(incoming => {
     if (!incoming || typeof incoming !== 'object') return;
 
@@ -214,6 +217,23 @@ export default function createCustomerRouter(dependencies) {
       matchedExisting = byName.get(incNormName);
     } else if (incPhone && byPhone.has(incPhone)) {
       matchedExisting = byPhone.get(incPhone);
+    }
+
+    if (incoming.isNew === true && !isBulk) {
+      // Add Customer: only the GST number decides a duplicate. Same name / phone with another or no GST is a separate customer.
+      matchedExisting = incGst && byGst.has(incGst) ? byGst.get(incGst) : null;
+      if (matchedExisting) {
+        rejectedNew.push({
+          status: 409,
+          error: `GST ${incoming.gstNumber || incoming.gstin || incoming.gstNo} is already registered to ${matchedExisting.companyName || matchedExisting.customerName || matchedExisting.name} (${matchedExisting.customerCode || matchedExisting.id})${matchedExisting.assignedSalesperson ? `, handled by ${matchedExisting.assignedSalesperson}` : ''}. Open that customer instead of adding a new one.`,
+          existingCustomerCode: matchedExisting.customerCode || matchedExisting.id
+        });
+        return;
+      }
+      if (!incPhone) {
+        rejectedNew.push({ status: 400, error: 'Mobile / Phone must have at least 10 digits.' });
+        return;
+      }
     }
 
     let customerId = matchedExisting ? (matchedExisting.customerCode || matchedExisting.id || matchedExisting.code) : null;
@@ -405,6 +425,11 @@ export default function createCustomerRouter(dependencies) {
 
     savedRecords.push(localCustomerRecord);
   });
+
+  if (rejectedNew.length > 0) {
+    const { status, ...body } = rejectedNew[0];
+    return res.status(status).json({ success: false, ...body });
+  }
 
   // Targeted INSERT/UPSERT each customer into authoritative PostgreSQL public.customers (Rule 2)
   for (const record of savedRecords) {
