@@ -415,8 +415,20 @@ export default function InvoiceDetailModal({
   invPresetGroups.forEach(g => {
     const kitBase = (Number(g?.kitPrice) || 0) * (parseFloat(String(g?.setCount ?? g?.sets ?? 1).replace(/[^0-9.]/g, '')) || 1);
     if (kitBase <= 0) return;
-    const pct = extractGstRate(g?.gstRate, 18);
-    gstRateAcc[pct] = (gstRateAcc[pct] || 0) + kitBase * (pct / 100);
+    // Same as BOM totals: share the kit value across its items by qty, each at its own GST rate
+    const gid = g?.groupId || g?.id || g?.presetGroupId;
+    const groupItems = itemsList.filter(it => gid && it.presetGroupId === gid);
+    const totalQty = groupItems.reduce((sum, it) => sum + (Number(it.qty || it.invQty || it.bomQty) || 1), 0);
+    if (totalQty > 0) {
+      groupItems.forEach(it => {
+        const pct = extractGstRate(it.gstRate ?? g?.gstRate, 18);
+        const share = kitBase * ((Number(it.qty || it.invQty || it.bomQty) || 1) / totalQty);
+        gstRateAcc[pct] = (gstRateAcc[pct] || 0) + share * (pct / 100);
+      });
+    } else {
+      const pct = extractGstRate(g?.gstRate, 18);
+      gstRateAcc[pct] = (gstRateAcc[pct] || 0) + kitBase * (pct / 100);
+    }
   });
   const gstRateGroups = Object.entries(gstRateAcc).map(([rate, amt]) => ({ rate: Number(rate), amt })).sort((a, b) => a.rate - b.rate);
   const gstRateGroupsTotal = gstRateGroups.reduce((acc, g) => acc + g.amt, 0);
