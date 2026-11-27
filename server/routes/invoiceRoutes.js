@@ -306,7 +306,6 @@ router.post('/api/invoices/complete', async (req, res) => {
            SET invoice_no = $1,
                invoice_confirmed = true,
                stock_deducted = true,
-               stock_deduction_date = COALESCE(stock_deduction_date, NOW()),
                status = CASE
                  WHEN status ILIKE '%complete%' OR status ILIKE '%dispatched%' OR status ILIKE '%delivered%' THEN status
                  ELSE 'Awaiting Vehicle Loading & Dispatch'
@@ -329,7 +328,8 @@ router.post('/api/invoices/complete', async (req, res) => {
             JSON.stringify({
               invoiceConfirmedAt: nowIso,
               invoiceNo: assignedInvNo,
-              attachedInvoiceDocs: attachedDocs
+              attachedInvoiceDocs: attachedDocs,
+              stockDeductionDate: nowIso
             }),
             targetBomCode
           ]

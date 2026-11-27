@@ -1566,7 +1566,9 @@ export default function BomOperationalModals({ ctx }) {
                                   notifyBomPackedAndSentToAccounts({
                                     bomCode: targetBom.bomCode,
                                     customerName: targetBom.customerName || targetBom.c3,
-                                    actorName: getCleanSalesPersonName(targetBom.salesPerson)
+                                    actorName: getCleanSalesPersonName(targetBom.salesPerson),
+                                    salesPerson: getCleanSalesPersonName(targetBom.salesPerson),
+                                    salesPersonCode: targetBom.salesPersonCode || targetBom.createdById || null
                                   });
                                 } catch (nErr) {
                                   console.warn('Failed to send Accounts notification:', nErr);

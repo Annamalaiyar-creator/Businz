@@ -403,12 +403,22 @@ export default function InvoiceDetailModal({
     return acc + (lineSub * (pct / 100));
   }, 0);
   const computedGrandTotal = computedSubtotal + computedTaxGst;
-  // Tax per GST rate, so mixed 5% / 18% orders show a correct breakdown
-  const gstRateGroups = Object.entries(itemsList.reduce((acc, it) => {
+  // Tax per GST rate, so mixed 5% / 18% orders show a correct breakdown.
+  // Preset kit items carry no own price: kits are taxed on kitPrice x setCount at the group's GST rate (same as BOM totals).
+  const invPresetGroups = Array.isArray(matchingBom?.presetGroups) ? matchingBom.presetGroups : Object.values(matchingBom?.presetGroups || {});
+  const gstRateAcc = itemsList.reduce((acc, it) => {
+    if (it.isPresetItem || it.presetGroupId) return acc;
     const pct = extractGstRate(it.gstRate ?? it.tax, 18);
     acc[pct] = (acc[pct] || 0) + (it.qty || it.invQty || it.bomQty || 1) * (it.rate || 0) * (pct / 100);
     return acc;
-  }, {})).map(([rate, amt]) => ({ rate: Number(rate), amt })).sort((a, b) => a.rate - b.rate);
+  }, {});
+  invPresetGroups.forEach(g => {
+    const kitBase = (Number(g?.kitPrice) || 0) * (parseFloat(String(g?.setCount ?? g?.sets ?? 1).replace(/[^0-9.]/g, '')) || 1);
+    if (kitBase <= 0) return;
+    const pct = extractGstRate(g?.gstRate, 18);
+    gstRateAcc[pct] = (gstRateAcc[pct] || 0) + kitBase * (pct / 100);
+  });
+  const gstRateGroups = Object.entries(gstRateAcc).map(([rate, amt]) => ({ rate: Number(rate), amt })).sort((a, b) => a.rate - b.rate);
   const gstRateGroupsTotal = gstRateGroups.reduce((acc, g) => acc + g.amt, 0);
 
   const cleanAmtNum = (amt) => {
@@ -450,6 +460,17 @@ export default function InvoiceDetailModal({
   // Credit orders: Accounts stores the order value (not money received), so received is 0 until Credit is settled.
   const isCreditInvoice = /credit|net\s?\d/i.test(String(inv.paymentType || matchingBom?.paymentType || matchingBom?.paymentTerms || ''));
   const isCreditSettled = Boolean(inv.creditSettled || matchingBom?.creditSettled || matchingBom?.accountsVerification?.creditSettled);
+  // Credit invoices are due after the credit period; other terms are due on the invoice date
+  const invDueText = (() => {
+    if (!isCreditInvoice) return invDateText;
+    const stored = matchingBom?.creditDueDate || inv.creditDueDate;
+    if (stored && !isNaN(new Date(stored).getTime())) return String(stored).slice(0, 10);
+    const days = Number(matchingBom?.creditDays || inv.creditDays || 0);
+    const d = new Date(invDateText);
+    if (!days || isNaN(d.getTime())) return invDateText;
+    d.setDate(d.getDate() + days);
+    return d.toISOString().slice(0, 10);
+  })();
   const verifiedReceivedAmt = isCreditInvoice
     ? (isCreditSettled ? (cleanAmtNum(matchingBom?.creditSettledAmount) || cleanAmtNum(matchingBom?.accountsVerification?.settledAmount) || totalAmtRaw) : 0)
     : (cleanAmtNum(inv.accountsVerification?.totalAmount) || cleanAmtNum(matchingBom?.accountsVerification?.totalAmount));
@@ -863,6 +884,12 @@ export default function InvoiceDetailModal({
         body: JSON.stringify(stripDataUrlsFromRecord(serverPayload))
       });
       const result = await completeRes.json().catch(() => null);
+      if (!completeRes.ok || !result || !result.success) {
+        // Never report success when the server did not save the invoice confirmation
+        const errMsg = `Invoice was NOT confirmed on the server (HTTP ${completeRes.status}): ${result?.error || 'Unknown error'}. Please try again or contact support.`;
+        if (typeof showCustomAlert === 'function') showCustomAlert(errMsg, 'Invoice Not Saved', 'error'); else alert(`⚠️ ${errMsg}`);
+        return;
+      }
       if (completeRes.ok && result && result.success && result.invoice) {
         const createdInv = result.invoice;
         const finalConfirmedInvNo = createdInv.invoiceNo || createdInv.invNo || targetInvNumber;
@@ -1058,7 +1085,7 @@ export default function InvoiceDetailModal({
 
             <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '10px', padding: '11px 14px' }}>
               <div style={{ color: '#64748B', fontSize: '10.5px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Payment Due Date</div>
-              <div style={{ marginTop: '4px', fontSize: '13px', fontWeight: '800', color: '#0F172A' }}>{invDateText}</div>
+              <div style={{ marginTop: '4px', fontSize: '13px', fontWeight: '800', color: '#0F172A' }}>{invDueText}</div>
             </div>
 
             <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '10px', padding: '11px 14px' }}>
@@ -1816,7 +1843,7 @@ export default function InvoiceDetailModal({
                               bomCode: targetCode,
                               customerName: inv.customerName || inv.party || matchingBom?.customerName,
                               salesPerson: salesPersonName,
-                              salesPersonCode: matchingBom?.salesPersonEmpCode || matchingBom?.salesPersonId || foundBom?.salesPersonEmpCode
+                              salesPersonCode: matchingBom?.salesPersonCode || foundBom?.salesPersonCode || matchingBom?.salesPersonEmpCode || matchingBom?.salesPersonId || foundBom?.salesPersonEmpCode
                             });
                             if (updatedBomRecord) {
                               window.dispatchEvent(new CustomEvent('controlroom_bom_store_updated', { detail: { bom: updatedBomRecord } }));

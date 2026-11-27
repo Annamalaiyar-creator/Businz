@@ -1146,9 +1146,11 @@ router.post('/api/boms', async (req, res) => {
             });
           } else if (persistedBom.status === 'COMPLETED & DISPATCHED' || persistedBom.status === 'Completed & Dispatched' || persistedBom.status === 'Dispatched' || persistedBom.tabGroup === 'Closed') {
             // Workflow: Final Vehicle Loading / Dispatched -> Notify Sales
+            // Notify only the order's own salesperson (BOMs store salesPersonCode); role fallback only when unknown
+            const dispatchedRepCode = persistedBom.salesPersonCode || persistedBom.salesPersonId || persistedBom.createdById || null;
             createInternalNotification({
-              recipientEmpCode: persistedBom.salesPersonId || null,
-              recipientRole: 'Sales Executive',
+              recipientEmpCode: dispatchedRepCode,
+              recipientRole: dispatchedRepCode ? null : 'Sales Executive',
               eventType: 'ORDER_DISPATCHED',
               documentType: 'bom',
               documentId: finalCode,

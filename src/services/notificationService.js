@@ -487,15 +487,21 @@ export function notifyInvoiceCompletedReadyForDispatch({ bomCode, customerName, 
   });
 }
 
-export function notifyDispatchCompletedToSales({ bomCode, customerName, salesPerson, salesPersonId, transporterName, lrNumber }) {
+export function notifyDispatchCompletedToSales({ bomCode, customerName, salesPerson, salesPersonId, salesPersonCode, transporterName, transporter, lrNumber, lrNo }) {
+  const viaName = transporterName || transporter;
+  const lrRef = lrNumber || lrNo;
+  // Target only the order's own salesperson; fall back to the Sales role only when nobody is known
+  const targetCode = salesPersonCode || salesPersonId || null;
+  const cleanSalesRep = (salesPerson && salesPerson !== 'Sales Executive' && salesPerson !== 'Sales' && salesPerson !== 'Sales Department') ? salesPerson : null;
   return sendServerWorkflowNotification({
-    recipientEmpCode: salesPersonId || null,
-    recipientRole: 'Sales Executive',
+    recipientEmpCode: targetCode,
+    recipientUserName: cleanSalesRep,
+    recipientRole: (targetCode || cleanSalesRep) ? null : 'Sales Executive',
     eventType: 'ORDER_DISPATCHED',
     documentType: 'BOM',
     documentId: bomCode,
     title: `🚀 Order Dispatched: BOM ${bomCode}`,
-    message: `Order ${bomCode} (${customerName || 'Customer'}) has been loaded and dispatched via ${transporterName || 'Transporter'}${lrNumber ? ` (LR: ${lrNumber})` : ''}.`,
+    message: `Order ${bomCode} (${customerName || 'Customer'}) has been loaded and dispatched via ${viaName || 'Transporter'}${lrRef ? ` (LR: ${lrRef})` : ''}.`,
     targetTab: 'Sales BOM',
     targetRecordId: bomCode,
     dedupId: `bom_dispatched_${bomCode}`

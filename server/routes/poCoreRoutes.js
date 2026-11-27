@@ -254,6 +254,15 @@ const getOrReserveNextInvAtomic = async (commit = false) => {
           } catch (_) {}
         }
 
+        // Ignore random fallback numbers (old client fallback "VRM-INV-YYYY-" + 4 digits of Date.now()) so they don't inflate the sequence
+        const isRandomFallbackInv = (v) => typeof v === 'string' && /^VRM-INV-\d{4}-\d{4}$/i.test(v.trim());
+        records = records.map(r => {
+          if (!r || typeof r !== 'object') return isRandomFallbackInv(r) ? null : r;
+          const clean = { ...r };
+          Object.keys(clean).forEach(k => { if (isRandomFallbackInv(clean[k])) clean[k] = null; });
+          return clean;
+        });
+
         let maxSeq = extractMaxSequence('INV', fy, records);
 
         if (serverInvSequenceCounter !== null && serverInvSequenceCounter.fy === fy && serverInvSequenceCounter.maxNum > maxSeq) {
