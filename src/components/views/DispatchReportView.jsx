@@ -1,7 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Download, FileSpreadsheet, FileText, Filter, RefreshCw, Search, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Download, FileSpreadsheet, FileText, Filter, RefreshCw, Search, X, ChevronLeft, ChevronRight, Truck, PackageOpen } from 'lucide-react';
 import { fetchCloudStore } from '../../utils/supabaseDataSync';
 import CeoKpiGrid from '../ceoDashboard/CeoKpiGrid';
+import { getItems } from '../../services/businzDataService';
+import { centralInventoryStore } from '../../utils/centralInventoryStore';
+import { syncPresetsWithCloud, getAllActivePresets } from '../../vrmHdgProposalPresets';
 
 // Dispatch Report (Dispatch login): BOMs received / cancelled / invoiced / dispatched for a day, month or custom range,
 // plus product-wise quantities that actually went out (items and preset kits).
@@ -124,10 +127,10 @@ function usePaged(rows, resetKey) {
 }
 
 // Product filter: pick products to show; each pick shows as a chip that can be removed again. Nothing picked = all.
-function ProductFilter({ label, options, selected, onChange }) {
+function ProductFilter({ label, options, selected, onChange, formatOption = (o) => o, searchPlaceholder = 'Search product name' }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
-  const shown = options.filter(o => o.toLowerCase().includes(q.trim().toLowerCase()));
+  const shown = options.filter(o => formatOption(o).toLowerCase().includes(q.trim().toLowerCase()));
   const toggle = (name) => onChange(selected.includes(name) ? selected.filter(s => s !== name) : [...selected, name]);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
@@ -142,14 +145,14 @@ function ProductFilter({ label, options, selected, onChange }) {
           <div style={{ position: 'absolute', top: '36px', left: 0, zIndex: 30, width: '340px', maxWidth: '90vw', backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', boxShadow: '0 12px 32px rgba(15, 23, 42, 0.12)', padding: '10px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '7px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '5px 10px', marginBottom: '8px' }}>
               <Search size={13} color="#94A3B8" />
-              <input autoFocus type="text" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search product name"
+              <input autoFocus type="text" value={q} onChange={(e) => setQ(e.target.value)} placeholder={searchPlaceholder}
                 style={{ border: 'none', outline: 'none', backgroundColor: 'transparent', fontSize: '12px', color: '#0F172A', width: '100%' }} />
             </div>
             <div style={{ maxHeight: '240px', overflowY: 'auto' }}>
               {shown.length === 0 ? <Empty text="No matching products" /> : shown.map(name => (
                 <label key={name} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 4px', fontSize: '12.5px', color: '#0F172A', cursor: 'pointer', borderRadius: '6px' }}>
                   <input type="checkbox" checked={selected.includes(name)} onChange={() => toggle(name)} />
-                  <span>{name}</span>
+                  <span>{formatOption(name)}</span>
                 </label>
               ))}
             </div>
@@ -163,8 +166,8 @@ function ProductFilter({ label, options, selected, onChange }) {
         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
           {selected.map(name => (
             <span key={name} style={{ ...pill(true), display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: 'default' }}>
-              {name}
-              <button type="button" aria-label={`Remove ${name}`} onClick={() => toggle(name)}
+              {formatOption(name)}
+              <button type="button" aria-label={`Remove ${formatOption(name)}`} onClick={() => toggle(name)}
                 style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer', color: '#0E7490', display: 'inline-flex' }}>
                 <X size={12} />
               </button>
@@ -188,6 +191,8 @@ export default function DispatchReportView(props) {
   const [kitFilter, setKitFilter] = useState([]);
   const [bomSearch, setBomSearch] = useState('');
   const [exporting, setExporting] = useState('');
+  const [productBasis, setProductBasis] = useState('goneout'); // goneout | received
+  const [dayFilter, setDayFilter] = useState([]); // picked dates (YYYY-MM-DD) for the Day-wise Summary
 
   const load = async () => {
     setLoading(true);
@@ -205,6 +210,28 @@ export default function DispatchReportView(props) {
     }
   };
   useEffect(() => { load(); }, []);
+
+  // Full inventory product list and preset library for the product filters
+  const [masterItems, setMasterItems] = useState([]);
+  const [masterKits, setMasterKits] = useState([]);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const central = (() => { try { return centralInventoryStore.getInventoryItems() || []; } catch (_) { return []; } })();
+      const api = await getItems().catch(() => []);
+      const byName = new Map();
+      [...(Array.isArray(api) ? api : []), ...central].forEach(it => {
+        const name = String(it?.name || it?.itemName || '').trim();
+        if (name && !byName.has(name.toLowerCase())) byName.set(name.toLowerCase(), { name, uom: String(it.uom || it.unit || 'NOS').toUpperCase() });
+      });
+      const presets = await syncPresetsWithCloud().catch(() => getAllActivePresets());
+      // The preset library is a keyed object (id -> preset), not an array
+      const presetList = Array.isArray(presets) ? presets : Object.values(presets || {});
+      const kitNamesAll = [...new Set(presetList.map(pr => String(pr?.name || pr?.presetName || pr?.label || pr?.title || '').trim()).filter(Boolean))];
+      if (alive) { setMasterItems([...byName.values()]); setMasterKits(kitNamesAll); }
+    })();
+    return () => { alive = false; };
+  }, []);
 
   // Selected period as inclusive [start, end] day keys
   const [start, end] = useMemo(() => {
@@ -233,10 +260,12 @@ export default function DispatchReportView(props) {
     dispatched.forEach(b => bump(dayKey(dispatchedDate(b)), 'dispatched'));
     const dayRows = Object.entries(days).sort(([a], [b]) => a.localeCompare(b));
 
+    // Products: "gone out" = packed qty of dispatched orders; "received" = ordered qty of BOMs received
+    const aggregate = (list, itemsFn) => {
     const itemMap = new Map();
     const kitMap = new Map();
-    dispatched.forEach(b => {
-      goneOutItems(b).forEach(it => {
+    list.forEach(b => {
+      itemsFn(b).forEach(it => {
         if (!it.qty) return;
         const key = `${it.name.trim().toLowerCase()}|${String(it.uom).toUpperCase()}`;
         const cur = itemMap.get(key) || { name: it.name.trim(), uom: String(it.uom).toUpperCase(), qty: 0, orders: new Set() };
@@ -250,8 +279,14 @@ export default function DispatchReportView(props) {
         kitMap.set(key, cur);
       });
     });
-    const items = [...itemMap.values()].sort((a, b) => b.qty - a.qty);
-    const kits = [...kitMap.values()].sort((a, b) => b.qty - a.qty);
+    return {
+      items: [...itemMap.values()].sort((a, b) => b.qty - a.qty),
+      kits: [...kitMap.values()].sort((a, b) => b.qty - a.qty)
+    };
+    };
+    const orderedItems = (b) => (Array.isArray(b.items) ? b.items : []).map(it => ({ name: it.name || it.code || 'Item', uom: it.uom || it.unit || 'NOS', qty: num(it.qty) }));
+    const goneOut = aggregate(dispatched, goneOutItems);
+    const ordered = aggregate(received, orderedItems);
 
     const bomMap = new Map();
     const add = (list, event, dateFn) => list.forEach(b => {
@@ -266,24 +301,51 @@ export default function DispatchReportView(props) {
     add(dispatched, 'Dispatched', dispatchedDate);
     const bomRows = [...bomMap.values()].sort((a, b) => String(b.code).localeCompare(String(a.code)));
 
-    return { received, cancelled, invoiced, dispatched, dayRows, items, kits, bomRows };
+    return { received, cancelled, invoiced, dispatched, dayRows, goneOut, ordered, bomRows };
   }, [boms, start, end]);
 
   // Product filters (drop picks that no longer exist in the selected period)
-  const itemNames = useMemo(() => [...new Set(report.items.map(i => i.name))].sort((a, b) => a.localeCompare(b)), [report.items]);
-  const kitNames = useMemo(() => [...new Set(report.kits.map(k => k.name))].sort((a, b) => a.localeCompare(b)), [report.kits]);
-  const activeItemFilter = itemFilter.filter(n => itemNames.includes(n));
-  const activeKitFilter = kitFilter.filter(n => kitNames.includes(n));
-  const shownItems = activeItemFilter.length ? report.items.filter(i => activeItemFilter.includes(i.name)) : report.items;
-  const shownKits = activeKitFilter.length ? report.kits.filter(k => activeKitFilter.includes(k.name)) : report.kits;
+  const products = productBasis === 'received' ? report.ordered : report.goneOut;
+  const basisLabel = productBasis === 'received' ? 'Received (Ordered)' : 'Gone Out';
+  // Filter lists = every inventory product / preset kit (plus any name seen in the period); picks with no orders show 0
+  const itemNames = useMemo(() => [...new Set([...masterItems.map(i => i.name), ...products.items.map(i => i.name)])].sort((a, b) => a.localeCompare(b)), [masterItems, products]);
+  const kitNames = useMemo(() => [...new Set([...masterKits, ...products.kits.map(k => k.name)])].sort((a, b) => a.localeCompare(b)), [masterKits, products]);
+  const activeItemFilter = itemFilter;
+  const activeKitFilter = kitFilter;
+  const shownItems = activeItemFilter.length
+    ? activeItemFilter.flatMap(n => {
+        const rows = products.items.filter(i => i.name === n);
+        return rows.length ? rows : [{ name: n, uom: masterItems.find(m => m.name === n)?.uom || 'NOS', qty: 0, orders: new Set() }];
+      })
+    : products.items;
+  const shownKits = activeKitFilter.length
+    ? activeKitFilter.flatMap(n => {
+        const rows = products.kits.filter(k => k.name === n);
+        return rows.length ? rows : [{ name: n, unit: 'Sets', qty: 0, orders: new Set() }];
+      })
+    : products.kits;
   const shownBoms = report.bomRows.filter(r => {
     const q = bomSearch.trim().toLowerCase();
     return !q || String(r.code).toLowerCase().includes(q) || String(r.customer).toLowerCase().includes(q) || String(r.invoiceNo).toLowerCase().includes(q);
   });
 
-  const dayPaged = usePaged(report.dayRows, `${start}${end}`);
-  const itemPaged = usePaged(shownItems, `${start}${end}${activeItemFilter.join('|')}`);
-  const kitPaged = usePaged(shownKits, `${start}${end}${activeKitFilter.join('|')}`);
+  // Day-wise date filter: options = every day in the selected period; picked days with no activity show zeros
+  const periodDays = useMemo(() => {
+    const out = [];
+    const [ys, ms, ds] = start.split('-').map(Number);
+    const cur = new Date(ys, ms - 1, ds);
+    for (let i = 0; i < 400 && dayKey(cur) <= end; i += 1) { out.push(dayKey(cur)); cur.setDate(cur.getDate() + 1); }
+    return out;
+  }, [start, end]);
+  const activeDayFilter = dayFilter.filter(k => k >= start && k <= end);
+  const zeroDay = { received: 0, cancelled: 0, invoiced: 0, dispatched: 0 };
+  const shownDayRows = activeDayFilter.length
+    ? [...activeDayFilter].sort().map(k => [k, (report.dayRows.find(([d]) => d === k) || [k, zeroDay])[1]])
+    : report.dayRows;
+  const dayTotals = shownDayRows.reduce((t, [, v]) => ({ received: t.received + v.received, cancelled: t.cancelled + v.cancelled, invoiced: t.invoiced + v.invoiced, dispatched: t.dispatched + v.dispatched }), { ...zeroDay });
+  const dayPaged = usePaged(shownDayRows, `${start}${end}${activeDayFilter.join('|')}`);
+  const itemPaged = usePaged(shownItems, `${start}${end}${productBasis}${activeItemFilter.join('|')}`);
+  const kitPaged = usePaged(shownKits, `${start}${end}${productBasis}${activeKitFilter.join('|')}`);
   const bomPaged = usePaged(shownBoms, `${start}${end}${bomSearch}`);
 
   // ---------- Downloads (what is on screen: selected period + product filters) ----------
@@ -292,9 +354,9 @@ export default function DispatchReportView(props) {
       ['BOMs Received', report.received.length], ['BOMs Cancelled', report.cancelled.length],
       ['Completed - Invoiced', report.invoiced.length], ['Completed - Dispatched', report.dispatched.length]
     ] },
-    { title: 'Day-wise Summary', head: ['Date', 'Received', 'Cancelled', 'Invoiced', 'Dispatched'], rows: report.dayRows.map(([k, v]) => [fmtDay(k), v.received, v.cancelled, v.invoiced, v.dispatched]) },
-    { title: 'Product-wise Gone Out - Items', head: ['Item', 'UOM', 'Qty', 'Orders'], rows: shownItems.map(i => [i.name, i.uom, i.qty, i.orders.size]) },
-    { title: 'Product-wise Gone Out - Preset Kits', head: ['Preset Kit', 'Qty', 'Unit', 'Orders'], rows: shownKits.map(k => [k.name, k.qty, k.unit, k.orders.size]) },
+    { title: 'Day-wise Summary', head: ['Date', 'Received', 'Cancelled', 'Invoiced', 'Dispatched'], rows: shownDayRows.map(([k, v]) => [fmtDay(k), v.received, v.cancelled, v.invoiced, v.dispatched]) },
+    { title: `Product-wise ${basisLabel} - Items`, head: ['Item', 'UOM', 'Qty', 'Orders'], rows: shownItems.map(i => [i.name, i.uom, i.qty, i.orders.size]) },
+    { title: `Product-wise ${basisLabel} - Preset Kits`, head: ['Preset Kit', 'Qty', 'Unit', 'Orders'], rows: shownKits.map(k => [k.name, k.qty, k.unit, k.orders.size]) },
     { title: 'BOMs in this Period', head: ['BOM Code', 'Customer', 'What happened', 'Current Status', 'Invoice No', 'Value (Rs)'], rows: shownBoms.map(r => [r.code, r.customer, r.events.join('; '), r.status, r.invoiceNo || '-', Math.round(r.value * 100) / 100]) }
   ]);
   const fileBase = `Dispatch_Report_${start}_to_${end}`;
@@ -408,6 +470,29 @@ export default function DispatchReportView(props) {
         </div>
       </div>
 
+      {/* Product view switcher (same pills as the CEO dashboard switcher) */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflowX: 'auto', padding: '2px 0 6px 0' }}>
+        {[
+          { id: 'goneout', label: 'Gone Out (Dispatched)', icon: Truck },
+          { id: 'received', label: 'Received (Ordered)', icon: PackageOpen }
+        ].map(tab => {
+          const isActive = productBasis === tab.id;
+          const TabIcon = tab.icon;
+          return (
+            <button key={tab.id} type="button" onClick={() => setProductBasis(tab.id)}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: '20px',
+                border: isActive ? '1.5px solid #0E7490' : '1px solid #E2E8F0', backgroundColor: isActive ? '#0E7490' : '#FFFFFF',
+                color: isActive ? '#FFFFFF' : '#475569', fontSize: '11.5px', fontWeight: isActive ? '800' : '600', cursor: 'pointer', whiteSpace: 'nowrap',
+                boxShadow: isActive ? '0 2px 8px rgba(14, 116, 144, 0.25)' : '0 1px 2px rgba(0,0,0,0.03)', transition: 'all 0.15s ease'
+              }}>
+              <TabIcon size={13} color={isActive ? '#FFFFFF' : '#64748B'} />
+              <span>{tab.label}</span>
+            </button>
+          );
+        })}
+      </div>
+
       <CeoKpiGrid kpis={[
         { title: 'BOMs Received', value: `${report.received.length}`, valColor: '#0E7490', trend: 'Sent to Dispatch', trendNeutral: true, hideTrendIcon: true, bottomPrefix: 'Reached Dispatch ', bottomHighlight: 'in this period', bottomHighlightColor: '#0E7490' },
         { title: 'BOMs Cancelled', value: `${report.cancelled.length}`, valColor: '#DC2626', highlightCard: report.cancelled.length > 0, trend: 'Cancelled', trendNeutral: true, hideTrendIcon: true, bottomPrefix: 'Cancelled and ', bottomHighlight: 'stock restored', bottomHighlightColor: '#DC2626' },
@@ -415,36 +500,37 @@ export default function DispatchReportView(props) {
         { title: 'Completed — Dispatched', value: `${report.dispatched.length}`, valColor: '#059669', trend: 'Gone out', trendUp: true, hideTrendIcon: true, bottomPrefix: 'Vehicle loaded and ', bottomHighlight: 'dispatched', bottomHighlightColor: '#059669' }
       ]} />
 
-      <BusinzSectionCard title="Day-wise Summary">
+      <BusinzSectionCard title={`Day-wise Summary (${shownDayRows.length} ${shownDayRows.length === 1 ? 'day' : 'days'})`}>
+        <ProductFilter label="Filter dates" options={periodDays} selected={activeDayFilter} onChange={setDayFilter} formatOption={fmtDay} searchPlaceholder="Search date (e.g. 27 Nov)" />
         <div style={tableWrap}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead><tr style={theadRow}><th style={th}>Date</th><th style={th}>Received</th><th style={th}>Cancelled</th><th style={th}>Invoiced</th><th style={th}>Dispatched</th></tr></thead>
             <tbody>
-              {report.dayRows.length === 0 ? (
+              {shownDayRows.length === 0 ? (
                 <tr><td colSpan={5}><Empty text="No BOM activity in this period." /></td></tr>
               ) : dayPaged.visible.map(([k, v]) => (
                 <tr key={k}><td style={{ ...td, fontWeight: '700' }}>{fmtDay(k)}</td><td style={td}>{v.received}</td><td style={td}>{v.cancelled}</td><td style={td}>{v.invoiced}</td><td style={td}>{v.dispatched}</td></tr>
               ))}
-              {report.dayRows.length > 0 && (
+              {shownDayRows.length > 0 && (
                 <tr style={{ backgroundColor: '#F8FAFC' }}>
-                  <td style={{ ...td, fontWeight: '800' }}>Total</td><td style={{ ...td, fontWeight: '800' }}>{report.received.length}</td><td style={{ ...td, fontWeight: '800' }}>{report.cancelled.length}</td><td style={{ ...td, fontWeight: '800' }}>{report.invoiced.length}</td><td style={{ ...td, fontWeight: '800' }}>{report.dispatched.length}</td>
+                  <td style={{ ...td, fontWeight: '800' }}>Total</td><td style={{ ...td, fontWeight: '800' }}>{dayTotals.received}</td><td style={{ ...td, fontWeight: '800' }}>{dayTotals.cancelled}</td><td style={{ ...td, fontWeight: '800' }}>{dayTotals.invoiced}</td><td style={{ ...td, fontWeight: '800' }}>{dayTotals.dispatched}</td>
                 </tr>
               )}
             </tbody>
           </table>
-          {report.dayRows.length > 0 && dayPaged.footer}
+          {shownDayRows.length > 0 && dayPaged.footer}
         </div>
       </BusinzSectionCard>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '16px', minWidth: 0 }}>
-        <BusinzSectionCard title={`Product-wise Gone Out — Items (${shownItems.length})`}>
+        <BusinzSectionCard title={`Product-wise ${basisLabel} — Items (${shownItems.length})`}>
           <ProductFilter label="Filter products" options={itemNames} selected={activeItemFilter} onChange={setItemFilter} />
           <div style={tableWrap}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead><tr style={theadRow}><th style={th}>Item</th><th style={th}>UOM</th><th style={th}>Qty</th><th style={th}>Orders</th></tr></thead>
               <tbody>
                 {shownItems.length === 0 ? (
-                  <tr><td colSpan={4}><Empty text="No dispatched orders in this period." /></td></tr>
+                  <tr><td colSpan={4}><Empty text={productBasis === 'received' ? 'No BOMs received in this period.' : 'No dispatched orders in this period.'} /></td></tr>
                 ) : itemPaged.visible.map(it => (
                   <tr key={`${it.name}|${it.uom}`}><td style={td}>{it.name}</td><td style={td}>{it.uom}</td><td style={{ ...td, fontWeight: '800' }}>{it.qty.toLocaleString('en-IN')}</td><td style={td}>{it.orders.size}</td></tr>
                 ))}
@@ -454,14 +540,14 @@ export default function DispatchReportView(props) {
           </div>
         </BusinzSectionCard>
 
-        <BusinzSectionCard title={`Product-wise Gone Out — Preset Kits (${shownKits.length})`}>
+        <BusinzSectionCard title={`Product-wise ${basisLabel} — Preset Kits (${shownKits.length})`}>
           <ProductFilter label="Filter kits" options={kitNames} selected={activeKitFilter} onChange={setKitFilter} />
           <div style={tableWrap}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead><tr style={theadRow}><th style={th}>Preset Kit</th><th style={th}>Qty</th><th style={th}>Orders</th></tr></thead>
               <tbody>
                 {shownKits.length === 0 ? (
-                  <tr><td colSpan={3}><Empty text="No preset kits dispatched in this period." /></td></tr>
+                  <tr><td colSpan={3}><Empty text={productBasis === 'received' ? 'No preset kits in BOMs received this period.' : 'No preset kits dispatched in this period.'} /></td></tr>
                 ) : kitPaged.visible.map(k => (
                   <tr key={`${k.name}|${k.unit}`}><td style={td}>{k.name}</td><td style={{ ...td, fontWeight: '800', whiteSpace: 'nowrap' }}>{k.qty.toLocaleString('en-IN')} {k.unit}</td><td style={td}>{k.orders.size}</td></tr>
                 ))}
