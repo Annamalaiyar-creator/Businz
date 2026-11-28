@@ -113,13 +113,20 @@ export function buildCanonicalInvoices({ bomStore: rawBomStore = [], invoiceList
       const derivedInvNo = matchSeq ? (matchSeq[2] ? `VRM-INV-${matchSeq[1]}-${matchSeq[2]}` : `VRM-INV-2026-${matchSeq[1]}`) : `VRM-INV-2026-${(bCode.match(/(\d+)$/)?.[1] || '01')}`;
       const hasExplicitInv = b.invoiceNo && b.invoiceNo !== 'Pending Confirmation' && !b.invoiceNo.toLowerCase().includes('pending');
       const invNo = hasExplicitInv ? b.invoiceNo : derivedInvNo;
-      const isConf = Boolean(b.status === 'Invoice Confirmed' || b.status === 'Completed' || b.invoiceConfirmed === true);
       const s = String(b.status || '').toLowerCase();
+      const isBomDisp = Boolean(
+        b.dispatchedAt || b.vehicleLoading?.loadedAt || b.fullyCompleted ||
+        s === 'dispatched' || s === 'closed' || s.includes('dispatched')
+      );
+      const isConf = Boolean(isBomDisp || b.status === 'Invoice Confirmed' || b.status === 'Completed' || b.invoiceConfirmed === true);
       const isAccDone = Boolean(b.accountsVerification?.verified || s.includes('accounts verified') || b.accountsVerified || s.includes('passed to invoice'));
 
       let statusVal = 'Ready for Invoicing';
       let payVal = 'Ready for Payment';
-      if (isConf) {
+      if (isBomDisp) {
+        statusVal = 'Dispatched';
+        payVal = 'Completed & Locked';
+      } else if (isConf) {
         statusVal = 'Invoice Confirmed';
         payVal = 'Completed & Locked';
       } else if (isAccDone || s.includes('passed to invoice')) {
@@ -176,6 +183,7 @@ export function buildCanonicalInvoices({ bomStore: rawBomStore = [], invoiceList
         status: statusVal,
         invoiceConfirmed: isConf,
         attachedInvoiceDocs: Array.isArray(b.attachedInvoiceDocs) ? b.attachedInvoiceDocs : [],
+        attachedDcDocs: Array.isArray(b.attachedDcDocs) ? b.attachedDcDocs : [],
         items: packedItems,
         dispatchPacking: b.dispatchPacking,
         billingAddress: b.billingAddress,
@@ -279,7 +287,16 @@ export function buildCanonicalInvoices({ bomStore: rawBomStore = [], invoiceList
     const matchingBom = findMatchingBom(inv);
     const explicitInvBom = inv.poNo || inv.bomCode || '';
     const resolvedBomCode = explicitInvBom || matchingBom?.bomCode || matchingBom?.code || (inv.notes || '').match(/(?:VRM-BOM-\d{4}-\d+|BOM-[0-9]+)/i)?.[0] || '';
+    const isBomDisp = Boolean(
+      (matchingBom && (
+        matchingBom.dispatchedAt || matchingBom.vehicleLoading?.loadedAt || matchingBom.fullyCompleted ||
+        ['dispatched', 'closed'].includes(String(matchingBom.status || '').toLowerCase()) ||
+        String(matchingBom.status || '').toLowerCase().includes('dispatched')
+      )) ||
+      String(inv.status || '').toLowerCase().includes('dispatched')
+    );
     const isConf = Boolean(
+      isBomDisp ||
       (matchingBom && (matchingBom.status === 'Invoice Confirmed' || matchingBom.status === 'Completed' || matchingBom.invoiceConfirmed === true)) ||
       inv.status === 'Invoice Confirmed' || inv.status === 'Completed' || inv.invoiceConfirmed === true
     );
@@ -313,8 +330,9 @@ export function buildCanonicalInvoices({ bomStore: rawBomStore = [], invoiceList
       deliveryAddress: inv.deliveryAddress || matchingBom?.deliveryAddress,
       deliveryAddressProofDoc: inv.deliveryAddressProofDoc || matchingBom?.deliveryAddressProofDoc,
       accountsVerification: matchingBom?.accountsVerification || inv.accountsVerification,
-      status: isConf ? 'Invoice Confirmed' : (inv.status || 'Ready for Payment'),
-      pay: isConf ? 'Completed & Locked' : (inv.pay || 'Ready for Payment'),
+      attachedDcDocs: Array.isArray(inv.attachedDcDocs) && inv.attachedDcDocs.length > 0 ? inv.attachedDcDocs : (Array.isArray(matchingBom?.attachedDcDocs) ? matchingBom.attachedDcDocs : []),
+      status: isBomDisp ? 'Dispatched' : (isConf ? 'Invoice Confirmed' : (inv.status || 'Ready for Payment')),
+      pay: (isBomDisp || isConf) ? 'Completed & Locked' : (inv.pay || 'Ready for Payment'),
       invAmt: resolvedAmount,
       total: resolvedAmount,
       amount: formatCurrency(resolvedAmount),

@@ -204,12 +204,12 @@ export default function createCustomerRouter(dependencies) {
     const isFakeCode = !rawIncCode || !isValidCustomerCode(rawIncCode);
 
     // Strict Multi-field Deduplication Matching:
-    // 1. GST match (highest priority, globally unique in India)
-    // 2. Official Customer Code match (VRM-CS-... or VRMS/CS/...) when not explicitly creating a brand new record
-    // 3. Normalized Company Name match
-    // 4. Primary Phone match
+    // When editing an existing customer (!incoming.isNew), match by its own Customer Code first so we always update that exact record.
+    // Otherwise match by GST -> Code -> Normalized Name -> Phone.
     let matchedExisting = null;
-    if (incGst && byGst.has(incGst)) {
+    if (!incoming.isNew && rawIncCode && !isFakeCode && byCode.has(incCode)) {
+      matchedExisting = byCode.get(incCode);
+    } else if (incGst && byGst.has(incGst)) {
       matchedExisting = byGst.get(incGst);
     } else if (!incoming.isNew && rawIncCode && !isFakeCode && byCode.has(incCode)) {
       matchedExisting = byCode.get(incCode);
@@ -431,68 +431,17 @@ export default function createCustomerRouter(dependencies) {
     return res.status(status).json({ success: false, ...body });
   }
 
-  // Targeted INSERT/UPSERT each customer into authoritative PostgreSQL public.customers (Rule 2)
+  // Targeted INSERT/UPDATE each customer into authoritative PostgreSQL public.customers (Rule 2)
   for (const record of savedRecords) {
     const dbRowId = dbRowIdByCode.get(String(record.customerCode).trim().toLowerCase()) || record.id || record.customerCode;
     try {
-      await query(`
-        INSERT INTO public.customers (
-          id, customer_code, company_name, customer_name, customer_type, industry,
-          gst_number, pan_number, billing_address, city, state, pincode, billing_address_obj,
-          dispatch_address, dispatch_city, dispatch_state, dispatch_pincode, delivery_address_obj,
-          same_as_billing, credit_limit, credit_days, payment_terms, assigned_salesperson,
-          source, primary_contact, email, phone, status, notes,
-          credit_approved, credit_status, credit_requested_limit, credit_requested_by,
-          credit_requested_at, credit_approved_by, credit_approved_at, credit_rejection_reason,
-          created_at, updated_at
-        ) VALUES (
-          $1, $2, $3, $4, $5, $6,
-          $7, $8, $9, $10, $11, $12, $13,
-          $14, $15, $16, $17, $18,
-          $19, $20, $21, $22, $23,
-          $24, $25, $26, $27, $28, $29,
-          $30, $31, $32, $33, $34, $35, $36, $37,
-          NOW(), NOW()
-        )
-        ON CONFLICT (customer_code) DO UPDATE SET
-          company_name = EXCLUDED.company_name,
-          customer_name = EXCLUDED.customer_name,
-          customer_type = EXCLUDED.customer_type,
-          industry = EXCLUDED.industry,
-          gst_number = EXCLUDED.gst_number,
-          pan_number = EXCLUDED.pan_number,
-          billing_address = EXCLUDED.billing_address,
-          city = EXCLUDED.city,
-          state = EXCLUDED.state,
-          pincode = EXCLUDED.pincode,
-          billing_address_obj = EXCLUDED.billing_address_obj,
-          dispatch_address = EXCLUDED.dispatch_address,
-          dispatch_city = EXCLUDED.dispatch_city,
-          dispatch_state = EXCLUDED.dispatch_state,
-          dispatch_pincode = EXCLUDED.dispatch_pincode,
-          delivery_address_obj = EXCLUDED.delivery_address_obj,
-          same_as_billing = EXCLUDED.same_as_billing,
-          credit_limit = EXCLUDED.credit_limit,
-          credit_days = EXCLUDED.credit_days,
-          payment_terms = EXCLUDED.payment_terms,
-          assigned_salesperson = EXCLUDED.assigned_salesperson,
-          source = EXCLUDED.source,
-          primary_contact = EXCLUDED.primary_contact,
-          email = EXCLUDED.email,
-          phone = EXCLUDED.phone,
-          status = EXCLUDED.status,
-          notes = EXCLUDED.notes,
-          credit_approved = EXCLUDED.credit_approved,
-          credit_status = EXCLUDED.credit_status,
-          credit_requested_limit = EXCLUDED.credit_requested_limit,
-          credit_requested_by = EXCLUDED.credit_requested_by,
-          credit_requested_at = EXCLUDED.credit_requested_at,
-          credit_approved_by = EXCLUDED.credit_approved_by,
-          credit_approved_at = EXCLUDED.credit_approved_at,
-          credit_rejection_reason = EXCLUDED.credit_rejection_reason,
-          updated_at = NOW()
-      `, [
-        dbRowId,
+      const existingPg = await query(
+        `SELECT id FROM public.customers WHERE customer_code = $1 OR id = $2 ORDER BY (customer_code = $1) DESC LIMIT 1`,
+        [record.customerCode, dbRowId]
+      );
+      const targetRowId = existingPg.rows[0]?.id || dbRowId;
+      const pgParams = [
+        targetRowId,
         record.customerCode,
         record.companyName,
         record.customerName,
@@ -529,7 +478,110 @@ export default function createCustomerRouter(dependencies) {
         record.creditApprovedBy || '',
         record.creditApprovedAt || null,
         record.creditRejectionReason || ''
-      ]);
+      ];
+
+      if (existingPg.rows[0]?.id) {
+        await query(`
+          UPDATE public.customers SET
+            customer_code = $2,
+            company_name = $3,
+            customer_name = $4,
+            customer_type = $5,
+            industry = $6,
+            gst_number = $7,
+            pan_number = $8,
+            billing_address = $9,
+            city = $10,
+            state = $11,
+            pincode = $12,
+            billing_address_obj = $13,
+            dispatch_address = $14,
+            dispatch_city = $15,
+            dispatch_state = $16,
+            dispatch_pincode = $17,
+            delivery_address_obj = $18,
+            same_as_billing = $19,
+            credit_limit = $20,
+            credit_days = $21,
+            payment_terms = $22,
+            assigned_salesperson = $23,
+            source = $24,
+            primary_contact = $25,
+            email = $26,
+            phone = $27,
+            status = $28,
+            notes = $29,
+            credit_approved = $30,
+            credit_status = $31,
+            credit_requested_limit = $32,
+            credit_requested_by = $33,
+            credit_requested_at = $34,
+            credit_approved_by = $35,
+            credit_approved_at = $36,
+            credit_rejection_reason = $37,
+            updated_at = NOW()
+          WHERE id = $1
+        `, pgParams);
+      } else {
+        await query(`
+          INSERT INTO public.customers (
+            id, customer_code, company_name, customer_name, customer_type, industry,
+            gst_number, pan_number, billing_address, city, state, pincode, billing_address_obj,
+            dispatch_address, dispatch_city, dispatch_state, dispatch_pincode, delivery_address_obj,
+            same_as_billing, credit_limit, credit_days, payment_terms, assigned_salesperson,
+            source, primary_contact, email, phone, status, notes,
+            credit_approved, credit_status, credit_requested_limit, credit_requested_by,
+            credit_requested_at, credit_approved_by, credit_approved_at, credit_rejection_reason,
+            created_at, updated_at
+          ) VALUES (
+            $1, $2, $3, $4, $5, $6,
+            $7, $8, $9, $10, $11, $12, $13,
+            $14, $15, $16, $17, $18,
+            $19, $20, $21, $22, $23,
+            $24, $25, $26, $27, $28, $29,
+            $30, $31, $32, $33, $34, $35, $36, $37,
+            NOW(), NOW()
+          )
+          ON CONFLICT (id) DO UPDATE SET
+            customer_code = EXCLUDED.customer_code,
+            company_name = EXCLUDED.company_name,
+            customer_name = EXCLUDED.customer_name,
+            customer_type = EXCLUDED.customer_type,
+            industry = EXCLUDED.industry,
+            gst_number = EXCLUDED.gst_number,
+            pan_number = EXCLUDED.pan_number,
+            billing_address = EXCLUDED.billing_address,
+            city = EXCLUDED.city,
+            state = EXCLUDED.state,
+            pincode = EXCLUDED.pincode,
+            billing_address_obj = EXCLUDED.billing_address_obj,
+            dispatch_address = EXCLUDED.dispatch_address,
+            dispatch_city = EXCLUDED.dispatch_city,
+            dispatch_state = EXCLUDED.dispatch_state,
+            dispatch_pincode = EXCLUDED.dispatch_pincode,
+            delivery_address_obj = EXCLUDED.delivery_address_obj,
+            same_as_billing = EXCLUDED.same_as_billing,
+            credit_limit = EXCLUDED.credit_limit,
+            credit_days = EXCLUDED.credit_days,
+            payment_terms = EXCLUDED.payment_terms,
+            assigned_salesperson = EXCLUDED.assigned_salesperson,
+            source = EXCLUDED.source,
+            primary_contact = EXCLUDED.primary_contact,
+            email = EXCLUDED.email,
+            phone = EXCLUDED.phone,
+            status = EXCLUDED.status,
+            notes = EXCLUDED.notes,
+            credit_approved = EXCLUDED.credit_approved,
+            credit_status = EXCLUDED.credit_status,
+            credit_requested_limit = EXCLUDED.credit_requested_limit,
+            credit_requested_by = EXCLUDED.credit_requested_by,
+            credit_requested_at = EXCLUDED.credit_requested_at,
+            credit_approved_by = EXCLUDED.credit_approved_by,
+            credit_approved_at = EXCLUDED.credit_approved_at,
+            credit_rejection_reason = EXCLUDED.credit_rejection_reason,
+            updated_at = NOW()
+        `, pgParams);
+      }
       if (record._notifyCeoCreditRequest) {
         delete record._notifyCeoCreditRequest;
         createInternalNotification({

@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import CeoKpiGrid from '../ceoDashboard/CeoKpiGrid';
+import { triggerCeoDrilldown } from '../../utils/ceoDrilldownFilter';
 
 const parseAmount = (val) => {
   if (typeof val === 'number') return Number.isFinite(val) ? val : 0;
@@ -513,12 +514,23 @@ export default function CeoSalesAnalyticsSection({
       existingCustSales,
       lostLeadsCount: lostLeads.length,
       lostVal,
-      lostReasonBreakdown
+      lostReasonBreakdown,
+      periodInvoiceKeys: fInvs.map((inv) => inv.taxInvoiceNo || inv.invNo || inv.invoiceNo || inv.code || inv.id)
     };
   }, [
     leadsList, allLeadsList, quotesList, allQuotesList, piList, invList, allInvList,
     paymentsList, customersList, companyTarget, repTargets, selectedExec, selectedRegion, selectedProduct, selectedPeriod
   ]);
+
+  const drillToInvoices = (label) => triggerCeoDrilldown({
+    storageKey: 'controlroom_inv_initial_date_filter',
+    eventName: 'controlroom_inv_filter_date',
+    targetKeys: analytics.periodInvoiceKeys,
+    periodLabel: label,
+    sourceLabel: 'Sales',
+    navigateTab: 'Invoice Management',
+    onNavigateTab
+  });
 
   const kpiCards = [
     {
@@ -527,7 +539,8 @@ export default function CeoSalesAnalyticsSection({
       valColor: '#0F172A',
       hideTrendIcon: true,
       bottomPrefix: analytics.currentMonthLabel,
-      bottomHighlight: ''
+      bottomHighlight: '',
+      onClick: () => drillToInvoices(`Sales Target (${selectedPeriod})`)
     },
     {
       title: 'ACHIEVED / INVOICED',
@@ -536,7 +549,8 @@ export default function CeoSalesAnalyticsSection({
       hideTrendIcon: true,
       bottomPrefix: `${analytics.achievedPct}% of `,
       bottomHighlight: 'monthly target',
-      bottomHighlightColor: '#059669'
+      bottomHighlightColor: '#059669',
+      onClick: () => drillToInvoices(`Invoiced (${selectedPeriod})`)
     },
     {
       title: 'BALANCE TO TARGET',
@@ -545,7 +559,8 @@ export default function CeoSalesAnalyticsSection({
       hideTrendIcon: true,
       bottomPrefix: analytics.balanceValue > 0 ? `${formatLakhs(analytics.dailyRequired)} ` : 'Target ',
       bottomHighlight: analytics.balanceValue > 0 ? 'required daily' : 'achieved',
-      bottomHighlightColor: analytics.balanceValue > 0 ? '#B45309' : '#059669'
+      bottomHighlightColor: analytics.balanceValue > 0 ? '#B45309' : '#059669',
+      onClick: () => onNavigateTab && onNavigateTab('Smart Leads')
     },
     {
       title: 'MONTH-END FORECAST',
@@ -554,7 +569,8 @@ export default function CeoSalesAnalyticsSection({
       hideTrendIcon: true,
       bottomPrefix: `${analytics.forecastPct}% of target · `,
       bottomHighlight: `${analytics.forecastDelta >= 0 ? '+' : ''}${formatLakhs(Math.abs(analytics.forecastDelta))} ${analytics.forecastDelta >= 0 ? 'expected' : 'gap'}`,
-      bottomHighlightColor: analytics.forecastDelta >= 0 ? '#059669' : '#B45309'
+      bottomHighlightColor: analytics.forecastDelta >= 0 ? '#059669' : '#B45309',
+      onClick: () => drillToInvoices(`Forecast (${selectedPeriod})`)
     }
   ];
 

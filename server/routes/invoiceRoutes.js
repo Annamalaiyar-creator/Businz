@@ -254,6 +254,7 @@ router.post('/api/invoices/complete', async (req, res) => {
         : `VRM-INV-${Date.now()}`;
     const targetBomCode = String(body.bomCode || body.poNo || '').trim();
     const attachedDocs = Array.isArray(body.attachedInvoiceDocs) ? body.attachedInvoiceDocs : [];
+    const attachedDcDocs = Array.isArray(body.attachedDcDocs) ? body.attachedDcDocs : [];
     const nowIso = new Date().toISOString();
 
     const invRecord = {
@@ -270,6 +271,7 @@ router.post('/api/invoices/complete', async (req, res) => {
       invoiceConfirmedAt: nowIso,
       confirmedBy: session.name || 'Billing & Invoice Exec',
       attachedInvoiceDocs: attachedDocs,
+      attachedDcDocs,
       updatedAt: nowIso
     };
 
@@ -329,6 +331,7 @@ router.post('/api/invoices/complete', async (req, res) => {
               invoiceConfirmedAt: nowIso,
               invoiceNo: assignedInvNo,
               attachedInvoiceDocs: attachedDocs,
+              attachedDcDocs,
               stockDeductionDate: nowIso
             }),
             targetBomCode
@@ -348,6 +351,7 @@ router.post('/api/invoices/complete', async (req, res) => {
               invoiceConfirmed: true,
               invoiceConfirmedAt: b.invoiceConfirmedAt || nowIso,
               attachedInvoiceDocs: attachedDocs,
+              attachedDcDocs,
               status: nextStatus
             };
           }

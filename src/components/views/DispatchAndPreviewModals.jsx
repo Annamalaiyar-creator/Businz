@@ -162,11 +162,19 @@ export function ActiveMediaPreviewModal({ activeMediaPreviewModal, onClose }) {
     setImgError(false);
     let active = true;
 
+    const hasStoragePath = Boolean(activeMediaPreviewModal.storagePath);
+    const cleanPath = hasStoragePath
+      ? String(activeMediaPreviewModal.storagePath).replace(/^\/+/, '').replace(/^bom-documents\//, '')
+      : '';
+    const directStorageUrl = cleanPath
+      ? `/api/uploads/${activeMediaPreviewModal.storageBucket || 'bom-documents'}/${cleanPath}`
+      : '';
+
     const direct = getSafeInitialUrl(activeMediaPreviewModal.dataUrl) ||
       getSafeInitialUrl(activeMediaPreviewModal.url) ||
       getSafeInitialUrl(activeMediaPreviewModal.previewUrl) ||
-      getMediaFromCache(activeMediaPreviewModal.name) ||
-      getMediaFromCache(activeMediaPreviewModal.id) ||
+      directStorageUrl ||
+      (!hasStoragePath ? (getMediaFromCache(activeMediaPreviewModal.name) || getMediaFromCache(activeMediaPreviewModal.id)) : '') ||
       '';
 
     if (direct) {
@@ -174,7 +182,7 @@ export function ActiveMediaPreviewModal({ activeMediaPreviewModal, onClose }) {
     }
 
     const resolveAsync = async () => {
-      // 1. Try Document Resolver
+      // 1. Try Document Resolver when storageBucket & storagePath are present (never collide by plain filename)
       if (activeMediaPreviewModal.storageBucket && activeMediaPreviewModal.storagePath) {
         try {
           const url = await resolveDocumentUrlAsync(activeMediaPreviewModal, activeMediaPreviewModal.bomCode || activeMediaPreviewModal.storagePath.split('/')[0]);
@@ -185,9 +193,11 @@ export function ActiveMediaPreviewModal({ activeMediaPreviewModal, onClose }) {
             return;
           }
         } catch (_) {}
+        if (!direct && active) setLoadFailed(true);
+        return;
       }
 
-      // 2. Try async media cache
+      // 2. Try async media cache (only when no unique storagePath exists)
       const docName = activeMediaPreviewModal.name || activeMediaPreviewModal.originalName || activeMediaPreviewModal.id;
       if (docName) {
         try {

@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { X, Search, ExternalLink } from 'lucide-react';
 import CeoKpiGrid from '../ceoDashboard/CeoKpiGrid';
+import { triggerCeoDrilldown } from '../../utils/ceoDrilldownFilter';
 
 const parseAmount = (val) => {
   if (typeof val === 'number' && !isNaN(val)) return val;
@@ -378,9 +379,18 @@ export default function CeoProcurementAnalyticsSection({
   const periodLabels = getPeriodSubtitle(selectedPeriod);
   const todayLabel = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 
+  const drillToPurchaseOrders = (title, list) => triggerCeoDrilldown({
+    storageKey: 'controlroom_po_initial_date_filter',
+    eventName: 'controlroom_po_filter_date',
+    targetKeys: (list || []).map(p => p.poNo || p.raw?.poNumber || p.raw?.poNo || p.raw?.id),
+    periodLabel: title,
+    sourceLabel: 'Procurement',
+    navigateTab: 'Purchase Orders',
+    onNavigateTab
+  });
+
   const openListPopup = (title, list) => {
-    setPopupSearch('');
-    setPoPopup({ title, list });
+    drillToPurchaseOrders(title, list);
   };
 
   const filteredPopupList = useMemo(() => {

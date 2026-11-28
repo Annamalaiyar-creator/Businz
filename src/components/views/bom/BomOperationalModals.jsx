@@ -470,10 +470,25 @@ export default function BomOperationalModals({ ctx }) {
                         <button
                           type="button"
                           onClick={() => {
-                            const docUrl = (lrDoc.url && !lrDoc.url.startsWith('blob:')) ? lrDoc.url : ((lrDoc.dataUrl && !lrDoc.dataUrl.startsWith('blob:')) ? lrDoc.dataUrl : (getMediaFromCache(lrDoc.name) || (lrDoc.name ? `/api/uploads/${lrDoc.name}` : '')));
+                            const cleanStoragePath = lrDoc?.storagePath
+                              ? String(lrDoc.storagePath).replace(/^\/+/, '').replace(/^bom-documents\//, '')
+                              : '';
+                            const lrStorageUrl = cleanStoragePath ? `/api/uploads/bom-documents/${cleanStoragePath}` : '';
+                            const safeLrUrl = (lrDoc.url && !lrDoc.url.startsWith('blob:'))
+                              ? (lrDoc.url.startsWith('/uploads/') ? `/api${lrDoc.url}` : lrDoc.url)
+                              : '';
+                            const safeDataUrl = (lrDoc.dataUrl && !lrDoc.dataUrl.startsWith('blob:')) ? lrDoc.dataUrl : '';
+                            const docUrl = safeLrUrl || lrStorageUrl || safeDataUrl || (!cleanStoragePath && lrDoc.name ? (getMediaFromCache(lrDoc.name) || `/api/uploads/${lrDoc.name}`) : '');
                             setPreviewDocModal({
                               title: `Lorry Receipt (LR) — ${lrNo !== '—' ? lrNo : quickPreviewRecord.bomCode}`,
-                              doc: { ...lrDoc, url: docUrl, dataUrl: docUrl }
+                              doc: {
+                                ...lrDoc,
+                                url: docUrl,
+                                dataUrl: docUrl,
+                                bomCode: quickPreviewRecord.bomCode,
+                                storageBucket: lrDoc.storageBucket || 'bom-documents',
+                                storagePath: lrDoc.storagePath
+                              }
                             });
                           }}
                           style={{ border: 'none', backgroundColor: '#16A34A', color: 'white', padding: '3px 8px', borderRadius: '5px', fontSize: '10px', fontWeight: '700', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '3px' }}

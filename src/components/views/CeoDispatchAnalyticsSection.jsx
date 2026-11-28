@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { getBomActiveStage, isBomAddressProofPending } from './bom/bomStageHelpers.js';
 import CeoKpiGrid from '../ceoDashboard/CeoKpiGrid';
+import { triggerCeoDrilldown } from '../../utils/ceoDrilldownFilter';
 
 const parseDateMs = (d) => {
   if (!d) return null;
@@ -157,7 +158,9 @@ export default function CeoDispatchAnalyticsSection({
   bomList = [],
   allBomList = [],
   dispatchesList = [],
-  onOpenBom
+  selectedPeriod = 'This Month',
+  onOpenBom,
+  onNavigateTab
 }) {
   const [activeFilter, setActiveFilter] = useState('today_overdue');
   const [searchTerm, setSearchTerm] = useState('');
@@ -394,7 +397,15 @@ export default function CeoDispatchAnalyticsSection({
           bottomPrefix: 'Due today and ',
           bottomHighlight: 'still open',
           bottomHighlightColor: '#B45309',
-          onClick: () => { setActiveFilter('pending_today'); setPage(1); }
+          onClick: () => triggerCeoDrilldown({
+            storageKey: 'controlroom_bom_initial_date_filter',
+            eventName: 'controlroom_bom_filter_date',
+            targetKeys: analytics.pendingTodayList.map(o => o.code),
+            periodLabel: 'Pending Today',
+            sourceLabel: 'Dispatch',
+            navigateTab: 'BOM Orders',
+            onNavigateTab
+          })
         },
         {
           title: 'Dispatched Today',
@@ -406,7 +417,15 @@ export default function CeoDispatchAnalyticsSection({
           bottomPrefix: 'Orders fully ',
           bottomHighlight: 'dispatched today',
           bottomHighlightColor: '#059669',
-          onClick: () => { setActiveFilter('dispatched_today'); setPage(1); }
+          onClick: () => triggerCeoDrilldown({
+            storageKey: 'controlroom_bom_initial_date_filter',
+            eventName: 'controlroom_bom_filter_date',
+            targetKeys: analytics.dispatchedTodayList.map(o => o.code),
+            periodLabel: 'Dispatched Today',
+            sourceLabel: 'Dispatch',
+            navigateTab: 'BOM Orders',
+            onNavigateTab
+          })
         },
         {
           title: 'Overdue Now',
@@ -419,7 +438,15 @@ export default function CeoDispatchAnalyticsSection({
           bottomPrefix: 'Past promised date ',
           bottomHighlight: 'and still open',
           bottomHighlightColor: '#DC2626',
-          onClick: () => { setActiveFilter('overdue'); setPage(1); }
+          onClick: () => triggerCeoDrilldown({
+            storageKey: 'controlroom_bom_initial_date_filter',
+            eventName: 'controlroom_bom_filter_date',
+            targetKeys: analytics.overdueNowList.map(o => o.code),
+            periodLabel: 'Overdue Now',
+            sourceLabel: 'Dispatch',
+            navigateTab: 'BOM Orders',
+            onNavigateTab
+          })
         },
         {
           title: 'Dispatched This Month',
@@ -430,7 +457,15 @@ export default function CeoDispatchAnalyticsSection({
           bottomPrefix: `Of ${analytics.dueInPeriodList.length} orders `,
           bottomHighlight: 'due this period',
           bottomHighlightColor: '#0E7490',
-          onClick: () => { setActiveFilter('mtd'); setPage(1); }
+          onClick: () => triggerCeoDrilldown({
+            storageKey: 'controlroom_bom_initial_date_filter',
+            eventName: 'controlroom_bom_filter_date',
+            targetKeys: analytics.dispatchedPeriodList.map(o => o.code),
+            periodLabel: `Dispatched (${selectedPeriod})`,
+            sourceLabel: 'Dispatch',
+            navigateTab: 'BOM Orders',
+            onNavigateTab
+          })
         },
         {
           title: 'Pending This Month',
@@ -442,7 +477,15 @@ export default function CeoDispatchAnalyticsSection({
           bottomPrefix: `Includes ${analytics.overdueInPeriodCount} `,
           bottomHighlight: 'already overdue',
           bottomHighlightColor: '#B45309',
-          onClick: () => { setActiveFilter('mtd'); setPage(1); }
+          onClick: () => triggerCeoDrilldown({
+            storageKey: 'controlroom_bom_initial_date_filter',
+            eventName: 'controlroom_bom_filter_date',
+            targetKeys: analytics.pendingPeriodList.map(o => o.code),
+            periodLabel: `Pending (${selectedPeriod})`,
+            sourceLabel: 'Dispatch',
+            navigateTab: 'BOM Orders',
+            onNavigateTab
+          })
         },
         {
           title: 'On-Time Dispatch',
@@ -454,7 +497,15 @@ export default function CeoDispatchAnalyticsSection({
           bottomPrefix: `${analytics.onTimePeriodList.length} of ${analytics.dispatchedPeriodList.length} `,
           bottomHighlight: 'completed on time',
           bottomHighlightColor: '#059669',
-          onClick: () => { setActiveFilter('mtd'); setPage(1); }
+          onClick: () => triggerCeoDrilldown({
+            storageKey: 'controlroom_bom_initial_date_filter',
+            eventName: 'controlroom_bom_filter_date',
+            targetKeys: analytics.onTimePeriodList.map(o => o.code),
+            periodLabel: `On-Time Dispatch (${selectedPeriod})`,
+            sourceLabel: 'Dispatch',
+            navigateTab: 'BOM Orders',
+            onNavigateTab
+          })
         }
       ]} />
 

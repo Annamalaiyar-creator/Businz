@@ -12,6 +12,7 @@ import { VRM_PRODUCTS, resolveProductCode, wordFingerprint, normalizeProductName
 import { fetchCloudStore, subscribeToCloudStore, saveCloudStore } from '../../utils/supabaseDataSync';
 import ZohoStyleBulkImportModal from '../ZohoStyleBulkImportModal';
 import * as XLSX from 'xlsx';
+import { readInitialDrilldownMeta, clearDrilldownMeta, matchesDrilldownKeys } from '../../utils/ceoDrilldownFilter';
 
 export const isRawZohoNumericId = (code) => Boolean(code && /^\d{10,}$/.test(String(code).trim()));
 
@@ -978,6 +979,25 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
   const [goToPageInput, setGoToPageInput] = useState('');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [itemsPendingDelete, setItemsPendingDelete] = useState([]);
+  const [ceoInvFilterMeta, setCeoInvFilterMeta] = useState(() => readInitialDrilldownMeta('controlroom_inventory_initial_filter'));
+
+  useEffect(() => {
+    const onInvFilter = (e) => {
+      const d = e?.detail;
+      if (d && Array.isArray(d.targetKeys)) {
+        setCeoInvFilterMeta({
+          targetKeys: new Set(d.targetKeys.map((k) => String(k || '').trim().toLowerCase()).filter(Boolean)),
+          periodLabel: d.periodLabel || 'Selected Period',
+          sourceLabel: d.sourceLabel || 'CEO Dashboard',
+          filterTab: d.filterTab || 'All',
+          count: d.count ?? d.targetKeys.length
+        });
+        setCurrentPage(1);
+      }
+    };
+    window.addEventListener('controlroom_inventory_filter', onInvFilter);
+    return () => window.removeEventListener('controlroom_inventory_filter', onInvFilter);
+  }, []);
 
   const selectedMat = useMemo(() => {
     const base = materials.find(m => m.code === selectedCode) || materials[0];
@@ -1401,7 +1421,9 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       const itemCat = String(m.category || m.cat || '').trim().toLowerCase();
       const isRawMaterial = itemCat === 'raw material' || itemCat === 'raw materials' || RAW_MATERIAL_CODES.has(String(m.code || '').toUpperCase().trim());
 
-      if (isRawMaterialDirectory) {
+      if (ceoInvFilterMeta && ceoInvFilterMeta.targetKeys) {
+        if (!matchesDrilldownKeys(ceoInvFilterMeta.targetKeys, [m.code, m.sku, m.name, m.id])) return false;
+      } else if (isRawMaterialDirectory) {
         // Raw Material Directory strictly shows ONLY items where Category is 'Raw Material' or is in RAW_MATERIAL_CODES
         if (!isRawMaterial) return false;
       } else {
@@ -1429,7 +1451,7 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
       seenCanonical.add(canonical);
       return true;
     }).sort((a, b) => (a.code || '').localeCompare(b.code || ''));
-  }, [materials, searchQuery, selectedCat, selectedStore, selectedStatus, activeTab]);
+  }, [materials, searchQuery, selectedCat, selectedStore, selectedStatus, activeTab, ceoInvFilterMeta]);
 
   // Low stock items
   const lowStockItems = useMemo(() => {
@@ -2795,6 +2817,26 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', minWidth: 0, width: '100%', fontFamily: "'DM Sans', sans-serif" }}>
+      {ceoInvFilterMeta && (
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px',
+          padding: '10px 16px', backgroundColor: '#ECFEFF', border: '1px solid #A5F3FC', borderRadius: '12px', fontSize: '12.5px', color: '#0E7490'
+        }}>
+          <span>
+            Showing <strong>{filteredMaterials.length}</strong> Inventory items filtered from <strong>{ceoInvFilterMeta.sourceLabel}</strong> ({ceoInvFilterMeta.periodLabel})
+          </span>
+          <button
+            type="button"
+            onClick={() => clearDrilldownMeta('controlroom_inventory_initial_filter', setCeoInvFilterMeta)}
+            style={{
+              padding: '4px 10px', borderRadius: '999px', border: '1px solid #0E7490', backgroundColor: '#FFFFFF',
+              color: '#0E7490', fontSize: '11.5px', fontWeight: '700', cursor: 'pointer'
+            }}
+          >
+            Clear Filter
+          </button>
+        </div>
+      )}
 
       {/* 1. TOP HEADER SECTION MATCHING CONTROLROOM DESIGN SYSTEM */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

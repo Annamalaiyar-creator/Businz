@@ -217,8 +217,9 @@ export default function BomDashboardSection({ ctx }) {
         </div>
       )}
 
-      {/* ADDRESS PROOF RE-UPLOAD REQUEST NOTIFICATION BANNER */}
-      {(bomStore || []).some(b => b.addressProofReuploadRequested || b.status === 'Address Proof Requested from Sales') && (() => {
+      {/* ADDRESS PROOF RE-UPLOAD REQUEST NOTIFICATION BANNER (hidden on CEO/MD login) */}
+      {!/^(ceo|md|managing director)$/i.test(String(userRole || '').trim()) &&
+        (bomStore || []).some(b => b.addressProofReuploadRequested || b.status === 'Address Proof Requested from Sales') && (() => {
         const pendingBoms = (bomStore || []).filter(b => b.addressProofReuploadRequested || b.status === 'Address Proof Requested from Sales');
         const earliestReq = pendingBoms.reduce((acc, b) => {
           const t = b.addressProofReuploadRequestedAt || b.reuploadRequestedAt || b.reissueRequestedAt;

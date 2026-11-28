@@ -4,6 +4,7 @@ import { prodModuleEngine, isLegacyWoId } from "../../utils/productionModuleEngi
 import { CANONICAL_PRODUCT_ALIASES } from "../../utils/vrmProductsData";
 import { fetchCloudStore } from "../../utils/supabaseDataSync";
 import { addLiveNotification } from "../Header";
+import { readInitialDrilldownMeta, clearDrilldownMeta, matchesDrilldownKeys } from "../../utils/ceoDrilldownFilter";
 
 export default function WorkOrdersView({
   userRole,
@@ -23,6 +24,24 @@ export default function WorkOrdersView({
   const [actualGoodOutputVal, setActualGoodOutputVal] = useState('');
   const [actualRejectedOutputVal, setActualRejectedOutputVal] = useState('0');
   const [operatorRemarksVal, setOperatorRemarksVal] = useState('');
+  const [woKpiFilterMeta, setWoKpiFilterMeta] = useState(() => readInitialDrilldownMeta('controlroom_wo_initial_filter'));
+
+  useEffect(() => {
+    const onWoFilter = (e) => {
+      const d = e?.detail;
+      if (d && Array.isArray(d.targetKeys)) {
+        setWoKpiFilterMeta({
+          targetKeys: new Set(d.targetKeys.map((k) => String(k || '').trim().toLowerCase()).filter(Boolean)),
+          periodLabel: d.periodLabel || 'Selected Period',
+          sourceLabel: d.sourceLabel || 'CEO Dashboard',
+          filterTab: d.filterTab || 'All',
+          count: d.count ?? d.targetKeys.length
+        });
+      }
+    };
+    window.addEventListener('controlroom_wo_filter', onWoFilter);
+    return () => window.removeEventListener('controlroom_wo_filter', onWoFilter);
+  }, []);
 
   const isFloorEmployee = String(userRole || '').toLowerCase().includes('employee') || 
     String(userRole || '').toLowerCase().includes('floor') || 
@@ -227,6 +246,9 @@ export default function WorkOrdersView({
   });
 
   const filteredRows = allWorkOrderRows.filter(row => {
+    if (woKpiFilterMeta && woKpiFilterMeta.targetKeys) {
+      if (!matchesDrilldownKeys(woKpiFilterMeta.targetKeys, [row.woNo, row.rawWO?.id, row.rawWO?.workOrderNo])) return false;
+    }
     const searchLower = (prodSearchQueryText || '').toLowerCase();
     const matchesSearch = !searchLower || row.woNo.toLowerCase().includes(searchLower) || row.product.toLowerCase().includes(searchLower) || row.customer.toLowerCase().includes(searchLower);
     const matchesStatusSelect = prodFilterStatusSelect === 'All' || row.status === prodFilterStatusSelect || (prodFilterStatusSelect === 'Completed' && (row.status === 'Completed' || row.status === 'Approved Closed'));
@@ -311,6 +333,26 @@ export default function WorkOrdersView({
       </div>
 
       {/* 2. SEARCH & FILTER CONTROLS CARD */}
+      {woKpiFilterMeta && (
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px',
+          padding: '10px 16px', backgroundColor: '#ECFEFF', border: '1px solid #A5F3FC', borderRadius: '12px', fontSize: '12.5px', color: '#0E7490'
+        }}>
+          <span>
+            Showing <strong>{filteredRows.length}</strong> Work Orders filtered from <strong>{woKpiFilterMeta.sourceLabel}</strong> ({woKpiFilterMeta.periodLabel})
+          </span>
+          <button
+            type="button"
+            onClick={() => clearDrilldownMeta('controlroom_wo_initial_filter', setWoKpiFilterMeta)}
+            style={{
+              padding: '4px 10px', borderRadius: '999px', border: '1px solid #0E7490', backgroundColor: '#FFFFFF',
+              color: '#0E7490', fontSize: '11.5px', fontWeight: '700', cursor: 'pointer'
+            }}
+          >
+            Clear Filter
+          </button>
+        </div>
+      )}
       <div style={{
         backgroundColor: '#FFFFFF',
         borderRadius: '16px',

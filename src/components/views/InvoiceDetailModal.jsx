@@ -166,7 +166,7 @@ export default function InvoiceDetailModal({
     return String(val);
   };
 
-  const isConfirmed = inv.status === 'Invoice Confirmed' || inv.status === 'Completed' || inv.invoiceConfirmed || Boolean(matchingBom?.invoiceConfirmed) || Boolean(matchingBom?.status === 'Invoice Confirmed');
+  const isConfirmed = inv.status === 'Invoice Confirmed' || inv.status === 'Dispatched' || inv.status === 'Completed' || inv.invoiceConfirmed || Boolean(matchingBom?.invoiceConfirmed) || Boolean(matchingBom?.status === 'Invoice Confirmed') || Boolean(matchingBom?.status === 'Dispatched');
 
   // Attach Invoice (Mandatory — up to 5 files: Image, PDF, etc.)
   const initialAttachedInvoiceDocs = Array.isArray(inv.attachedInvoiceDocs) && inv.attachedInvoiceDocs.length > 0
@@ -175,12 +175,25 @@ export default function InvoiceDetailModal({
   const [attachedInvoiceDocs, setAttachedInvoiceDocs] = useState(initialAttachedInvoiceDocs);
   const [uploadingInvoiceDocs, setUploadingInvoiceDocs] = useState(false);
 
+  // Attach DC (Delivery Challan — separate upload up to 5 files)
+  const initialAttachedDcDocs = Array.isArray(inv.attachedDcDocs) && inv.attachedDcDocs.length > 0
+    ? inv.attachedDcDocs
+    : (Array.isArray(matchingBom?.attachedDcDocs) ? matchingBom.attachedDcDocs : []);
+  const [attachedDcDocs, setAttachedDcDocs] = useState(initialAttachedDcDocs);
+  const [uploadingDcDocs, setUploadingDcDocs] = useState(false);
+
   useEffect(() => {
     const incoming = Array.isArray(inv.attachedInvoiceDocs) && inv.attachedInvoiceDocs.length > 0
       ? inv.attachedInvoiceDocs
       : (Array.isArray(matchingBom?.attachedInvoiceDocs) ? matchingBom.attachedInvoiceDocs : []);
     if (incoming.length > 0) {
       setAttachedInvoiceDocs(incoming);
+    }
+    const incomingDc = Array.isArray(inv.attachedDcDocs) && inv.attachedDcDocs.length > 0
+      ? inv.attachedDcDocs
+      : (Array.isArray(matchingBom?.attachedDcDocs) ? matchingBom.attachedDcDocs : []);
+    if (incomingDc.length > 0) {
+      setAttachedDcDocs(incomingDc);
     }
   }, [inv.invNo, inv.code, bomRefText]);
   const confirmedFallbackNo = (inv.code && inv.code !== 'Pending Confirmation') ? inv.code : (matchingBom?.invoiceNo && matchingBom.invoiceNo !== 'Pending Confirmation' ? matchingBom.invoiceNo : (inv.invNo && inv.invNo !== 'Pending Confirmation' ? inv.invNo : 'VRM-INV-2026-01'));
@@ -785,6 +798,7 @@ export default function InvoiceDetailModal({
       confirmedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short', year: 'numeric' }),
       deliveryAddressProofDoc: hasAddressProof ? (inv.deliveryAddressProofDoc || matchingBom?.deliveryAddressProofDoc || foundBom?.deliveryAddressProofDoc) : null,
       attachedInvoiceDocs: attachedInvoiceDocs,
+      attachedDcDocs: attachedDcDocs,
       addressProofWaivedWithDisclaimer: waiveProofDisclaimer,
       addressProofDisclaimerClause: waiveProofDisclaimer ? 'The Invoice is processed without the Address Proof so if any problem happens means VRM Structures India Private Limited will not take any responsibility.' : null,
       termsAndConditions: waiveProofDisclaimer
@@ -823,6 +837,7 @@ export default function InvoiceDetailModal({
       stockDeductionDate: new Date().toISOString(),
       deliveryAddressProofDoc: hasAddressProof ? (inv.deliveryAddressProofDoc || matchingBom?.deliveryAddressProofDoc || foundBom?.deliveryAddressProofDoc) : null,
       attachedInvoiceDocs: attachedInvoiceDocs,
+      attachedDcDocs: attachedDcDocs,
       addressProofWaivedWithDisclaimer: waiveProofDisclaimer,
       addressProofDisclaimerClause: waiveProofDisclaimer ? 'The Invoice is processed without the Address Proof so if any problem happens means VRM Structures India Private Limited will not take any responsibility.' : null
     };
@@ -841,6 +856,7 @@ export default function InvoiceDetailModal({
         stockDeductionDate: new Date().toISOString(),
         deliveryAddressProofDoc: hasAddressProof ? (inv.deliveryAddressProofDoc || matchingBom?.deliveryAddressProofDoc || foundBom?.deliveryAddressProofDoc) : null,
         attachedInvoiceDocs: attachedInvoiceDocs,
+      attachedDcDocs: attachedDcDocs,
         addressProofWaivedWithDisclaimer: waiveProofDisclaimer,
         addressProofDisclaimerClause: waiveProofDisclaimer ? 'The Invoice is processed without the Address Proof so if any problem happens means VRM Structures India Private Limited will not take any responsibility.' : null
       } : b);
@@ -879,6 +895,7 @@ export default function InvoiceDetailModal({
         deliveryAddress: inv.deliveryAddress || matchingBom?.deliveryAddress,
         deliveryAddressProofDoc: hasAddressProof ? (inv.deliveryAddressProofDoc || matchingBom?.deliveryAddressProofDoc || foundBom?.deliveryAddressProofDoc) : null,
         attachedInvoiceDocs: attachedInvoiceDocs,
+      attachedDcDocs: attachedDcDocs,
         addressProofWaivedWithDisclaimer: waiveProofDisclaimer,
         addressProofDisclaimerClause: waiveProofDisclaimer ? 'The Invoice is processed without the Address Proof so if any problem happens means VRM Structures India Private Limited will not take any responsibility.' : null
       };
@@ -2609,6 +2626,160 @@ export default function InvoiceDetailModal({
                         const nextDocs = attachedInvoiceDocs.filter((_, i) => i !== idx);
                         setAttachedInvoiceDocs(nextDocs);
                         setViewingInvoiceModal(prev => prev ? { ...prev, attachedInvoiceDocs: nextDocs } : prev);
+                      }}
+                      style={{ border: 'none', backgroundColor: '#FEE2E2', color: '#DC2626', borderRadius: '6px', padding: '4px 7px', fontSize: '11px', fontWeight: '700', cursor: 'pointer' }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ─── SEPARATE ATTACH DC (DELIVERY CHALLAN) SECTION ─── */}
+      <div style={{
+        marginTop: '14px',
+        padding: '16px 20px',
+        backgroundColor: '#FFFFFF',
+        border: '1px solid #E2E8F0',
+        borderRadius: '14px',
+        boxShadow: '0 2px 8px rgba(15, 23, 42, 0.03)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '10px'
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+          <div>
+            <div style={{ fontSize: '13.5px', fontWeight: '800', color: '#0F172A' }}>
+              Attach DC (Delivery Challan)
+            </div>
+            <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px' }}>
+              Upload Delivery Challan copies separately from the Tax Invoice ({attachedDcDocs.length}/5 attached · Image, PDF, etc.)
+            </div>
+          </div>
+          {attachedDcDocs.length < 5 && (
+            <label style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '8px 14px',
+              borderRadius: '8px',
+              backgroundColor: uploadingDcDocs ? '#CBD5E1' : '#0E7490',
+              color: '#FFFFFF',
+              fontSize: '12px',
+              fontWeight: '700',
+              cursor: uploadingDcDocs ? 'not-allowed' : 'pointer'
+            }}>
+              <FileText size={14} />
+              {uploadingDcDocs ? 'Uploading...' : 'Upload DC File'}
+              <input
+                type="file"
+                multiple
+                accept="image/*,application/pdf,.pdf,.png,.jpg,.jpeg,.webp"
+                disabled={uploadingDcDocs}
+                style={{ display: 'none' }}
+                onChange={async (e) => {
+                  const files = Array.from(e.target.files || []);
+                  e.target.value = '';
+                  if (files.length === 0) return;
+                  const remaining = 5 - attachedDcDocs.length;
+                  const toUpload = files.slice(0, remaining);
+                  if (files.length > remaining) {
+                    alert(`You can attach up to 5 DC files total. Uploading first ${remaining} file(s).`);
+                  }
+                  setUploadingDcDocs(true);
+                  try {
+                    const uploadedResults = [];
+                    const targetCode = bomRefText || invNoText || inv.code || 'DC';
+                    for (const file of toUpload) {
+                      const res = await uploadBomDocumentFile({ file, bomCode: targetCode, category: 'general' });
+                      if (res && (res.url || res.storagePath)) {
+                        uploadedResults.push({
+                          id: `DC-DOC-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                          name: res.name || file.name,
+                          originalName: file.name,
+                          type: res.type || file.type || 'application/octet-stream',
+                          size: res.size || file.size,
+                          url: res.url,
+                          storagePath: res.storagePath || '',
+                          uploadedAt: new Date().toISOString()
+                        });
+                      }
+                    }
+                    if (uploadedResults.length > 0) {
+                      const nextDocs = [...attachedDcDocs, ...uploadedResults].slice(0, 5);
+                      setAttachedDcDocs(nextDocs);
+                      setViewingInvoiceModal(prev => prev ? { ...prev, attachedDcDocs: nextDocs } : prev);
+                      setInvoiceList(prev => {
+                        const updated = (prev || []).map(item => (
+                          item.invNo === inv.invNo || item.code === inv.code || item.bomCode === inv.bomCode
+                        ) ? { ...item, attachedDcDocs: nextDocs } : item);
+                        try { saveCloudInvoiceRow({ ...inv, attachedDcDocs: nextDocs }); } catch (_) {}
+                        return updated;
+                      });
+                      if (matchingBom) {
+                        const nextBom = { ...matchingBom, attachedDcDocs: nextDocs };
+                        setBomStore(prev => (prev || []).map(b => (b.id === matchingBom.id || b.bomCode === matchingBom.bomCode) ? nextBom : b));
+                        try { saveCloudBomRow(nextBom); } catch (_) {}
+                      }
+                    }
+                  } catch (err) {
+                    alert(err?.message || 'Failed to upload DC attachment.');
+                  } finally {
+                    setUploadingDcDocs(false);
+                  }
+                }}
+              />
+            </label>
+          )}
+        </div>
+
+        {attachedDcDocs.length > 0 && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '10px', marginTop: '8px' }}>
+            {attachedDcDocs.map((doc, idx) => {
+              const docUrl = doc.storagePath
+                ? `/api/uploads/bom-documents/${String(doc.storagePath).replace(/^\/+/, '').replace(/^bom-documents\//, '')}`
+                : (doc.url || doc.dataUrl || '');
+              const isPdf = String(doc.type || '').includes('pdf') || String(doc.name || '').toLowerCase().endsWith('.pdf');
+              return (
+                <div key={doc.id || idx} style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '8px',
+                  padding: '9px 12px',
+                  borderRadius: '10px',
+                  backgroundColor: '#F8FAFC',
+                  border: '1px solid #E2E8F0'
+                }}>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontSize: '12px', fontWeight: '700', color: '#0F172A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {isPdf ? '📄' : '🖼️'} {doc.name || `DC Attachment ${idx + 1}`}
+                    </div>
+                    <div style={{ fontSize: '10.5px', color: '#64748B' }}>
+                      {doc.size ? `${Math.round(doc.size / 1024)} KB` : 'Attached'}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+                    {docUrl && (
+                      <a
+                        href={docUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ padding: '4px 8px', borderRadius: '6px', backgroundColor: '#ECFEFF', color: '#0E7490', fontSize: '11px', fontWeight: '700', textDecoration: 'none' }}
+                      >
+                        View
+                      </a>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const nextDocs = attachedDcDocs.filter((_, i) => i !== idx);
+                        setAttachedDcDocs(nextDocs);
+                        setViewingInvoiceModal(prev => prev ? { ...prev, attachedDcDocs: nextDocs } : prev);
                       }}
                       style={{ border: 'none', backgroundColor: '#FEE2E2', color: '#DC2626', borderRadius: '6px', padding: '4px 7px', fontSize: '11px', fontWeight: '700', cursor: 'pointer' }}
                     >
