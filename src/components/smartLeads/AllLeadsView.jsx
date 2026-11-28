@@ -205,6 +205,49 @@ export default function AllLeadsView({ meta, onOpenLead, toast, canCreateLead = 
         </div>
       </div>
 
+      {/* Stage Filter Pills */}
+      <div style={{ display: 'flex', gap: '8px', padding: '2px 0 12px', alignItems: 'center', flexWrap: 'wrap' }}>
+        {[{ id: '', label: 'All Stages', count: totalAll }, ...stages.map(s => ({ id: s, label: s, count: data.stageCounts[s] || 0 }))].map(pill => {
+          const isSelected = (filters.stage || '') === pill.id;
+          return (
+            <button
+              key={pill.id || 'all'}
+              type="button"
+              onClick={() => setFilter('stage', pill.id)}
+              style={{
+                backgroundColor: isSelected ? '#0E7490' : '#FFFFFF',
+                color: isSelected ? '#FFFFFF' : '#334155',
+                border: isSelected ? '1px solid #0E7490' : '1px solid #E2E8F0',
+                borderRadius: '9999px',
+                padding: '7px 14px',
+                fontSize: '12.5px',
+                fontWeight: '700',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                boxShadow: isSelected ? '0 2px 8px rgba(14, 116, 144, 0.25)' : '0 1px 2px rgba(15, 23, 42, 0.04)',
+                transition: 'all 0.15s ease',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              <span>{pill.label}</span>
+              <span style={{
+                fontSize: '11px',
+                padding: '1px 7px',
+                borderRadius: '9999px',
+                backgroundColor: isSelected ? 'rgba(255, 255, 255, 0.22)' : '#F1F5F9',
+                color: isSelected ? '#FFFFFF' : '#475569',
+                fontWeight: '800',
+                lineHeight: '1.3'
+              }}>
+                {pill.count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
       {error && <div className="sl-alert sl-alert-error">{error} <button className="sl-btn sl-btn-sm" style={{ marginLeft: 8 }} onClick={load}>Retry</button></div>}
 
       <div className="sl-card sl-table-wrap">

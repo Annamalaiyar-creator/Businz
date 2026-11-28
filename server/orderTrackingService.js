@@ -242,10 +242,15 @@ export const TRACKING_STAGES = [
  */
 export function deriveCustomerOrderStage(bom) {
   if (!bom) return { stage: 'UNKNOWN', label: 'Order Processing', stepIndex: 0, description: 'Order is being processed.' };
+  const extra = bom.accounts_verification?._extra_data || {};
+  const vehicleLoading = bom.vehicleLoading || extra.vehicleLoading || null;
+  const dispatchedAt = bom.dispatchedAt || bom.dispatched_at || extra.dispatchedAt || extra.dispatched_at || vehicleLoading?.dispatchedAt || null;
+  const completedAt = bom.completedAt || bom.completed_at || extra.completedAt || extra.completed_at || null;
+  const lrDoc = bom.lrCopyDoc || extra.lrCopyDoc || vehicleLoading?.lrCopyDoc || null;
   const s = String(bom.status || '').toLowerCase();
-  const rawStatus = String(bom.accounts_verification?._extra_data?.rawStatus || '').toLowerCase();
-  const tabGroup = String(bom.accounts_verification?._extra_data?.tabGroup || '');
-  const isCancelled = bom.cancelled || s.includes('cancel') || bom.accounts_verification?._extra_data?.cancelled;
+  const rawStatus = String(extra.rawStatus || '').toLowerCase();
+  const tabGroup = String(extra.tabGroup || '');
+  const isCancelled = bom.cancelled || s.includes('cancel') || extra.cancelled;
   
   if (isCancelled) {
     return {
@@ -258,7 +263,7 @@ export function deriveCustomerOrderStage(bom) {
   }
 
   // Stage 10: Delivered
-  if (s.includes('delivered') || rawStatus.includes('delivered') || bom.deliveredAt || bom.delivery_confirmed_at) {
+  if (s.includes('delivered') || rawStatus.includes('delivered') || bom.deliveredAt || bom.delivery_confirmed_at || extra.deliveredAt) {
     return {
       stage: 'DELIVERED',
       label: 'Order Delivered',
@@ -269,12 +274,30 @@ export function deriveCustomerOrderStage(bom) {
   }
 
   // Stage 9: Dispatched
+  const hasVehicleLoadingDispatch = Boolean(
+    vehicleLoading && (
+      vehicleLoading.fullyCompleted ||
+      vehicleLoading.loadedAt ||
+      vehicleLoading.lrNo ||
+      vehicleLoading.lrNumber ||
+      vehicleLoading.vehicleNo ||
+      vehicleLoading.vehicleNumber ||
+      vehicleLoading.transporter ||
+      vehicleLoading.transporterName ||
+      vehicleLoading.lrCopyDoc
+    )
+  );
   if (
     s.includes('dispatched') ||
+    s === 'completed' ||
     rawStatus.includes('dispatched') ||
-    bom.dispatchedAt ||
-    (bom.vehicleLoading && (bom.vehicleLoading.lrNo || bom.vehicleLoading.vehicleNo)) ||
-    (bom.lr_no && bom.vehicle_no)
+    rawStatus === 'completed' ||
+    Boolean(dispatchedAt) ||
+    Boolean(completedAt) ||
+    Boolean(bom.fullyCompleted || extra.fullyCompleted) ||
+    Boolean(lrDoc) ||
+    hasVehicleLoadingDispatch ||
+    Boolean((bom.lr_no && bom.lr_no !== 'Awaiting LR Copy') || (bom.vehicle_no && bom.vehicle_no !== 'Awaiting Loading'))
   ) {
     return {
       stage: 'DISPATCHED',
@@ -289,7 +312,7 @@ export function deriveCustomerOrderStage(bom) {
   if (
     rawStatus.includes('loading in progress') ||
     rawStatus.includes('loading verified') ||
-    (bom.accounts_verification?._extra_data?.vehicleLoading && !bom.dispatchedAt)
+    (vehicleLoading && !dispatchedAt && !completedAt)
   ) {
     return {
       stage: 'LOADING_IN_PROGRESS',
@@ -535,16 +558,22 @@ export async function resolveCustomerDocuments(bom, tracking = {}) {
   });
 
   // 3. Lorry Receipt (LR Copy) / Transporter Consignment Note
-  const lrDoc = bom.lrCopyDoc || bom.accounts_verification?._extra_data?.lrCopyDoc || bom.accounts_verification?._extra_data?.vehicleLoading?.lrCopyDoc;
-  const lrNo = bom.lr_no || bom.lrNo || bom.vehicleLoading?.lrNo || bom.accounts_verification?._extra_data?.vehicleLoading?.lrNo;
+  const extraDocData = bom.accounts_verification?._extra_data || {};
+  const vlDocData = bom.vehicleLoading || extraDocData.vehicleLoading || {};
+  const lrDoc = bom.lrCopyDoc || extraDocData.lrCopyDoc || vlDocData.lrCopyDoc;
+  const rawLrCandidates = [bom.lr_no, bom.lrNo, extraDocData.lrNo, vlDocData.lrNumber, vlDocData.lrNo];
+  const lrNo = rawLrCandidates.find(v => {
+    const t = String(v || '').trim();
+    return t && t !== 'Awaiting LR Copy' && t !== 'Awaiting Carrier Dispatch';
+  }) || '';
   const isLrAvailable = Boolean(lrDoc || lrNo);
   documents.push({
     type: 'LR_COPY',
     title: 'Lorry Receipt (LR Copy)',
-    docNumber: lrNo || 'Awaiting Carrier',
+    docNumber: lrNo || (lrDoc ? 'Attached' : 'Awaiting Carrier'),
     status: isLrAvailable ? 'AVAILABLE' : 'AWAITING_UPLOAD',
     available: isLrAvailable,
-    date: bom.dispatchedAt || null,
+    date: bom.dispatchedAt || bom.dispatched_at || extraDocData.dispatchedAt || vlDocData.loadedAt || null,
     url: lrDoc ? `/api/track/${encodeURIComponent(docToken)}/documents/lr-copy` : null
   });
 
@@ -588,17 +617,19 @@ export function buildTimeline(currentStageInfo, events = [], bom = {}) {
   }
 
   // Fallback timestamp extractors from BOM
+  const extraTs = bom.accounts_verification?._extra_data || {};
+  const vlTs = bom.vehicleLoading || extraTs.vehicleLoading || {};
   const timestamps = {
     ORDER_CONFIRMED: bom.created_at || bom.date || eventMap.get('ORDER_CONFIRMED'),
     RECEIVED_BY_DISPATCH: bom.sales_confirmed_at || bom.salesConfirmedAt || bom.created_at || eventMap.get('RECEIVED_BY_DISPATCH'),
     PACKING_IN_PROGRESS: bom.packingStartedAt || eventMap.get('PACKING_IN_PROGRESS'),
-    PACKING_COMPLETED: bom.accounts_verification?._extra_data?.packingCompletedAt || eventMap.get('PACKING_COMPLETED'),
-    ORDER_VERIFICATION: bom.accounts_verification?._extra_data?.accountsVerifiedAt || eventMap.get('ORDER_VERIFICATION'),
-    INVOICE_GENERATED: bom.accounts_verification?._extra_data?.invoiceConfirmedAt || bom.invoice_date || eventMap.get('INVOICE_GENERATED'),
+    PACKING_COMPLETED: extraTs.packingCompletedAt || eventMap.get('PACKING_COMPLETED'),
+    ORDER_VERIFICATION: extraTs.accountsVerifiedAt || eventMap.get('ORDER_VERIFICATION'),
+    INVOICE_GENERATED: extraTs.invoiceConfirmedAt || bom.invoice_date || eventMap.get('INVOICE_GENERATED'),
     READY_FOR_LOADING: bom.readyForLoadingAt || eventMap.get('READY_FOR_LOADING'),
-    LOADING_IN_PROGRESS: bom.loadingStartedAt || eventMap.get('LOADING_IN_PROGRESS'),
-    DISPATCHED: bom.dispatchedAt || bom.vehicleLoading?.dispatchedAt || eventMap.get('DISPATCHED'),
-    DELIVERED: bom.deliveredAt || bom.delivery_confirmed_at || eventMap.get('DELIVERED')
+    LOADING_IN_PROGRESS: bom.loadingStartedAt || vlTs.loadedAt || eventMap.get('LOADING_IN_PROGRESS'),
+    DISPATCHED: bom.dispatchedAt || bom.dispatched_at || extraTs.dispatchedAt || extraTs.completedAt || vlTs.dispatchedAt || vlTs.loadedAt || eventMap.get('DISPATCHED'),
+    DELIVERED: bom.deliveredAt || bom.delivery_confirmed_at || extraTs.deliveredAt || eventMap.get('DELIVERED')
   };
 
   return TRACKING_STAGES.map((s) => {
@@ -872,13 +903,14 @@ export async function buildCustomerTrackingResponse(bom, tracking = null, compan
     ? normalizePhotoList(rawPackingPhotos, 'Packing')
     : [];
 
-  const vehicleLoading = bom?.vehicleLoading || bom?.accounts_verification?._extra_data?.vehicleLoading || {};
+  const extra = bom?.accounts_verification?._extra_data || {};
+  const vehicleLoading = bom?.vehicleLoading || extra.vehicleLoading || {};
   const loadingPhotos = settings.show_loading_photos !== false
     ? normalizePhotoList(vehicleLoading.photos || [], 'Vehicle Loading')
     : [];
 
-  const rawMode = String(bom?.transport_mode || bom?.transportMode || bom?.deliveryMode || vehicleLoading.deliveryMode || vehicleLoading.transportMode || '').trim().toLowerCase();
-  const rawTransporter = String(bom?.transporter_name || vehicleLoading.transporterName || vehicleLoading.transporter || '').trim().toLowerCase();
+  const rawMode = String(bom?.transport_mode || bom?.transportMode || bom?.deliveryMode || extra.deliveryMode || vehicleLoading.deliveryMode || vehicleLoading.transportMode || '').trim().toLowerCase();
+  const rawTransporter = String(bom?.transporter_name || bom?.transporterName || bom?.transporter || extra.transporterName || extra.transporter || vehicleLoading.transporterName || vehicleLoading.transporter || '').trim().toLowerCase();
   const isNoLrMode =
     rawMode.includes('porter') ||
     rawMode.includes('portal') ||
@@ -889,16 +921,32 @@ export async function buildCustomerTrackingResponse(bom, tracking = null, compan
     rawTransporter.includes('porter') ||
     rawTransporter.includes('self') ||
     rawTransporter.includes('direct');
-  const lrDoc = bom?.lrCopyDoc || bom?.accounts_verification?._extra_data?.lrCopyDoc || vehicleLoading.lrCopyDoc || null;
+  const lrDoc = bom?.lrCopyDoc || extra.lrCopyDoc || vehicleLoading.lrCopyDoc || null;
+  const cleanLrVal = (val) => {
+    const t = String(val || '').trim();
+    if (!t || t === 'Awaiting LR Copy' || t === 'Awaiting Carrier Dispatch') return '';
+    return t;
+  };
+  const resolvedLrNumber =
+    cleanLrVal(bom?.lr_no) ||
+    cleanLrVal(bom?.lrNo) ||
+    cleanLrVal(extra.lrNo) ||
+    cleanLrVal(vehicleLoading.lrNumber) ||
+    cleanLrVal(vehicleLoading.lrNo) ||
+    (lrDoc ? 'LR Copy Attached' : (bom?.lr_no || vehicleLoading.lrNo || 'Awaiting Carrier Dispatch'));
+
+  const resolvedVehicleNumber =
+    String(bom?.vehicle_no || bom?.vehicleNo || extra.vehicleNo || vehicleLoading.vehicleNumber || vehicleLoading.vehicleNo || '').trim() ||
+    (isNoLrMode ? (bom?.transport_mode || vehicleLoading.transportMode || 'Direct / Pickup') : (currentStage?.stage === 'DISPATCHED' || currentStage?.stage === 'DELIVERED' ? 'Dispatched via Carrier' : 'Awaiting Loading'));
 
   const transport = {
-    transporterName: bom?.transporter_name || vehicleLoading.transporterName || 'Pending Carrier Assignment',
-    transportMode: bom?.transport_mode || vehicleLoading.transportMode || 'Road Transport',
-    lrNumber: bom?.lr_no || vehicleLoading.lrNumber || vehicleLoading.lrNo || 'Awaiting Carrier Dispatch',
-    vehicleNumber: bom?.vehicle_no || vehicleLoading.vehicleNumber || vehicleLoading.vehicleNo || 'Awaiting Loading',
-    driverName: vehicleLoading.driverName || 'Designated Driver',
-    driverPhone: settings.show_driver_phone ? (vehicleLoading.driverPhone || null) : null,
-    loadingDate: bom?.dispatchedAt || vehicleLoading.loadingDate || null,
+    transporterName: bom?.transporter_name || bom?.transporterName || bom?.transporter || extra.transporterName || extra.transporter || vehicleLoading.transporterName || vehicleLoading.transporter || 'Pending Carrier Assignment',
+    transportMode: bom?.transport_mode || bom?.transportMode || extra.transportMode || vehicleLoading.transportMode || 'Road Transport',
+    lrNumber: resolvedLrNumber,
+    vehicleNumber: resolvedVehicleNumber,
+    driverName: vehicleLoading.driverName || extra.driverName || 'Designated Driver',
+    driverPhone: settings.show_driver_phone ? (vehicleLoading.driverPhone || extra.driverPhone || null) : null,
+    loadingDate: bom?.dispatchedAt || bom?.dispatched_at || extra.dispatchedAt || vehicleLoading.loadedAt || vehicleLoading.loadingDate || null,
     packagesCount: vehicleLoading.packagesCount || null,
     bundlesCount: vehicleLoading.bundlesCount || null,
     requiresLrCopy: !isNoLrMode,

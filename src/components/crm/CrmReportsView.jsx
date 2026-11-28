@@ -1256,8 +1256,8 @@ export default function CrmReportsView({
         </div>
       </div>
 
-      {/* ─── 4. STANDARD STATUS SUB-TABS ROW (EXACT STANDARD BUSINZ DESIGN) ─── */}
-      <div style={{ display: 'flex', borderBottom: '1px solid #E2E8F0', gap: '24px', padding: '2px 4px 0', alignItems: 'center', overflowX: 'auto' }}>
+      {/* ─── 4. STANDARD FILTER PILLS ROW ─── */}
+      <div style={{ display: 'flex', gap: '8px', padding: '4px 0', alignItems: 'center', flexWrap: 'wrap' }}>
         {[
           { id: 'leaderboard', label: isRestrictedSalesUser ? 'My 360° Realization Scorecard' : 'Salesperson 360° Realization Leaderboard', icon: Award, count: repStats.length, bg: '#F1F5F9', fg: '#64748B' },
           { id: 'products', label: 'Product Sales & Module Breakdown', icon: Layers, count: filteredProductItems.length, bg: '#F0FDFA', fg: '#0E7490' },
@@ -1271,35 +1271,37 @@ export default function CrmReportsView({
           return (
             <button
               key={tab.id}
+              type="button"
               onClick={() => setActiveReportTab(tab.id)}
               style={{
-                border: 'none',
-                background: 'transparent',
-                padding: '10px 4px',
-                fontSize: '13px',
-                fontWeight: 'bold',
-                color: isActive ? '#0E7490' : '#64748B',
-                borderBottom: isActive ? '3px solid #0E7490' : '3px solid transparent',
+                backgroundColor: isActive ? '#0E7490' : '#FFFFFF',
+                color: isActive ? '#FFFFFF' : '#334155',
+                border: isActive ? '1px solid #0E7490' : '1px solid #E2E8F0',
+                borderRadius: '9999px',
+                padding: '7px 14px',
+                fontSize: '12.5px',
+                fontWeight: '700',
                 cursor: 'pointer',
-                display: 'flex',
+                display: 'inline-flex',
                 alignItems: 'center',
                 gap: '8px',
                 whiteSpace: 'nowrap',
+                boxShadow: isActive ? '0 2px 8px rgba(14, 116, 144, 0.25)' : '0 1px 2px rgba(15, 23, 42, 0.04)',
                 transition: 'all 0.15s ease'
               }}
             >
               {IconComponent && (
-                <IconComponent size={15} style={{ color: isActive ? '#0E7490' : '#64748B', flexShrink: 0 }} />
+                <IconComponent size={14} style={{ color: isActive ? '#FFFFFF' : '#64748B', flexShrink: 0 }} />
               )}
               <span>{tab.label}</span>
               <span style={{
                 fontSize: '11px',
-                padding: '2px 8px',
-                borderRadius: '12px',
-                backgroundColor: isActive ? '#ECFEFF' : tab.bg,
-                color: isActive ? '#0E7490' : tab.fg,
-                fontWeight: 'bold',
-                border: `1px solid ${isActive ? '#A5F3FC' : '#E2E8F0'}`
+                padding: '1px 7px',
+                borderRadius: '9999px',
+                backgroundColor: isActive ? 'rgba(255, 255, 255, 0.22)' : (tab.bg || '#F1F5F9'),
+                color: isActive ? '#FFFFFF' : (tab.fg || '#475569'),
+                fontWeight: '800',
+                lineHeight: '1.3'
               }}>
                 {tab.badge || tab.count}
               </span>

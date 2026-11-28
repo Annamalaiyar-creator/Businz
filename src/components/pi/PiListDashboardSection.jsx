@@ -597,9 +597,8 @@ export default function PiListDashboardSection({ ctx }) {
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
-              borderBottom: '1px solid #e2e8f0',
               paddingBottom: '0',
-              marginBottom: '16px',
+              marginBottom: '12px',
               width: '100%',
               overflowX: isMobile ? 'auto' : 'visible',
               WebkitOverflowScrolling: 'touch',
@@ -607,10 +606,11 @@ export default function PiListDashboardSection({ ctx }) {
             }}>
               <div style={{
                 display: 'flex',
-                gap: isMobile ? '14px' : '20px',
+                gap: '8px',
                 flexWrap: isMobile ? 'nowrap' : 'wrap',
                 whiteSpace: isMobile ? 'nowrap' : 'normal',
-                paddingBottom: isMobile ? '6px' : '0'
+                padding: '4px 0',
+                alignItems: 'center'
               }}>
                 {[
                   { id: 'All', label: 'All Invoices (Total Sent)', count: baseFilteredPIList.length },
@@ -618,38 +618,48 @@ export default function PiListDashboardSection({ ctx }) {
                   { id: 'Converted to BOM', label: 'Converted to BOM', count: baseFilteredPIList.filter(pi => piEffectiveStatusMap.get(pi) === 'Converted to BOM').length },
                   { id: 'Cancelled', label: 'Cancelled', count: baseFilteredPIList.filter(pi => piEffectiveStatusMap.get(pi) === 'Cancelled').length },
                   { id: 'Draft', label: 'Draft', count: baseFilteredPIList.filter(pi => piEffectiveStatusMap.get(pi) === 'Draft').length }
-                ].map(tab => (
-                  <button
-                    key={tab.id}
-                    onClick={() => { setPiTab(tab.id); setCurrentPage(1); }}
-                    style={{
-                      border: 'none',
-                      background: 'transparent',
-                      padding: '12px 0',
-                      fontSize: '13px',
-                      fontWeight: 'bold',
-                      color: piTab === tab.id ? '#0E7490' : '#64748b',
-                      borderBottom: piTab === tab.id ? '2px solid #0E7490' : '2px solid transparent',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      flexShrink: 0
-                    }}
-                  >
-                    {tab.label}
-                    <span style={{
-                      fontSize: '10px',
-                      padding: '2px 7px',
-                      borderRadius: '12px',
-                      backgroundColor: tab.id === 'Converted to BOM' ? '#ecfdf5' : tab.id === 'Issued' ? '#f0fdf4' : tab.id === 'Cancelled' ? '#fef2f2' : '#f1f5f9',
-                      color: tab.id === 'Converted to BOM' ? '#059669' : tab.id === 'Issued' ? '#16a34a' : tab.id === 'Cancelled' ? '#b91c1c' : '#475569',
-                      fontWeight: 'bold'
-                    }}>
-                      {tab.count}
-                    </span>
-                  </button>
-                ))}
+                ].map(tab => {
+                  const isSelected = piTab === tab.id;
+                  const badgeBg = tab.id === 'Converted to BOM' ? '#ecfdf5' : tab.id === 'Issued' ? '#f0fdf4' : tab.id === 'Cancelled' ? '#fef2f2' : '#f1f5f9';
+                  const badgeFg = tab.id === 'Converted to BOM' ? '#059669' : tab.id === 'Issued' ? '#16a34a' : tab.id === 'Cancelled' ? '#b91c1c' : '#475569';
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => { setPiTab(tab.id); setCurrentPage(1); }}
+                      style={{
+                        backgroundColor: isSelected ? '#0E7490' : '#FFFFFF',
+                        color: isSelected ? '#FFFFFF' : '#334155',
+                        border: isSelected ? '1px solid #0E7490' : '1px solid #E2E8F0',
+                        borderRadius: '9999px',
+                        padding: '7px 14px',
+                        fontSize: '12.5px',
+                        fontWeight: '700',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        boxShadow: isSelected ? '0 2px 8px rgba(14, 116, 144, 0.25)' : '0 1px 2px rgba(15, 23, 42, 0.04)',
+                        transition: 'all 0.15s ease',
+                        flexShrink: 0,
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      <span>{tab.label}</span>
+                      <span style={{
+                        fontSize: '11px',
+                        padding: '1px 7px',
+                        borderRadius: '9999px',
+                        backgroundColor: isSelected ? 'rgba(255, 255, 255, 0.22)' : badgeBg,
+                        color: isSelected ? '#FFFFFF' : badgeFg,
+                        fontWeight: '800',
+                        lineHeight: '1.3'
+                      }}>
+                        {tab.count}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 

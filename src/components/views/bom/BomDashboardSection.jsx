@@ -6,6 +6,7 @@ import ModernDateRangePicker from '../../ModernDateRangePicker';
 import BomOperationalModals from './BomOperationalModals';
 import BomExecutiveModals from './BomExecutiveModals';
 import { isBomAddressProofPending, needsSalesAddressProof } from './bomStageHelpers';
+import { isSalesLoginRole } from '../../../utils/vrmProductsData';
 
 export default function BomDashboardSection({ ctx }) {
   const {
@@ -220,7 +221,20 @@ export default function BomDashboardSection({ ctx }) {
       {/* ADDRESS PROOF RE-UPLOAD REQUEST NOTIFICATION BANNER (hidden on CEO/MD login) */}
       {!/^(ceo|md|managing director)$/i.test(String(userRole || '').trim()) &&
         (bomStore || []).some(b => b.addressProofReuploadRequested || b.status === 'Address Proof Requested from Sales') && (() => {
-        const pendingBoms = (bomStore || []).filter(b => b.addressProofReuploadRequested || b.status === 'Address Proof Requested from Sales');
+        const ONE_HOUR_MS = 60 * 60 * 1000;
+        const nowMs = Date.now();
+        const pendingBoms = (bomStore || []).filter(b => {
+          if (!b || b.cancelled || (b.status || '').toLowerCase().includes('cancel')) return false;
+          if (!(b.addressProofReuploadRequested || b.status === 'Address Proof Requested from Sales')) return false;
+          const t = b.addressProofReuploadRequestedAt || b.reuploadRequestedAt || b.reissueRequestedAt;
+          if (t) {
+            const reqMs = new Date(t).getTime();
+            if (Number.isFinite(reqMs) && (nowMs - reqMs) >= ONE_HOUR_MS) return false;
+          }
+          return true;
+        });
+        if (pendingBoms.length === 0) return null;
+
         const earliestReq = pendingBoms.reduce((acc, b) => {
           const t = b.addressProofReuploadRequestedAt || b.reuploadRequestedAt || b.reissueRequestedAt;
           if (!t) return acc;
@@ -230,56 +244,64 @@ export default function BomDashboardSection({ ctx }) {
 
         let minsLeft = null;
         if (earliestReq) {
-          const ONE_HOUR_MS = 60 * 60 * 1000;
-          minsLeft = Math.max(0, Math.ceil((ONE_HOUR_MS - (Date.now() - earliestReq)) / 60000));
+          minsLeft = Math.max(1, Math.ceil((ONE_HOUR_MS - (nowMs - earliestReq)) / 60000));
         }
 
         return (
           <div style={{
-            backgroundColor: '#FEF2F2',
-            border: '1px solid #FCA5A5',
-            borderRadius: '12px',
+            backgroundColor: '#FFFFFF',
+            border: '1px solid #FECACA',
+            borderLeft: '4px solid #DC2626',
+            borderRadius: '14px',
             padding: '14px 18px',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
-            boxShadow: '0 2px 6px rgba(220, 38, 38, 0.08)'
+            flexWrap: 'wrap',
+            gap: '12px',
+            boxShadow: '0 4px 14px rgba(220, 38, 38, 0.08)'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <div style={{ width: '36px', height: '36px', borderRadius: '10px', backgroundColor: '#FEE2E2', color: '#DC2626', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <AlertCircle size={20} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0, flex: 1 }}>
+              <div style={{ width: '38px', height: '38px', borderRadius: '10px', backgroundColor: '#FEF2F2', border: '1px solid #FECACA', color: '#DC2626', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <AlertCircle size={19} />
               </div>
-              <div>
-                <div style={{ fontSize: '13px', fontWeight: '800', color: '#991B1B', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span>Action Required: Address Proof Re-upload Requested by Accounts ({pendingBoms.length} Order{pendingBoms.length > 1 ? 's' : ''})</span>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: '13.5px', fontWeight: '800', color: '#0F172A', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <span>Address Proof Re-upload Requested by Accounts</span>
+                  <span style={{ fontSize: '11px', fontWeight: '800', backgroundColor: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA', padding: '2px 9px', borderRadius: '9999px' }}>
+                    {pendingBoms.length} Order{pendingBoms.length > 1 ? 's' : ''}
+                  </span>
                   {minsLeft !== null && (
-                    <span style={{ fontSize: '11px', fontWeight: '800', backgroundColor: '#DC2626', color: '#FFFFFF', padding: '2px 8px', borderRadius: '12px' }}>
-                      ⏱️ {minsLeft}m SLA Remaining
+                    <span style={{ fontSize: '11px', fontWeight: '800', backgroundColor: '#DC2626', color: '#FFFFFF', padding: '2px 9px', borderRadius: '9999px' }}>
+                      ⏱️ {minsLeft}m SLA Left
                     </span>
                   )}
                 </div>
-                <div style={{ fontSize: '12px', color: '#B91C1C', marginTop: '2px' }}>
-                  Accounts team requested verified address proof document. Sales has 1 hour from reissue request to upload verified proof, otherwise the invoice will be automatically cancelled.
+                <div style={{ fontSize: '12px', color: '#64748B', marginTop: '3px' }}>
+                  Upload verified address proof within 1 hour of the Accounts reissue request to prevent automatic cancellation.
                 </div>
               </div>
             </div>
             <button
+              type="button"
               onClick={() => { setActiveSubTab('AddressAction'); setCurrentPage(1); }}
               style={{
                 border: 'none',
                 backgroundColor: '#DC2626',
                 color: '#FFFFFF',
-                padding: '8px 16px',
-                borderRadius: '8px',
-                fontSize: '12px',
+                padding: '9px 18px',
+                borderRadius: '9999px',
+                fontSize: '12.5px',
                 fontWeight: '700',
                 cursor: 'pointer',
-                display: 'flex',
+                display: 'inline-flex',
                 alignItems: 'center',
-                gap: '6px'
+                gap: '6px',
+                whiteSpace: 'nowrap',
+                boxShadow: '0 2px 6px rgba(220, 38, 38, 0.25)'
               }}
             >
-              Review Requested Orders ({pendingBoms.length})
+              Review Requested Orders ({pendingBoms.length}) <ArrowUpRight size={14} />
             </button>
           </div>
         );
@@ -415,45 +437,63 @@ export default function BomDashboardSection({ ctx }) {
         </div>
       )}
 
-      {/* 3. STATUS SUB-TABS ROW */}
-      <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', gap: '20px', padding: '4px 0', alignItems: 'center', flexWrap: 'wrap' }}>
-        {pageConfig.tabs.map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => { setActiveSubTab(tab.id); setCurrentPage(1); }}
-            style={{
-              border: 'none',
-              background: 'transparent',
-              padding: '10px 4px',
-              fontSize: '13px',
-              fontWeight: 'bold',
-              color: activeSubTab === tab.id ? '#2563eb' : '#64748b',
-              borderBottom: activeSubTab === tab.id ? '2px solid #2563eb' : '2px solid transparent',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}
-          >
-            {tab.label}
-            <span style={{
-              fontSize: '10px',
-              padding: '2px 7px',
-              borderRadius: '12px',
-              backgroundColor: tab.bg,
-              color: tab.fg,
-              fontWeight: 'bold'
-            }}>
-              {tab.count}
-            </span>
-          </button>
-        ))}
+      {/* 3. STATUS FILTER PILLS (CEO Dashboard Pill Style with Counts) */}
+      <div style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: '8px',
+        padding: '4px 0',
+        alignItems: 'center',
+        width: '100%',
+        boxSizing: 'border-box'
+      }}>
+        {pageConfig.tabs.map(tab => {
+          const isSelected = activeSubTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => { setActiveSubTab(tab.id); setCurrentPage(1); }}
+              style={{
+                backgroundColor: isSelected ? '#0E7490' : '#FFFFFF',
+                color: isSelected ? '#FFFFFF' : '#334155',
+                border: isSelected ? '1px solid #0E7490' : '1px solid #E2E8F0',
+                borderRadius: '9999px',
+                padding: '7px 14px',
+                fontSize: '12.5px',
+                fontWeight: '700',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                boxShadow: isSelected
+                  ? '0 2px 8px rgba(14, 116, 144, 0.25)'
+                  : '0 1px 2px rgba(15, 23, 42, 0.04)',
+                transition: 'all 0.15s ease',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              <span>{tab.label}</span>
+              <span style={{
+                fontSize: '11px',
+                padding: '1px 7px',
+                borderRadius: '9999px',
+                backgroundColor: isSelected ? 'rgba(255, 255, 255, 0.22)' : (tab.bg || '#F1F5F9'),
+                color: isSelected ? '#FFFFFF' : (tab.fg || '#475569'),
+                fontWeight: '800',
+                lineHeight: '1.3'
+              }}>
+                {tab.count}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       {/* 4. MAIN DATA DISPLAY (PIPELINE CARDS / CLASSIC TABLE) WITH INTERACTIVE ROW SELECTION */}
       <div className="section-card" style={{ padding: '0', backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', overflow: 'hidden', width: '100%', boxSizing: 'border-box' }}>
-        {/* CEO EXCLUSIVE: EXACT PI-STYLE MASTER REGISTER DATA TABLE */}
-        {isCeo ? (() => {
+        {/* MASTER REGISTER DATA TABLE (Unified Clean Table for Sales & CEO) */}
+        {(() => {
           let ceoPiLookup = null;
           const getCeoPiLookup = () => {
             if (ceoPiLookup) return ceoPiLookup;
@@ -577,7 +617,14 @@ export default function BomDashboardSection({ ctx }) {
                     return (
                       <tr
                         key={row.code || idx}
-                        onClick={() => setCeoBomDetailModal(row)}
+                        onClick={() => {
+                          if (isCeo) {
+                            setCeoBomDetailModal(row);
+                          } else {
+                            const isPendingSales = ['Draft', 'Pending Confirmation', 'Pending Sales Confirmation', 'Edited / Pending Confirmation', 'Cancelled & Reissued to Dispatch', 'Pending Verification', 'Pending'].includes(row.status);
+                            setConfirmingBomModal({ ...row, isEditMode: isPendingSales && !isCancelled });
+                          }
+                        }}
                         style={{
                           borderBottom: '1px solid #F1F5F9',
                           transition: 'all 0.15s ease',
@@ -606,29 +653,21 @@ export default function BomDashboardSection({ ctx }) {
                           />
                         </td>
                         <td style={{ padding: '12px 14px', width: '150px', minWidth: '130px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                            <span style={{ fontWeight: 'bold', color: isCancelled ? '#DC2626' : '#2563EB', fontSize: '13px' }}>
-                              {row.code}
-                            </span>
-                            {(row.isEdited || (Array.isArray(row.editHistory) && row.editHistory.length > 0)) && (
+                          {(() => {
+                            const isEditedBom = Boolean(row.isEdited || (Array.isArray(row.editHistory) && row.editHistory.length > 0));
+                            return (
                               <span
-                                title={row.lastEditedBy ? `Edited by ${row.lastEditedBy} on ${new Date(row.lastEditedAt || Date.now()).toLocaleString('en-IN')}` : 'This BOM was edited'}
+                                title={isEditedBom ? (row.lastEditedBy ? `Edited by ${row.lastEditedBy} on ${new Date(row.lastEditedAt || Date.now()).toLocaleString('en-IN')}` : 'This BOM was edited') : undefined}
                                 style={{
-                                  backgroundColor: '#FEF3C7',
-                                  color: '#B45309',
-                                  border: '1px solid #FDE68A',
-                                  padding: '1px 7px',
-                                  borderRadius: '10px',
-                                  fontSize: '10px',
-                                  fontWeight: '800',
-                                  letterSpacing: '0.2px',
-                                  whiteSpace: 'nowrap'
+                                  fontWeight: 'bold',
+                                  color: isCancelled ? '#DC2626' : (isEditedBom ? '#D97706' : '#2563EB'),
+                                  fontSize: '13px'
                                 }}
                               >
-                                Edited
+                                {row.code}
                               </span>
-                            )}
-                          </div>
+                            );
+                          })()}
                         </td>
                         <td style={{ padding: '12px 14px', color: '#64748B', width: '120px', minWidth: '110px', whiteSpace: 'nowrap' }}>
                           <div>{dateFormatted}</div>
@@ -711,614 +750,7 @@ export default function BomDashboardSection({ ctx }) {
             </table>
           </div>
           );
-        })() : (
-          <>
-        {/* VIEW MODE & BULK SELECTION TOOLBAR */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '12px 18px',
-          borderBottom: '1px solid #E2E8F0',
-          backgroundColor: '#F8FAFC',
-          flexWrap: 'wrap',
-          gap: '10px'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <input
-              id="bom-orders-select-all"
-              name="selectAll"
-              aria-label="SelectAll"
-              type="checkbox"
-              style={{ accentColor: '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0, width: '16px', height: '16px' }}
-              checked={filteredRows.length > 0 && filteredRows.every(r => selectedRows.includes(r.code))}
-              onChange={(e) => {
-                if (e.target.checked) {
-                  setSelectedRows(filteredRows.map(r => r.code));
-                } else {
-                  setSelectedRows([]);
-                }
-              }}
-            />
-            <label htmlFor="bom-orders-select-all" style={{ fontSize: '12.5px', fontWeight: '700', color: '#475569', cursor: 'pointer' }}>
-              Select All Orders ({filteredRows.length})
-            </label>
-          </div>
-        </div>
-
-        {/* PIPELINE CARDS FEED */}
-        <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px', backgroundColor: '#F8FAFC' }}>
-            {tableLoading ? (
-              Array.from({ length: 4 }).map((_, sIdx) => (
-                <div key={`bom-skel-card-${sIdx}`} style={{ backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '14px', padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div className="skeleton-shimmer" style={{ width: '220px', height: '18px', borderRadius: '4px' }} />
-                    <div className="skeleton-shimmer" style={{ width: '130px', height: '14px', borderRadius: '4px' }} />
-                  </div>
-                  <div className="skeleton-shimmer" style={{ width: '55%', height: '14px', borderRadius: '4px' }} />
-                  <div className="skeleton-shimmer" style={{ width: '100%', height: '52px', borderRadius: '10px' }} />
-                </div>
-              ))
-            ) : currentRows.length === 0 ? (
-              <div style={{ padding: '48px 16px', textAlign: 'center', color: '#64748B', backgroundColor: '#FFFFFF', borderRadius: '14px', border: '1px solid #E2E8F0' }}>
-                <Boxes size={36} style={{ color: '#CBD5E1', marginBottom: '8px' }} />
-                <div style={{ fontSize: '15px', fontWeight: '700', color: '#475569' }}>No BOM orders found</div>
-                <div style={{ fontSize: '12px', color: '#94A3B8', marginTop: '4px' }}>
-                  No records match your active search or filter criteria. Try adjusting your query or clear filters.
-                </div>
-              </div>
-            ) : (
-              currentRows.map((row, idx) => {
-                const isChecked = selectedRows.includes(row.code);
-                const lifecycle = getOrderLifecycle(row);
-                const isCancelled = Boolean(row.cancelled || row.status === 'Cancelled & Stock Restored' || (row.status || '').toLowerCase().includes('cancel') || row.tabGroup === 'Cancelled');
-                const isAwaitingSalesPayment = getBomActiveStage(row).name === 'Payment Proof Pending (Sales)';
-                const isSentToDispatch = Boolean(
-                  row.salesConfirmed ||
-                  row.salesReconfirmed ||
-                  row.creditSettled ||
-                  row.isAccountsDone ||
-                  row.accountsVerified ||
-                  row.dispatchPackingVerified ||
-                  lifecycle.steps[1]?.isDone ||
-                  ['Sales Confirmed - Sent to Dispatch', 'Sent to Production', 'Confirmed', 'Packed & Ready for Dispatch', 'Partially Packed', 'Closed', 'CLOSED', 'Dispatch Packing Verified - Sent to Accounts', 'Accounts Verified & Passed to Invoice', 'Accounts Verified - Proceed Billing', 'Invoice Generated', 'Awaiting Vehicle Loading & Dispatch', 'Invoice Confirmed'].includes(row.status)
-                );
-                const isDraftOrPending = !isCeo && !isSentToDispatch && ['Draft', 'Pending Confirmation', 'Pending Sales Confirmation', 'Edited / Pending Confirmation', 'Cancelled & Reissued to Dispatch', 'Pending Verification', 'Pending'].includes(row.status);
-
-                return (
-                  <div
-                    key={row.code || idx}
-                    style={{
-                      backgroundColor: isCancelled ? (isChecked ? '#FEF2F2' : '#FFFDFD') : (isChecked ? '#ECFEFF' : '#FFFFFF'),
-                      border: isCancelled ? (isChecked ? '1.5px solid #EF4444' : '1px solid #FECACA') : (isChecked ? '1.5px solid #0E7490' : '1px solid #E2E8F0'),
-                      borderLeft: isCancelled ? '4px solid #DC2626' : (isAwaitingSalesPayment ? '4px solid #F59E0B' : (isChecked ? '4px solid #0E7490' : '4px solid transparent')),
-                      borderRadius: '10px',
-                      padding: '12px 16px',
-                      boxShadow: isCancelled ? '0 1px 4px rgba(220, 38, 38, 0.06)' : '0 1px 4px rgba(15, 23, 42, 0.03)',
-                      transition: 'all 0.15s ease'
-                    }}
-                  >
-                    {/* Line 1: Header (Customer Name · Status · Assigned · Applied at Date •••) */}
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                        <input
-                          id={`bom-pipeline-chk-${idx}`}
-                          name={`bom_pipeline_chk_${idx}`}
-                          aria-label={`Select BOM ${row.code}`}
-                          type="checkbox"
-                          style={{ accentColor: isCancelled ? '#DC2626' : '#0E7490', cursor: 'pointer', verticalAlign: 'middle', margin: 0, width: '15px', height: '15px' }}
-                          checked={isChecked}
-                          onChange={() => handleSelectRowGeneric(row.code)}
-                        />
-                        <span
-                          onClick={() => setConfirmingBomModal({ ...row, isEditMode: isDraftOrPending && !isCancelled })}
-                          style={{ fontSize: '13.5px', fontWeight: '700', color: isCancelled ? '#991B1B' : '#0F172A', cursor: 'pointer', letterSpacing: '-0.2px' }}
-                        >
-                          {row.c3 || row.customerName || 'Customer'}
-                        </span>
-
-                        {(row.isEdited || (Array.isArray(row.editHistory) && row.editHistory.length > 0)) && (
-                          <span
-                            title={row.lastEditedBy ? `Edited by ${row.lastEditedBy} on ${new Date(row.lastEditedAt || Date.now()).toLocaleString('en-IN')}` : 'This BOM was edited'}
-                            style={{
-                              backgroundColor: '#FEF3C7',
-                              color: '#B45309',
-                              border: '1px solid #FDE68A',
-                              padding: '2px 8px',
-                              borderRadius: '12px',
-                              fontSize: '11px',
-                              fontWeight: '700',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px'
-                            }}
-                          >
-                            Edited
-                          </span>
-                        )}
-
-                        {isCancelled && (
-                          <span style={{
-                            backgroundColor: '#FEF2F2',
-                            color: '#DC2626',
-                            border: '1px solid #FECACA',
-                            padding: '2px 8px',
-                            borderRadius: '12px',
-                            fontSize: '11px',
-                            fontWeight: '700',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px'
-                          }}>
-                            <XCircle size={11} style={{ color: '#DC2626' }} />
-                            Cancelled
-                          </span>
-                        )}
-
-                        {!isCancelled && isAwaitingSalesPayment && (
-                          <span style={{
-                            backgroundColor: '#FEF3C7',
-                            color: '#92400E',
-                            border: '1px solid #FCD34D',
-                            padding: '2px 8px',
-                            borderRadius: '12px',
-                            fontSize: '11px',
-                            fontWeight: '700',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px'
-                          }}>
-                            <AlertCircle size={11} style={{ color: '#D97706' }} />
-                            Packed — Awaiting Sales Payment Proof
-                          </span>
-                        )}
-
-                        {isCeo && !isCancelled && isBomAddressProofPending(row) && (
-                          <span
-                            title="Different delivery address — Address proof not attached by Sales"
-                            style={{
-                              backgroundColor: '#FEF2F2',
-                              color: '#DC2626',
-                              border: '1px solid #FCA5A5',
-                              padding: '2px 8px',
-                              borderRadius: '12px',
-                              fontSize: '11px',
-                              fontWeight: '800',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px'
-                            }}
-                          >
-                            <AlertCircle size={11} style={{ color: '#DC2626' }} />
-                            Address Proof Pending
-                          </span>
-                        )}
-
-                        {row.docType === 'DC' && (
-                          <span style={{
-                            backgroundColor: '#FEF3C7',
-                            color: '#92400E',
-                            border: '1px solid #FCD34D',
-                            padding: '2px 8px',
-                            borderRadius: '12px',
-                            fontSize: '11px',
-                            fontWeight: '800',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px'
-                          }}>
-                            <Truck size={12} strokeWidth={2.2} />
-                            <span>DC (Delivery Challan)</span>
-                          </span>
-                        )}
-                        {row.docType === 'DC' && row.dcRemarks && (
-                          <span title={row.dcRemarks} style={{ fontSize: '11px', fontWeight: '700', color: '#92400E', maxWidth: '280px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            DC Remarks: {row.dcRemarks}
-                          </span>
-                        )}
-
-                        <span style={{ color: '#CBD5E1', fontSize: '12px', fontWeight: '700' }}>·</span>
-
-                        {/* Assigned Salesperson Badge in standard compact 11px */}
-                        <span style={{
-                          backgroundColor: '#F0FDFA',
-                          color: '#0E7490',
-                          border: '1px solid #A5F3FC',
-                          padding: '2px 8px',
-                          borderRadius: '12px',
-                          fontSize: '11px',
-                          fontWeight: '700',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px'
-                        }}>
-                          <User size={11} style={{ color: '#0E7490' }} />
-                          {getCleanSalesPersonName(row.salesPerson || row.createdBy, row.salesPersonCode || row.createdById)}
-                        </span>
-                      </div>
-
-                      {/* Right Side: Applied Date & CEO Timing Taken */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        {isCeo && (() => {
-                          const timing = getBomStageTiming(row);
-                          if (!timing || !timing.confirmedTime) return null;
-                          return (
-                            <span
-                              title={`Current Stage: ${timing.activeStageName}`}
-                              style={{
-                                backgroundColor: timing.isCompleted ? '#F0FDF4' : '#ECFEFF',
-                                color: timing.isCompleted ? '#16A34A' : '#0E7490',
-                                border: `1px solid ${timing.isCompleted ? '#BBF7D0' : '#BAE6FD'}`,
-                                padding: '3px 9px',
-                                borderRadius: '12px',
-                                fontSize: '11px',
-                                fontWeight: '800',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '5px'
-                              }}
-                            >
-                              <Clock size={12} />
-                              <span>{timing.isCompleted ? '✓ Dispatched' : timing.activeStageName}</span>
-                            </span>
-                          );
-                        })()}
-                        <span style={{ fontSize: '12px', color: '#64748B', fontWeight: '500' }}>
-                          Applied at <strong style={{ color: '#334155', fontWeight: '600' }}>{formatAppliedAtDate(row)}</strong>
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Line 2: Metadata Subline (ID and Items count, print status) */}
-                    <div style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      flexWrap: 'wrap',
-                      gap: '7px',
-                      marginTop: '4px',
-                      marginBottom: '10px',
-                      marginLeft: '23px',
-                      fontSize: '12px',
-                      color: '#475569'
-                    }}>
-                      <span
-                        onClick={() => setConfirmingBomModal({ ...row, isEditMode: isDraftOrPending && !isCancelled })}
-                        style={{ fontWeight: '700', color: isCancelled ? '#DC2626' : '#0E7490', cursor: 'pointer' }}
-                      >
-                        BOM ID: {row.code}
-                      </span>
-                      <span style={{ color: '#CBD5E1' }}>|</span>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#64748B' }}>
-                        <Boxes size={11} style={{ color: '#64748B' }} />
-                        {Array.isArray(row.items) ? row.items.length : 0} Items
-                      </span>
-                      <span style={{ color: '#CBD5E1' }}>·</span>
-                      <span>
-                        {isCancelled ? (
-                          <span style={{ color: '#DC2626', fontWeight: '700', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                            <XCircle size={11} /> Cancelled & Stock Restored
-                          </span>
-                        ) : row.dispatchPrinted ? (
-                          <span style={{ color: '#15803D', fontWeight: '700', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                            <Printer size={11} /> Printed
-                          </span>
-                        ) : (
-                          <span style={{ color: '#B45309', fontWeight: '700', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                            <Clock size={11} /> Pending Print
-                          </span>
-                        )}
-                      </span>
-                      {!isCancelled && Boolean((Array.isArray(row.paymentProofDocs) && row.paymentProofDocs.length > 0) || row.paymentProofDoc || row.proofDoc || row.accountsVerification?.paymentProofDoc) && (
-                        <span style={{
-                          backgroundColor: '#DCFCE7',
-                          color: '#166534',
-                          border: '1px solid #86EFAC',
-                          padding: '2px 8px',
-                          borderRadius: '12px',
-                          fontSize: '10.5px',
-                          fontWeight: '700',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px'
-                        }}>
-                          <Check size={11} strokeWidth={3} /> Payment Slip Attached
-                        </span>
-                      )}
-                      {!isCancelled && Boolean((Array.isArray(row.deliveryAddressProofDocs) && row.deliveryAddressProofDocs.length > 0) || row.deliveryAddressProofDoc || row.deliveryProofDoc) && (
-                        <span style={{
-                          backgroundColor: '#ECFEFF',
-                          color: '#0E7490',
-                          border: '1px solid #A5F3FC',
-                          padding: '2px 8px',
-                          borderRadius: '12px',
-                          fontSize: '10.5px',
-                          fontWeight: '700',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px'
-                        }}>
-                          <Check size={11} strokeWidth={3} /> Address Proof Attached
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Amber Action Alert for Packed BOM Awaiting Sales Payment Proof */}
-                    {!isCancelled && isAwaitingSalesPayment && (
-                      <div style={{
-                        backgroundColor: '#FFFBEB',
-                        border: '1px solid #FDE68A',
-                        borderRadius: '8px',
-                        padding: '9px 14px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: '12px',
-                        flexWrap: 'wrap',
-                        marginLeft: '23px',
-                        marginBottom: '8px',
-                        boxShadow: '0 1px 2px rgba(245, 158, 11, 0.08)'
-                      }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                          <div style={{
-                            width: '20px',
-                            height: '20px',
-                            borderRadius: '50%',
-                            backgroundColor: '#F59E0B',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            flexShrink: 0
-                          }}>
-                            <UploadCloud size={12} style={{ color: '#FFFFFF' }} />
-                          </div>
-                          <span style={{ fontSize: '12px', fontWeight: '800', color: '#92400E' }}>
-                            Action Required: Goods Packed — Please Attach Payment Proof
-                          </span>
-                          <span style={{ fontSize: '11px', color: '#B45309' }}>
-                            Terms: <strong>{row.paymentType || 'Payment While Dispatch / Partial Paid'}</strong> · Packed by Dispatch. Held until payment slip is attached to forward to Accounts.
-                          </span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setUploadPaymentModal(row);
-                          }}
-                          style={{
-                            backgroundColor: '#D97706',
-                            color: '#FFFFFF',
-                            border: 'none',
-                            borderRadius: '6px',
-                            padding: '5px 12px',
-                            fontSize: '11.5px',
-                            fontWeight: '700',
-                            cursor: 'pointer',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '5px',
-                            boxShadow: '0 1px 3px rgba(217, 119, 6, 0.25)'
-                          }}
-                        >
-                          <Upload size={12} style={{ color: '#FFFFFF' }} /> Attach Payment Slip
-                        </button>
-                      </div>
-                    )}
-
-                    {/* Action Required Banner for Accounts-Requested Address Proof Re-upload, or missing proof for a different delivery address */}
-                    {!isCeo && !isCancelled && (row.addressProofReuploadRequested || row.status === 'Address Proof Requested from Sales' || needsSalesAddressProof(row)) && (
-                      <div style={{
-                        backgroundColor: '#FEF2F2',
-                        border: '1px solid #FCA5A5',
-                        borderRadius: '8px',
-                        padding: '8px 14px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: '12px',
-                        flexWrap: 'wrap',
-                        marginLeft: '23px',
-                        marginBottom: '8px',
-                        boxShadow: '0 1px 2px rgba(220, 38, 38, 0.08)'
-                      }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                          <div style={{
-                            width: '20px',
-                            height: '20px',
-                            borderRadius: '50%',
-                            backgroundColor: '#DC2626',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            flexShrink: 0
-                          }}>
-                            <AlertCircle size={12} style={{ color: '#FFFFFF' }} />
-                          </div>
-                          <span style={{ fontSize: '12px', fontWeight: '800', color: '#991B1B' }}>
-                            {(row.addressProofReuploadRequested || row.status === 'Address Proof Requested from Sales')
-                              ? 'Action Required: Address Proof Re-upload Requested by Accounts'
-                              : 'Action Required: Address Proof Missing'}
-                          </span>
-                          <span style={{ fontSize: '11px', color: '#B91C1C' }}>
-                            {(row.addressProofReuploadRequested || row.status === 'Address Proof Requested from Sales')
-                              ? 'Upload a verified address proof document (GST / Electricity Bill / Lease Agreement) to clear Accounts hold.'
-                              : 'Delivery address is different from billing. Upload address proof now, or Billing will block this invoice.'}
-                          </span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setConfirmingBomModal({ ...row });
-                          }}
-                          style={{
-                            backgroundColor: '#DC2626',
-                            color: '#FFFFFF',
-                            border: 'none',
-                            borderRadius: '6px',
-                            padding: '5px 12px',
-                            fontSize: '11.5px',
-                            fontWeight: '700',
-                            cursor: 'pointer',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '5px',
-                            boxShadow: '0 1px 3px rgba(220, 38, 38, 0.25)'
-                          }}
-                        >
-                          <Upload size={12} style={{ color: '#FFFFFF' }} /> Upload Address Proof
-                        </button>
-                      </div>
-                    )}
-
-                    {/* Line 3: Stepper Pipeline Card Box or Red Cancelled Info Box */}
-                    {isCancelled ? (
-                      <div style={{
-                        backgroundColor: '#FEF2F2',
-                        border: '1px solid #FECACA',
-                        borderRadius: '8px',
-                        padding: '9px 14px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: '12px',
-                        flexWrap: 'wrap',
-                        marginLeft: '23px',
-                        boxShadow: '0 1px 2px rgba(220, 38, 38, 0.05)'
-                      }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                          <div style={{
-                            width: '20px',
-                            height: '20px',
-                            borderRadius: '50%',
-                            backgroundColor: '#DC2626',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            flexShrink: 0
-                          }}>
-                            <XCircle size={12} style={{ color: '#FFFFFF' }} />
-                          </div>
-                          <span style={{ fontSize: '12px', fontWeight: '800', color: '#DC2626' }}>
-                            Order Cancelled & Stock Restored to Inventory
-                          </span>
-                          {row.cancellationReason && (
-                            <span style={{
-                              fontSize: '11.5px',
-                              color: '#991B1B',
-                              backgroundColor: '#FFFFFF',
-                              padding: '2px 8px',
-                              borderRadius: '4px',
-                              border: '1px solid #FCA5A5'
-                            }}>
-                              Reason: <strong>{row.cancellationReason}</strong>
-                            </span>
-                          )}
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '11px', color: '#991B1B' }}>
-                          {row.cancelledByNameAndRole ? (
-                            <span>Cancelled by: <strong>{row.cancelledByNameAndRole}</strong></span>
-                          ) : row.cancelledBy ? (
-                            <span>Cancelled by: <strong>{row.cancelledBy}</strong></span>
-                          ) : null}
-                          {row.cancelledAt && (
-                            <span>({new Date(row.cancelledAt).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })})</span>
-                          )}
-                        </div>
-                      </div>
-                    ) : (
-                      <div style={{
-                        backgroundColor: '#FFFFFF',
-                        border: '1px solid #E2E8F0',
-                        borderRadius: '8px',
-                        padding: '8px 14px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: '12px',
-                        flexWrap: 'wrap',
-                        marginLeft: '23px',
-                        boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
-                      }}>
-                        {/* Horizontal Stepper Flow */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: '300px', overflowX: 'auto', padding: '2px 0' }}>
-                          {lifecycle.steps.map((st, sIdx) => {
-                            const isLast = sIdx === lifecycle.steps.length - 1;
-                            const nextStep = lifecycle.steps[sIdx + 1];
-                            const isLineActive = st.isDone && (nextStep?.isDone || nextStep?.isActive);
-                            const StepIcon = st.icon;
-
-                            return (
-                              <React.Fragment key={st.id}>
-                                {/* Step Node */}
-                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', flexShrink: 0 }}>
-                                  {st.isDone ? (
-                                    <>
-                                      <div style={{
-                                        width: '18px',
-                                        height: '18px',
-                                        borderRadius: '50%',
-                                        backgroundColor: '#0E7490',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        flexShrink: 0
-                                      }}>
-                                        <Check size={11} strokeWidth={3.5} style={{ color: '#FFFFFF' }} />
-                                      </div>
-                                      <span style={{ fontSize: '12px', fontWeight: '700', color: '#0E7490', whiteSpace: 'nowrap' }}>
-                                        {st.label}
-                                      </span>
-                                    </>
-                                  ) : st.isActive ? (
-                                    <div style={{
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      gap: '5px',
-                                      padding: '2px 8px',
-                                      borderRadius: '6px',
-                                      border: '1.5px solid #0E7490',
-                                      backgroundColor: '#F0FDFA',
-                                      color: '#0E7490',
-                                      flexShrink: 0
-                                    }}>
-                                      {StepIcon && <StepIcon size={12} style={{ color: '#0E7490' }} />}
-                                      <span style={{ fontSize: '12px', fontWeight: '800', color: '#0E7490', whiteSpace: 'nowrap' }}>
-                                        {st.label}
-                                      </span>
-                                    </div>
-                                  ) : (
-                                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', flexShrink: 0, opacity: 0.75 }}>
-                                      {StepIcon && <StepIcon size={13} style={{ color: '#94A3B8' }} />}
-                                      <span style={{ fontSize: '12px', fontWeight: '500', color: '#94A3B8', whiteSpace: 'nowrap' }}>
-                                        {st.label}
-                                      </span>
-                                    </div>
-                                  )}
-                                </div>
-
-                                {/* Connecting Line */}
-                                {!isLast && (
-                                  <div style={{
-                                    flex: 1,
-                                    minWidth: '20px',
-                                    height: '2px',
-                                    backgroundColor: isLineActive ? '#0E7490' : '#E2E8F0',
-                                    borderRadius: '1px'
-                                  }} />
-                                )}
-                              </React.Fragment>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })
-            )}
-          </div>
-          </>
-        )}
+        })()}
         {/* PAGINATION FOOTER - STRICT RULES MATCH */}
         {!tableLoading && filteredRows.length > 0 && (
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', fontSize: '13px', color: '#64748B', borderTop: '1px solid #F1F5F9', backgroundColor: '#FFFFFF' }}>
@@ -1817,6 +1249,7 @@ export default function BomDashboardSection({ ctx }) {
             );
           })()}
 
+          {!isSalesLoginRole(userRole) && (
           <button
             type="button"
             onClick={() => {
@@ -1863,6 +1296,7 @@ export default function BomDashboardSection({ ctx }) {
           >
             <Printer size={14} style={{ color: '#059669' }} /> Print
           </button>
+          )}
 
           <button
             onClick={() => {

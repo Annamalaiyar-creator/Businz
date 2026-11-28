@@ -10,6 +10,7 @@ import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import { fetchCustomersDeduplicated } from '../../services/customerService';
 import { CeoKpiGrid } from './CeoExecutiveDashboardView';
 import { CODE_TO_SALES_NAME, EMAIL_TO_SALES_NAME } from '../pi/piHelpers';
+import SalesPersonDashboardView from './salesDashboard/SalesPersonDashboardView';
 
 // Fast shallow list equality check to prevent unnecessary React re-renders and visual data flickering
 function areItemListsEqual(prev, next, idKey = 'id') {
@@ -70,6 +71,14 @@ function isDateInPeriod(dateVal, period) {
   if (isNaN(d.getTime())) return true;
   const now = new Date();
 
+  if (period === 'Today') {
+    return d.getDate() === now.getDate() && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+  }
+  if (period === 'This Week') {
+    const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay());
+    const endOfWeek = new Date(startOfWeek.getFullYear(), startOfWeek.getMonth(), startOfWeek.getDate() + 6, 23, 59, 59);
+    return d >= startOfWeek && d <= endOfWeek;
+  }
   if (period === 'This Month') {
     return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
   }
@@ -1552,6 +1561,172 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%', minWidth: 0, boxSizing: 'border-box', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
 
       {/* ─── 1. TOP PERSONALIZED WELCOME BANNER & LIVE CONTROLS CARD ─── */}
+      {!isCeoOrMd ? (() => {
+        const cleanName = String(loggedUserName || 'Sales').trim();
+        const initials = cleanName
+          .split(/\s+/)
+          .filter(Boolean)
+          .slice(0, 2)
+          .map(w => w[0].toUpperCase())
+          .join('') || 'SA';
+        const curYr = new Date().getFullYear();
+        const curMo = new Date().getMonth();
+        const fyQ = curMo < 3 ? 4 : curMo < 6 ? 1 : curMo < 9 ? 2 : 3;
+        const fyYearShort = String(curMo < 3 ? curYr % 100 : (curYr + 1) % 100).padStart(2, '0');
+        const qLabel = `Q${fyQ} FY${fyYearShort}`;
+        const periodPills = [
+          { label: 'Today', value: 'Today' },
+          { label: 'This Week', value: 'This Week' },
+          { label: 'MTD', value: 'This Month' },
+          { label: qLabel, value: 'This Quarter' },
+          { label: 'YTD', value: 'Financial Year (YTD)' },
+          { label: 'All', value: 'All Time' }
+        ];
+
+        return (
+          <div style={{
+            backgroundColor: '#FFFFFF',
+            borderRadius: '16px',
+            border: '1px solid #E2E8F0',
+            padding: '16px 20px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '14px',
+            boxShadow: '0 4px 16px -2px rgba(15, 23, 42, 0.04)',
+            background: 'linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 100%)',
+            position: 'relative',
+            boxSizing: 'border-box',
+            width: '100%',
+            minHeight: '74px',
+            flexShrink: 0
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', zIndex: 2, minWidth: 0 }}>
+              <div style={{
+                width: '42px',
+                height: '42px',
+                borderRadius: '12px',
+                backgroundColor: '#0E7490',
+                color: '#FFFFFF',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: '900',
+                fontSize: '18px',
+                boxShadow: '0 4px 12px rgba(14, 116, 144, 0.35)',
+                flexShrink: 0
+              }}>
+                {initials}
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <h2 style={{ fontSize: '18px', fontWeight: '800', color: '#0F172A', margin: 0, letterSpacing: '-0.02em' }}>
+                    Welcome back, {cleanName}!
+                  </h2>
+                  <span style={{
+                    fontSize: '10.5px',
+                    fontWeight: '800',
+                    color: '#0E7490',
+                    backgroundColor: '#ECFEFF',
+                    padding: '2px 8px',
+                    borderRadius: '8px',
+                    border: '1px solid #BAE6FD'
+                  }}>
+                    SALES DASHBOARD
+                  </span>
+                </div>
+                <p style={{ fontSize: '12px', color: '#64748B', margin: '3px 0 0 0', fontWeight: '500' }}>
+                  Personal Sales Command Center • Real-time Targets, Follow-ups, Funnel, Collections &amp; Performance.
+                </p>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', zIndex: 2 }}>
+              {isManagementRole && (
+                <select
+                  aria-label="SelectedExecutive"
+                  value={selectedExecutive}
+                  onChange={(e) => setSelectedExecutive(e.target.value)}
+                  style={{
+                    height: '32px',
+                    borderRadius: '8px',
+                    border: '1px solid #E2E8F0',
+                    padding: '0 8px',
+                    fontSize: '11.5px',
+                    fontWeight: '700',
+                    color: '#0F172A',
+                    backgroundColor: '#F8FAFC',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {availableExecutives.map(exec => (
+                    <option key={exec} value={exec}>{exec === 'All' ? 'All Sales Reps' : exec}</option>
+                  ))}
+                </select>
+              )}
+
+              <div style={{
+                display: 'flex',
+                backgroundColor: '#F1F5F9',
+                padding: '3px',
+                borderRadius: '10px',
+                border: '1px solid #E2E8F0',
+                gap: '2px',
+                flexWrap: 'wrap'
+              }}>
+                {periodPills.map(p => {
+                  const isActive = selectedPeriod === p.value;
+                  return (
+                    <button
+                      key={p.value}
+                      type="button"
+                      onClick={() => setSelectedPeriod(p.value)}
+                      style={{
+                        border: 'none',
+                        backgroundColor: isActive ? '#0E7490' : 'transparent',
+                        color: isActive ? '#FFFFFF' : '#475569',
+                        padding: '5px 10px',
+                        borderRadius: '7px',
+                        fontSize: '11px',
+                        fontWeight: isActive ? '800' : '600',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      {p.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <button
+                type="button"
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+                title={`Refresh Live Data (Last synced ${lastSyncedTime})`}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '8px',
+                  border: '1px solid #CBD5E1',
+                  backgroundColor: '#FFFFFF',
+                  color: '#475569',
+                  cursor: isRefreshing ? 'wait' : 'pointer',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                  flexShrink: 0
+                }}
+              >
+                <RefreshCw size={14} style={{ animation: isRefreshing ? 'spin 1s linear infinite' : 'none' }} />
+              </button>
+            </div>
+          </div>
+        );
+      })() : (
       <div style={{
         backgroundColor: '#FFFFFF',
         borderRadius: '16px',
@@ -1677,7 +1852,39 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
           pointerEvents: 'none'
         }} />
       </div>
+      )}
 
+      {!isCeoOrMd ? (
+        <SalesPersonDashboardView
+          isMobile={isMobile}
+          selectedPeriod={selectedPeriod}
+          monthlyTargetNum={monthlyTargetNum}
+          targetAchievedVal={targetAchievedVal}
+          targetAchievedPct={targetAchievedPct}
+          targetBalanceVal={targetBalanceVal}
+          requiredDailySales={requiredDailySales}
+          monthEndForecastVal={monthEndForecastVal}
+          forecastPctOfTarget={forecastPctOfTarget}
+          forecastExpectedAddl={forecastExpectedAddl}
+          remainingWorkingDays={remainingWorkingDays}
+          filteredQuotations={filteredQuotations}
+          filteredOpportunities={filteredOpportunities}
+          filteredLeads={filteredLeads}
+          filteredPis={filteredPis}
+          filteredInvoices={filteredInvoices}
+          invoices={invoices}
+          followups={followups}
+          customers={customers}
+          regionWiseSales={regionWiseSales}
+          monthlyTrendData={monthlyTrendData}
+          productPerformance={productPerformance}
+          customerSalesMix={customerSalesMix}
+          realLostCancelledData={realLostCancelledData}
+          totalLostVal={totalLostVal}
+          onNavigateTab={onNavigateTab}
+        />
+      ) : (
+        <>
       {/* ─── ROW 1: 6 CORE EXECUTIVE KPI CARDS (MATCHING CEO LOGIN BUSINZ DESIGN SYSTEM - HIDDEN FOR SALES LOGIN) ─── */}
       {isCeoOrMd && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%' }}>
@@ -3099,6 +3306,8 @@ export default function SalesExecutiveDashboardView({ userRole = 'Sales Executiv
             </div>
           </div>
       </div>
+        </>
+      )}
 
       {showTargetModal && (
         <div style={{

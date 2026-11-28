@@ -102,7 +102,14 @@ function actorOf(session) {
 function scopeClause(session, params) {
   if (isLeadManager(session.role)) return '';
   params.push(String(session.empCode || ''));
-  return ` AND (l.assigned_to_user_id = $${params.length} OR l.lead_created_by_id = $${params.length})`;
+  const empIdx = params.length;
+  params.push(String(session.user || '').trim().toLowerCase());
+  const nameIdx = params.length;
+  return ` AND (
+    l.assigned_to_user_id = $${empIdx}
+    OR l.lead_created_by_id = $${empIdx}
+    OR ($${nameIdx} <> '' AND LOWER(TRIM(COALESCE(l.assigned_to_name, l.assigned_salesperson, ''))) = $${nameIdx})
+  )`;
 }
 
 async function loadLeadForWrite(client, id, session) {
@@ -113,7 +120,11 @@ async function loadLeadForWrite(client, id, session) {
   if (!lead) throw new HttpError(404, 'Lead not found');
   if (!isLeadManager(session.role)) {
     const me = String(session.empCode || '');
-    if (lead.assigned_to_user_id !== me && lead.lead_created_by_id !== me) throw new HttpError(403, 'You can only modify your own leads');
+    const myName = String(session.user || '').trim().toLowerCase();
+    const assignedName = String(lead.assigned_to_name || lead.assigned_salesperson || '').trim().toLowerCase();
+    if (lead.assigned_to_user_id !== me && lead.lead_created_by_id !== me && (!myName || assignedName !== myName)) {
+      throw new HttpError(403, 'You can only modify your own leads');
+    }
   }
   return lead;
 }

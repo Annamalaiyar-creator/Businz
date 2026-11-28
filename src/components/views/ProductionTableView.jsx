@@ -242,46 +242,51 @@ export default function ProductionTableView({
         display: 'flex',
         borderBottom: '1px solid #e2e8f0',
         gap: '20px',
+        gap: '8px',
         padding: '4px 0',
         alignItems: 'center',
-        flexWrap: 'nowrap',
-        overflowX: 'auto',
-        WebkitOverflowScrolling: 'touch',
-        scrollbarWidth: 'thin'
+        flexWrap: 'wrap'
       }}>
-        {pageConfig.tabs.map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => { setProdActiveSubTab(tab.id); if (setCurrentPage) setCurrentPage(1); }}
-            style={{
-              border: 'none',
-              background: 'transparent',
-              padding: '10px 4px',
-              fontSize: '13px',
-              fontWeight: 'bold',
-              color: prodActiveSubTab === tab.id ? '#2563eb' : '#64748b',
-              borderBottom: prodActiveSubTab === tab.id ? '2px solid #2563eb' : '2px solid transparent',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              flexShrink: 0,
-              whiteSpace: 'nowrap'
-            }}
-          >
-            {safeText(tab.label, '')}
-            <span style={{
-              fontSize: '10px',
-              padding: '2px 7px',
-              borderRadius: '12px',
-              backgroundColor: tab.bg,
-              color: tab.fg,
-              fontWeight: 'bold'
-            }}>
-              {tab.count}
-            </span>
-          </button>
-        ))}
+        {pageConfig.tabs.map(tab => {
+          const isSelected = prodActiveSubTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => { setProdActiveSubTab(tab.id); if (setCurrentPage) setCurrentPage(1); }}
+              style={{
+                backgroundColor: isSelected ? '#0E7490' : '#FFFFFF',
+                color: isSelected ? '#FFFFFF' : '#334155',
+                border: isSelected ? '1px solid #0E7490' : '1px solid #E2E8F0',
+                borderRadius: '9999px',
+                padding: '7px 14px',
+                fontSize: '12.5px',
+                fontWeight: '700',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                boxShadow: isSelected ? '0 2px 8px rgba(14, 116, 144, 0.25)' : '0 1px 2px rgba(15, 23, 42, 0.04)',
+                transition: 'all 0.15s ease',
+                flexShrink: 0,
+                whiteSpace: 'nowrap'
+              }}
+            >
+              <span>{safeText(tab.label, '')}</span>
+              <span style={{
+                fontSize: '11px',
+                padding: '1px 7px',
+                borderRadius: '9999px',
+                backgroundColor: isSelected ? 'rgba(255, 255, 255, 0.22)' : (tab.bg || '#F1F5F9'),
+                color: isSelected ? '#FFFFFF' : (tab.fg || '#475569'),
+                fontWeight: '800',
+                lineHeight: '1.3'
+              }}>
+                {tab.count}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       {/* 4. MAIN DATA TABLE (EXACT MATCH FOR PI & PO DESIGN) */}

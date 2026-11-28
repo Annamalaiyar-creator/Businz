@@ -2089,8 +2089,8 @@ export default function QuotationsView(props) {
               </div>
             </div>
 
-            {/* 2. STATUS TABS ROW (RFP Style) */}
-            <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', gap: '20px', padding: '4px 0', alignItems: 'center', flexWrap: 'wrap', marginBottom: '16px' }}>
+            {/* 2. STATUS FILTER PILLS */}
+            <div style={{ display: 'flex', gap: '8px', padding: '4px 0', alignItems: 'center', flexWrap: 'wrap', marginBottom: '12px' }}>
               {[
                 { label: 'All Quotations', status: 'All', color: '#3b82f6', bg: '#eff6ff' },
                 { label: 'Draft', status: 'Draft', color: '#c2410c', bg: '#fff7ed' },
@@ -2099,30 +2099,45 @@ export default function QuotationsView(props) {
                 { label: 'Accepted', status: 'Accepted', color: '#15803d', bg: '#f0fdf4' },
                 { label: 'Expired', status: 'Expired', color: '#b91c1c', bg: '#fef2f2' },
                 { label: 'Rejected', status: 'Rejected', color: '#e53e3e', bg: '#fff5f5' }
-              ].map(tab => (
-                <button
-                  key={tab.status}
-                  onClick={() => { setQuotationActiveTab(tab.status); setQuotationStatusFilter(tab.status); setQuotationCurrentPage(1); }}
-                  style={{
-                    border: 'none',
-                    background: 'transparent',
-                    padding: '10px 4px',
-                    fontSize: '13px',
-                    fontWeight: 'bold',
-                    color: quotationActiveTab === tab.status ? '#2563eb' : '#64748b',
-                    borderBottom: quotationActiveTab === tab.status ? '2px solid #2563eb' : '2px solid transparent',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px'
-                  }}
-                >
-                  <span>{tab.label}</span>
-                  <span style={{ fontSize: '10px', fontWeight: 'bold', backgroundColor: tab.bg || '#f1f5f9', color: tab.color || '#475569', padding: '1px 6px', borderRadius: '10px' }}>
-                    {getCount(tab.status)}
-                  </span>
-                </button>
-              ))}
+              ].map(tab => {
+                const isSelected = quotationActiveTab === tab.status;
+                return (
+                  <button
+                    key={tab.status}
+                    type="button"
+                    onClick={() => { setQuotationActiveTab(tab.status); setQuotationStatusFilter(tab.status); setQuotationCurrentPage(1); }}
+                    style={{
+                      backgroundColor: isSelected ? '#0E7490' : '#FFFFFF',
+                      color: isSelected ? '#FFFFFF' : '#334155',
+                      border: isSelected ? '1px solid #0E7490' : '1px solid #E2E8F0',
+                      borderRadius: '9999px',
+                      padding: '7px 14px',
+                      fontSize: '12.5px',
+                      fontWeight: '700',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      boxShadow: isSelected ? '0 2px 8px rgba(14, 116, 144, 0.25)' : '0 1px 2px rgba(15, 23, 42, 0.04)',
+                      transition: 'all 0.15s ease',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    <span>{tab.label}</span>
+                    <span style={{
+                      fontSize: '11px',
+                      fontWeight: '800',
+                      backgroundColor: isSelected ? 'rgba(255, 255, 255, 0.22)' : (tab.bg || '#f1f5f9'),
+                      color: isSelected ? '#FFFFFF' : (tab.color || '#475569'),
+                      padding: '1px 7px',
+                      borderRadius: '9999px',
+                      lineHeight: '1.3'
+                    }}>
+                      {getCount(tab.status)}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
 
             {/* 3. TABLE CARD */}

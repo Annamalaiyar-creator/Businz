@@ -103,6 +103,18 @@ export const getBomActiveStage = (row) => {
     return { name: 'Invoice Pending', bg: '#EFF6FF', color: '#1D4ED8', border: '#BFDBFE', dot: '#2563EB' };
   }
 
+  const isAddressProofRequestedActive = Boolean(row.addressProofReuploadRequested || statusStr.includes('address proof requested'));
+  if (isAddressProofRequestedActive) {
+    return {
+      name: 'Address Proof Pending (Sales)',
+      bg: '#FFF7ED',
+      color: '#C2410C',
+      border: '#FFEDD5',
+      dot: '#EA580C',
+      responsibleDept: 'Sales'
+    };
+  }
+
   const isPackingVerified = Boolean(row.dispatchPackingVerified || row.packingVerified || row.dispatchPackingDone) ||
     (Array.isArray(row.dispatchPacking) && row.dispatchPacking.length > 0 && row.dispatchPacking.some(p => p.packed)) ||
     ['Packed & Ready for Dispatch', 'Partially Packed', 'Packed — Awaiting Sales Payment Proof', 'Packed - Awaiting Sales Payment Proof', 'Dispatch Packing Verified - Sent to Accounts'].includes(row.status) ||
@@ -758,10 +770,14 @@ const addressKey = (addr) => [...new Set(
 )].sort().join('|');
 export const isSameAddressText = (a, b) => Boolean(a && b && addressKey(a) === addressKey(b));
 
-// Sales still needs to attach address proof: proof missing and the order is not yet invoiced, dispatched or completed.
+// Sales still needs to attach address proof: proof missing and the order is not yet accounts-verified, invoiced, dispatched or completed.
 export const needsSalesAddressProof = (bom) => Boolean(
-  bom && !bom.invoiceConfirmed &&
-  !/complete|dispatched|closed/i.test(String(bom.status || '')) &&
+  bom &&
+  !bom.invoiceConfirmed &&
+  !bom.invoiceGenerated &&
+  !bom.accountsVerified &&
+  !bom.isAccountsDone &&
+  !/complete|dispatched|closed|vehicle loading|invoice/i.test(String(bom.status || '')) &&
   isBomAddressProofPending(bom)
 );
 

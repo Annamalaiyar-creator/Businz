@@ -2994,36 +2994,41 @@ const RawMaterialInventoryView = ({ showAddStockForm: externalShowForm, setShowA
         </div>
       </div>
 
-      {/* 3. STATUS SUB-TABS ROW (EXACT MATCH FOR BOM & PO DESIGN) */}
-      <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', gap: '20px', padding: '4px 0', alignItems: 'center', flexWrap: 'wrap' }}>
+      {/* 3. STATUS FILTER PILLS */}
+      <div style={{ display: 'flex', gap: '8px', padding: '4px 0', alignItems: 'center', flexWrap: 'wrap' }}>
         {pageConfig.tabs.map((tab) => {
           const isActive = selectedTab === tab.id;
           return (
             <button
               key={tab.id}
+              type="button"
               onClick={() => setSelectedTab(tab.id)}
               style={{
-                border: 'none',
-                background: 'transparent',
-                padding: '10px 4px',
-                fontSize: '13px',
-                fontWeight: 'bold',
-                color: isActive ? '#2563eb' : '#64748b',
-                borderBottom: isActive ? '2px solid #2563eb' : '2px solid transparent',
+                backgroundColor: isActive ? '#0E7490' : '#FFFFFF',
+                color: isActive ? '#FFFFFF' : '#334155',
+                border: isActive ? '1px solid #0E7490' : '1px solid #E2E8F0',
+                borderRadius: '9999px',
+                padding: '7px 14px',
+                fontSize: '12.5px',
+                fontWeight: '700',
                 cursor: 'pointer',
-                display: 'flex',
+                display: 'inline-flex',
                 alignItems: 'center',
-                gap: '6px'
+                gap: '8px',
+                boxShadow: isActive ? '0 2px 8px rgba(14, 116, 144, 0.25)' : '0 1px 2px rgba(15, 23, 42, 0.04)',
+                transition: 'all 0.15s ease',
+                whiteSpace: 'nowrap'
               }}
             >
-              {tab.label}
+              <span>{tab.label}</span>
               <span style={{
-                fontSize: '10px',
-                padding: '2px 7px',
-                borderRadius: '12px',
-                backgroundColor: tab.bg,
-                color: tab.fg,
-                fontWeight: 'bold'
+                fontSize: '11px',
+                padding: '1px 7px',
+                borderRadius: '9999px',
+                backgroundColor: isActive ? 'rgba(255, 255, 255, 0.22)' : (tab.bg || '#F1F5F9'),
+                color: isActive ? '#FFFFFF' : (tab.fg || '#475569'),
+                fontWeight: '800',
+                lineHeight: '1.3'
               }}>
                 {tab.count}
               </span>

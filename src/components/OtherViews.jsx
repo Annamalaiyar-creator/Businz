@@ -200,7 +200,7 @@ export default function OtherViews(props) {
         {activeTab === 'Dispatch Report' && <DispatchReportView {...props} />}
 
         {/* Sales CRM Master Engine (Individual Dedicated Tabs) */}
-        {['Sales CRM', 'CRM', 'Sales & CRM', 'Leads', 'Leads Directory', 'Customers', 'Customer Management', 'Opportunities', 'Follow-ups', 'WhatsApp Inbox', 'Quotations', 'Product Catalog', 'Sales Reports', 'IndiaMART', 'IndiaMART Integration', 'IndiaMART CRM Integration'].includes(activeTab) && (
+        {['Sales CRM', 'CRM', 'Sales & CRM', 'Customers', 'Customer Management', 'Opportunities', 'Follow-ups', 'WhatsApp Inbox', 'Quotations', 'Product Catalog', 'Sales Reports', 'IndiaMART', 'IndiaMART Integration', 'IndiaMART CRM Integration'].includes(activeTab) && (
           <SalesCrmEngine
             userRole={userRole}
             activeTab={activeTab}
@@ -210,7 +210,7 @@ export default function OtherViews(props) {
           />
         )}
 
-        {SMART_LEADS_ENABLED && activeTab === 'Smart Leads' && (
+        {SMART_LEADS_ENABLED && ['Smart Leads', 'Leads', 'Leads Directory'].includes(activeTab) && (
           <SmartLeadsApp
             userRole={userRole}
             onNavigateTab={props.onChangeTab || props.onSelectTab}

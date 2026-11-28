@@ -18,6 +18,7 @@ import {
 import { searchCustomers } from '../../services/customerService';
 import { getHsnCode, is5PctSolarProduct } from '../../utils/hsnCodeService';
 import { PRESET_THEMES, getPresetTheme } from '../../utils/presetThemes';
+import QuickAddCustomerModal from './QuickAddCustomerModal';
 
 export default function PiCreatorEditorSection({ ctx }) {
   const {
@@ -169,57 +170,7 @@ export default function PiCreatorEditorSection({ ctx }) {
     };
   }, [draggedItemIndex]);
 
-  const [piGstLoading, setPiGstLoading] = React.useState(false);
-  const [piGstNotice, setPiGstNotice] = React.useState(null);
-  const [piGstAddresses, setPiGstAddresses] = React.useState([]);
-  const lastAutoFetchedPiGstRef = React.useRef('');
-
-  const applyPiGstAddress = (addrObj) => {
-    if (!addrObj) return;
-    const streetVal = [addrObj.address1, addrObj.address2].filter(Boolean).join(', ') || addrObj.address || '';
-    if (streetVal) setBillingStreet(streetVal);
-    if (addrObj.city) setBillingCity(addrObj.city);
-    if (addrObj.state) setBillingState(addrObj.state);
-    if (addrObj.pincode) setBillingPincode(addrObj.pincode);
-    if (sameAsBilling) {
-      if (streetVal) setDeliveryStreet(streetVal);
-      if (addrObj.city) setDeliveryCity(addrObj.city);
-      if (addrObj.state) setDeliveryState(addrObj.state);
-      if (addrObj.pincode) setDeliveryPincode(addrObj.pincode);
-    }
-  };
-
-  const handleFetchPiGstDetails = async (overrideGst) => {
-    const cleanGst = String(overrideGst ?? gstNo ?? '').trim().toUpperCase();
-    if (cleanGst.length !== 15) {
-      setPiGstNotice({ ok: false, msg: 'Enter a valid 15-character GSTIN first.' });
-      return;
-    }
-    setPiGstLoading(true);
-    setPiGstNotice(null);
-    try {
-      const res = await fetch(`/api/gst-lookup?gstin=${encodeURIComponent(cleanGst)}`);
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || data.success === false) {
-        setPiGstNotice({ ok: false, msg: data.error || 'GST lookup failed.' });
-        return;
-      }
-      setGstNo(cleanGst);
-      const resolvedName = data.legalName || data.tradeName || '';
-      if (resolvedName) setVendorName(resolvedName);
-      const addrs = Array.isArray(data.addresses) && data.addresses.length > 0 ? data.addresses : [];
-      setPiGstAddresses(addrs);
-      applyPiGstAddress(addrs[0] || data);
-      setPiGstNotice({
-        ok: true,
-        msg: `Fetched ${resolvedName || cleanGst} (${data.status || 'Active'})${addrs.length > 1 ? ` · ${addrs.length} addresses found` : ''}`
-      });
-    } catch (err) {
-      setPiGstNotice({ ok: false, msg: err?.message || 'Failed to fetch GST details.' });
-    } finally {
-      setPiGstLoading(false);
-    }
-  };
+  const [showAddCustomerModal, setShowAddCustomerModal] = React.useState(false);
 
   return (
     <>
@@ -442,13 +393,35 @@ export default function PiCreatorEditorSection({ ctx }) {
 
             {/* SECTION 2: CUSTOMER INFORMATION & ADDRESSES (NO DELIVERY PROOF AS INSTRUCTED) */}
             <div style={{ backgroundColor: 'white', padding: '24px', borderRadius: '16px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{ width: '28px', height: '28px', borderRadius: '8px', backgroundColor: '#0E7490', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: '800' }}>
-                  2
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{ width: '28px', height: '28px', borderRadius: '8px', backgroundColor: '#0E7490', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: '800' }}>
+                    2
+                  </div>
+                  <h3 style={{ fontSize: '14px', fontWeight: '800', color: '#0E7490', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    CUSTOMER INFORMATION & ADDRESSES
+                  </h3>
                 </div>
-                <h3 style={{ fontSize: '14px', fontWeight: '800', color: '#0E7490', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  CUSTOMER INFORMATION & ADDRESSES
-                </h3>
+                <button
+                  type="button"
+                  onClick={() => setShowAddCustomerModal(true)}
+                  style={{
+                    height: '34px',
+                    padding: '0 14px',
+                    borderRadius: '9px',
+                    border: '1px solid #0E7490',
+                    backgroundColor: '#ECFEFF',
+                    color: '#0E7490',
+                    fontSize: '12.5px',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <Plus size={14} /> Add Customer
+                </button>
               </div>
 
               {/* Row 1: Customer Contact details */}
@@ -695,81 +668,38 @@ export default function PiCreatorEditorSection({ ctx }) {
                 </div>
 
                 <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                    <label style={{ fontSize: '12px', fontWeight: '700', color: '#334155', margin: 0 }}>
-                      Customer GSTIN
-                    </label>
-                  </div>
-                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                    <input id="performa-invoice-33aabcv1234f1z5" name="33AABCV1234F1Z5" aria-label="33AABCV1234F1Z5"
-                      type="text"
-                      placeholder="e.g. 33AABCV1234F1Z5"
-                      value={gstNo}
-                      onChange={(e) => {
-                        const val = e.target.value.toUpperCase();
-                        const cleanVal = val.trim();
-                        setGstNo(val);
-                        if (cleanVal.length >= 2) {
-                          const sCode = cleanVal.substring(0, 2);
-                          const mappedState = GST_STATE_MAP[sCode];
-                          if (mappedState && (!billingState || billingState.trim() === '')) {
-                            setBillingState(mappedState);
-                            if (sameAsBilling) setDeliveryState(mappedState);
-                          }
+                  <label htmlFor="performa-invoice-33aabcv1234f1z5" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                    Customer GSTIN
+                  </label>
+                  <input id="performa-invoice-33aabcv1234f1z5" name="33AABCV1234F1Z5" aria-label="33AABCV1234F1Z5"
+                    type="text"
+                    placeholder="e.g. 33AABCV1234F1Z5"
+                    value={gstNo}
+                    onChange={(e) => {
+                      const val = e.target.value.toUpperCase();
+                      setGstNo(val);
+                      if (val.trim().length >= 2) {
+                        const sCode = val.trim().substring(0, 2);
+                        const mappedState = GST_STATE_MAP[sCode];
+                        if (mappedState && (!billingState || billingState.trim() === '')) {
+                          setBillingState(mappedState);
+                          if (sameAsBilling) setDeliveryState(mappedState);
                         }
-                        if (/^[0-9]{2}[A-Z0-9]{13}$/.test(cleanVal)) {
-                          if (lastAutoFetchedPiGstRef.current !== cleanVal) {
-                            lastAutoFetchedPiGstRef.current = cleanVal;
-                            handleFetchPiGstDetails(cleanVal);
-                          }
-                        } else {
-                          lastAutoFetchedPiGstRef.current = '';
-                          if (piGstNotice) setPiGstNotice(null);
-                          if (piGstAddresses.length > 0) setPiGstAddresses([]);
-                        }
-                      }}
-                      style={{
-                        width: '100%',
-                        height: '42px',
-                        borderRadius: '10px',
-                        border: piGstLoading ? '1px solid #0E7490' : '1px solid #E2E8F0',
-                        padding: piGstLoading ? '0 105px 0 14px' : '0 14px',
-                        fontSize: '13px',
-                        fontWeight: '700',
-                        color: '#0F172A',
-                        outline: 'none',
-                        boxSizing: 'border-box'
-                      }}
-                     />
-                    {piGstLoading && (
-                      <div style={{ position: 'absolute', right: '10px', display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '4px 8px', borderRadius: '6px', backgroundColor: '#ECFEFF', color: '#0E7490', fontSize: '11px', fontWeight: '700', pointerEvents: 'none' }}>
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                          <path d="M12 2a10 10 0 0 1 10 10">
-                            <animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.75s" repeatCount="indefinite" />
-                          </path>
-                        </svg>
-                        <span>Fetching...</span>
-                      </div>
-                    )}
-                  </div>
-                  {piGstNotice && (
-                    <div style={{ marginTop: '5px', fontSize: '11px', fontWeight: '600', color: piGstNotice.ok ? '#059669' : '#DC2626' }}>
-                      {piGstNotice.msg}
-                    </div>
-                  )}
-                  {piGstAddresses.length > 1 && (
-                    <select
-                      onChange={(e) => {
-                        const chosen = piGstAddresses[Number(e.target.value)];
-                        if (chosen) applyPiGstAddress(chosen);
-                      }}
-                      style={{ marginTop: '6px', width: '100%', height: '36px', borderRadius: '8px', border: '1px solid #BAE6FD', backgroundColor: '#F0F9FF', padding: '0 10px', fontSize: '11.5px', fontWeight: '600', color: '#0369A1' }}
-                    >
-                      {piGstAddresses.map((a, idx) => (
-                        <option key={idx} value={idx}>{a.label}: {a.address}</option>
-                      ))}
-                    </select>
-                  )}
+                      }
+                    }}
+                    style={{
+                      width: '100%',
+                      height: '42px',
+                      borderRadius: '10px',
+                      border: '1px solid #E2E8F0',
+                      padding: '0 14px',
+                      fontSize: '13px',
+                      fontWeight: '700',
+                      color: '#0F172A',
+                      outline: 'none',
+                      boxSizing: 'border-box'
+                    }}
+                   />
                 </div>
               </div>
 
@@ -2469,6 +2399,20 @@ export default function PiCreatorEditorSection({ ctx }) {
           </div>
         );
       })()}
+      <QuickAddCustomerModal
+        isOpen={showAddCustomerModal}
+        onClose={() => setShowAddCustomerModal(false)}
+        existingCustomers={customerList}
+        activeUserName={salesPerson || getActiveUserName?.() || 'System User'}
+        onCreated={(newCustomer) => {
+          setCustomerList((prev) => [
+            newCustomer,
+            ...(prev || []).filter((c) => (c.id || c.customerCode) !== (newCustomer.id || newCustomer.customerCode))
+          ]);
+          handleSelectCustomer(newCustomer);
+          setShowAddCustomerModal(false);
+        }}
+      />
     </>
   );
 }

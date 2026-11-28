@@ -1517,7 +1517,7 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
           </div>
 
           {/* 2. STATUS TABS ROW (Exact PO Tabs Style & Color Palettes) */}
-          <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', gap: '20px', padding: '4px 0', alignItems: 'center', flexWrap: 'wrap', marginBottom: '16px' }}>
+          <div style={{ display: 'flex', gap: '8px', padding: '4px 0', alignItems: 'center', flexWrap: 'wrap', marginBottom: '16px' }}>
             {[
               { id: 'All', label: 'All orders', count: statusCounts.all, bg: '#e2e8f0', fg: '#475569' },
               { id: 'Draft', label: 'Draft', count: statusCounts.draft, bg: '#fff7ed', fg: '#c2410c' },
@@ -1526,30 +1526,45 @@ export default function DeliveryChallansView({ userRole = 'Procurement Head', on
               { id: 'Partially Returned', label: 'Partially Returned', count: statusCounts.partiallyReturned, bg: '#FEF3C7', fg: '#B45309' },
               { id: 'Delivered', label: 'Closed / Delivered', count: statusCounts.delivered, bg: '#dcfce7', fg: '#15803d' },
               { id: 'Cancelled', label: 'Cancelled', count: statusCounts.cancelled, bg: '#fee2e2', fg: '#b91c1c' }
-            ].map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => { setDcTab(tab.id); setCurrentPage(1); }}
-                style={{
-                  border: 'none',
-                  background: 'transparent',
-                  padding: '10px 4px',
-                  fontSize: '13px',
-                  fontWeight: 'bold',
-                  color: dcTab === tab.id ? '#2563eb' : '#64748b',
-                  borderBottom: dcTab === tab.id ? '2px solid #2563eb' : '2px solid transparent',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}
-              >
-                <span>{tab.label}</span>
-                <span style={{ fontSize: '10px', fontWeight: 'bold', backgroundColor: tab.bg, color: tab.fg, padding: '1px 6px', borderRadius: '10px' }}>
-                  {tab.count}
-                </span>
-              </button>
-            ))}
+            ].map(tab => {
+              const isSelected = dcTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => { setDcTab(tab.id); setCurrentPage(1); }}
+                  style={{
+                    backgroundColor: isSelected ? '#0E7490' : '#FFFFFF',
+                    color: isSelected ? '#FFFFFF' : '#334155',
+                    border: isSelected ? '1px solid #0E7490' : '1px solid #E2E8F0',
+                    borderRadius: '9999px',
+                    padding: '7px 14px',
+                    fontSize: '12.5px',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    boxShadow: isSelected ? '0 2px 8px rgba(14, 116, 144, 0.25)' : '0 1px 2px rgba(15, 23, 42, 0.04)',
+                    transition: 'all 0.15s ease',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  <span>{tab.label}</span>
+                  <span style={{
+                    fontSize: '11px',
+                    fontWeight: '800',
+                    backgroundColor: isSelected ? 'rgba(255, 255, 255, 0.22)' : (tab.bg || '#F1F5F9'),
+                    color: isSelected ? '#FFFFFF' : (tab.fg || '#475569'),
+                    padding: '1px 7px',
+                    borderRadius: '9999px',
+                    lineHeight: '1.3'
+                  }}>
+                    {tab.count}
+                  </span>
+                </button>
+              );
+            })}
           </div>
 
           {/* 3. TABLE CARD (Exact custom-table & section-card classes from PO) */}

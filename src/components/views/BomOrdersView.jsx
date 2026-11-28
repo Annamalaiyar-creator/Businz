@@ -2142,13 +2142,14 @@ export default function BomOrdersView(props) {
       { id: 'address_proof_pending', label: 'Address Proof Pending', count: tabBaseBomList.filter(b => isBomAddressProofPending(b) || getBomActiveStage(b).name === 'Address Proof Pending (Sales)').length, bg: '#fee2e2', fg: '#b91c1c' }
     ] : [
       { id: 'All', label: 'All BOMs', count: tabBaseBomList.filter(b => !(b.cancelled || b.status === 'Cancelled & Stock Restored' || (b.status || '').toLowerCase().includes('cancel'))).length, bg: '#e2e8f0', fg: '#475569' },
-      { id: 'Pending', label: 'Pending Sales Confirmation', count: tabBaseBomList.filter(b => (!b.status || b.status === 'Pending Sales Confirmation' || b.status.includes('Pending Confirmation') || b.status === 'Draft') && !b.cancelled).length, bg: '#fef3c7', fg: '#b45309' },
-      { id: 'AddressAction', label: 'Address Proof Requested', count: tabBaseBomList.filter(b => (b.addressProofReuploadRequested || b.status === 'Address Proof Requested from Sales' || needsSalesAddressProof(b)) && !b.cancelled).length, bg: '#fee2e2', fg: '#b91c1c' },
-      { id: 'Sent', label: 'Sales Confirmed / Forwarded', count: tabBaseBomList.filter(b => (b.status === 'Sales Confirmed - Sent to Dispatch' || b.status === 'Sent to Production' || b.status === 'Confirmed' || b.salesConfirmed) && !b.fullyCompleted && b.status !== 'Completed' && b.status !== 'Closed' && !b.cancelled).length, bg: '#dcfce7', fg: '#166534' },
+      { id: 'Pending', label: 'Reconfirmation Pending', count: tabBaseBomList.filter(b => (!b.status || b.status === 'Pending Sales Confirmation' || b.status.includes('Pending Confirmation') || b.status === 'Draft') && !b.cancelled).length, bg: '#fef3c7', fg: '#b45309' },
+      { id: 'PaymentPending', label: 'Payment Proof Pending', count: tabBaseBomList.filter(b => getBomActiveStage(b).name === 'Payment Proof Pending (Sales)' && !b.cancelled).length, bg: '#fffbeb', fg: '#b45309' },
+      { id: 'AddressAction', label: 'Address Proof Requested', count: tabBaseBomList.filter(b => !b.cancelled && !(b.invoiceConfirmed || b.invoiceGenerated || b.accountsVerified || b.isAccountsDone) && (b.addressProofReuploadRequested || b.status === 'Address Proof Requested from Sales' || getBomActiveStage(b).name === 'Address Proof Pending (Sales)')).length, bg: '#fee2e2', fg: '#b91c1c' },
+      { id: 'Sent', label: 'Sales Confirmed', count: tabBaseBomList.filter(b => (b.status === 'Sales Confirmed - Sent to Dispatch' || b.status === 'Sent to Production' || b.status === 'Confirmed' || b.salesConfirmed) && !b.fullyCompleted && b.status !== 'Completed' && b.status !== 'Closed' && !b.cancelled).length, bg: '#dcfce7', fg: '#166534' },
       { id: 'PendingPrint', label: 'Pending Print', count: tabBaseBomList.filter(b => (!b.dispatchPrinted && !b.isPrinted) && !(b.status === 'Completed' || b.status === 'Closed' || b.status === 'CLOSED' || b.fullyCompleted || b.status === 'Fully Dispatched & Delivered' || (b.status || '').toLowerCase().includes('completed') || (b.status || '').toLowerCase().includes('closed')) && !(b.status === 'Cancelled & Stock Restored' || b.cancelled)).length, bg: '#fef3c7', fg: '#b45309' },
       { id: 'Printed', label: 'Print Taken', count: tabBaseBomList.filter(b => (b.dispatchPrinted || b.isPrinted) && !(b.status === 'Completed' || b.status === 'Closed' || b.status === 'CLOSED' || b.fullyCompleted || b.status === 'Fully Dispatched & Delivered' || (b.status || '').toLowerCase().includes('completed') || (b.status || '').toLowerCase().includes('closed')) && !(b.status === 'Cancelled & Stock Restored' || b.cancelled)).length, bg: '#dcfce7', fg: '#166534' },
-      { id: 'Closed', label: 'Closed / Completed', count: tabBaseBomList.filter(b => b && (b.status === 'Completed' || b.status === 'Closed' || b.status === 'CLOSED' || b.fullyCompleted || b.status === 'Fully Dispatched & Delivered' || (b.status || '').toLowerCase().includes('completed') || (b.status || '').toLowerCase().includes('closed')) && !b.cancelled).length, bg: '#ecfdf5', fg: '#047857' },
-      { id: 'Cancelled', label: 'Cancelled & Restored', count: tabBaseBomList.filter(b => b.status === 'Cancelled & Stock Restored' || b.cancelled || (b.status || '').toLowerCase().includes('cancel')).length, bg: '#fee2e2', fg: '#dc2626' }
+      { id: 'Closed', label: 'Dispatched', count: tabBaseBomList.filter(b => b && (b.status === 'Completed' || b.status === 'Closed' || b.status === 'CLOSED' || b.fullyCompleted || b.status === 'Fully Dispatched & Delivered' || (b.status || '').toLowerCase().includes('completed') || (b.status || '').toLowerCase().includes('closed')) && !b.cancelled).length, bg: '#ecfdf5', fg: '#047857' },
+      { id: 'Cancelled', label: 'Cancelled', count: tabBaseBomList.filter(b => b.status === 'Cancelled & Stock Restored' || b.cancelled || (b.status || '').toLowerCase().includes('cancel')).length, bg: '#fee2e2', fg: '#dc2626' }
     ],
     headers: ['BOM Code', 'Date & Time', 'Customer Name', 'Sales Person', 'Payment Type', 'Total (₹)', 'Printout Status', 'Status'],
     rows: (visibleBomStore || []).filter(Boolean).sort(compareBomDescending).map(b => {
@@ -2400,8 +2401,10 @@ export default function BomOrdersView(props) {
         matchesTab = !isPrinted && !isCancelled && !isClosedOrDone;
       } else if (subTab === 'printed') {
         matchesTab = isPrinted && !isCancelled && !isClosedOrDone;
+      } else if (subTab === 'paymentpending') {
+        matchesTab = getBomActiveStage(r).name === 'Payment Proof Pending (Sales)' && !isCancelled;
       } else if (subTab === 'addressaction') {
-        matchesTab = Boolean(r.addressProofReuploadRequested || rStatus.includes('address proof') || needsSalesAddressProof(r)) && !isCancelled;
+        matchesTab = Boolean(r.addressProofReuploadRequested || rStatus.includes('address proof') || getBomActiveStage(r).name === 'Address Proof Pending (Sales)') && !isCancelled && !isClosedOrDone && !(r.invoiceConfirmed || r.invoiceGenerated || r.accountsVerified || r.isAccountsDone);
       } else if (subTab.includes('closed') || subTab.includes('complete')) {
         matchesTab = Boolean(isClosedOrDone) && !isCancelled;
       } else if (subTab.includes('cancel')) {
@@ -2811,7 +2814,7 @@ export default function BomOrdersView(props) {
     setNewBomTransporterName(sourceBom.transporterName || '');
     setNewBomDestination(sourceBom.destination || '');
     setNewBomVehicleNo(sourceBom.vehicleNo || '');
-    setNewBomTransportScope(sourceBom.transportScope || 'VRM Structures');
+    setNewBomTransportScope(sourceBom.transportScope || '');
     setNewBomPaymentType(normalizePaymentTerm(sourceBom.paymentType || sourceBom.paymentTerms || '100% Paid'));
     setNewBomPartialAmount(sourceBom.partialAmount != null ? String(sourceBom.partialAmount) : '');
     setNewBomCreditDays(sourceBom.creditDays || 7);

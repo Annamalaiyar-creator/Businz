@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  Plus, Check, Trash2, Eye, FileText, AlertCircle, XCircle, CheckCircle, RotateCcw, Truck, Upload, Printer, Download, CreditCard, CheckSquare, Camera, Video, List, Image, Lock, Boxes, User, Receipt, Layers, X, Save, Clock, UploadCloud, FileCheck
+  Plus, Check, Trash2, Eye, FileText, AlertCircle, XCircle, CheckCircle, RotateCcw, Truck, Upload, Printer, Download, CreditCard, CheckSquare, Camera, Video, List, Image, Lock, Boxes, User, Receipt, Layers, X, Save, Clock, UploadCloud, FileCheck, ShoppingCart
 } from 'lucide-react';
 import { saveCloudBomRow } from '../../../utils/supabaseDataSync';
 import {
@@ -764,6 +764,39 @@ export default function BomConfirmAuditSection({ ctx }) {
     setSelectedPresetPicker('');
   };
 
+  const handleAddReconfirmPresetItem = (groupId) => {
+    if (!groupId) return;
+    const grp = modalPresetGroups.find(g => g.groupId === groupId) || {};
+    setConfirmingBomModal(prev => {
+      const list = [...(prev.items || [])];
+      let lastIdx = -1;
+      list.forEach((it, idx) => {
+        if ((it.presetGroupId || 'legacy_default') === groupId) lastIdx = idx;
+      });
+      const newItem = {
+        name: '',
+        category: '',
+        specs: '',
+        uom: 'NOS',
+        unit: 'NOS',
+        qty: 1,
+        baseQty: 1,
+        rate: 0,
+        gstRate: grp.gstRate || '18%',
+        isPresetItem: true,
+        presetGroupId: groupId,
+        presetName: grp.presetName || prev.presetName || '',
+        confirmed: false
+      };
+      if (lastIdx >= 0) {
+        list.splice(lastIdx + 1, 0, newItem);
+      } else {
+        list.push(newItem);
+      }
+      return { ...prev, items: list };
+    });
+  };
+
   const handleUploadReconfirmDeliveryProofs = async (fileList) => {
     const files = Array.from(fileList || []).filter(Boolean);
     if (files.length === 0) return;
@@ -1031,55 +1064,72 @@ export default function BomConfirmAuditSection({ ctx }) {
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', width: '100%', fontFamily: "'DM Sans', sans-serif", backgroundColor: '#F8FAFC', padding: '24px', borderRadius: '16px', boxSizing: 'border-box' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <h1 style={{ fontSize: '22px', fontWeight: '800', color: '#0F172A', margin: 0 }}>
-                {isCancelled
-                  ? `BOM Order (Cancelled) — ${confirmingBomModal.bomCode}`
-                  : (isAlreadyForwarded ? `BOM Details & Order Summary — ${confirmingBomModal.bomCode}` : `BOM Verification & Order Editing — ${confirmingBomModal.bomCode}`)}
-              </h1>
-              {isCancelled && (
-                <span style={{
-                  backgroundColor: '#FEE2E2', color: '#DC2626',
-                  fontSize: '11px', fontWeight: '800', padding: '3px 10px',
-                  borderRadius: '12px', border: '1px solid #FECACA'
-                }}>
-                  CANCELLED • VIEW ONLY
-                </span>
-              )}
-              {(confirmingBomModal.isEdited || (Array.isArray(confirmingBomModal.editHistory) && confirmingBomModal.editHistory.length > 0)) && (
-                <span style={{
-                  backgroundColor: '#FEF3C7', color: '#B45309',
-                  fontSize: '11px', fontWeight: '800', padding: '3px 10px',
-                  borderRadius: '12px', border: '1px solid #FDE68A',
-                  display: 'inline-flex', alignItems: 'center', gap: '4px'
-                }}>
-                  Edited{confirmingBomModal.lastEditedBy ? ` • ${confirmingBomModal.lastEditedBy}` : ''}{confirmingBomModal.lastEditedAt ? ` (${new Date(confirmingBomModal.lastEditedAt).toLocaleString('en-IN')})` : ''}
-                </span>
-              )}
-              {isCeo && (
-                <span style={{
-                  backgroundColor: '#ECFEFF', color: '#0E7490',
-                  fontSize: '11px', fontWeight: '800', padding: '3px 10px',
-                  borderRadius: '12px', border: '1px solid #A5F3FC',
-                  display: 'inline-flex', alignItems: 'center', gap: '4px'
-                }}>
-                  EXECUTIVE VIEW ONLY
-                </span>
-              )}
+        {/* Top Blue Gradient Page Title Bar (Same as Create BOM) */}
+        <div style={{
+          background: 'linear-gradient(135deg, #075985 0%, #0E7490 50%, #0891B2 100%)',
+          borderRadius: '18px',
+          padding: '24px 28px',
+          color: '#FFFFFF',
+          boxShadow: '0 10px 25px -5px rgba(14, 116, 144, 0.4)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '14px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <div style={{ width: '48px', height: '48px', borderRadius: '14px', backgroundColor: 'rgba(255,255,255,0.18)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <ShoppingCart style={{ width: '24px', height: '24px', color: '#FFFFFF' }} />
             </div>
-            <span style={{ fontSize: '12px', color: '#64748B', marginTop: '2px', display: 'block' }}>
-              {isCancelled
-                ? 'This BOM was cancelled and reserved stock was released back into inventory.'
-                : (isAlreadyForwarded
-                  ? 'Review verified bill of materials, product breakdown, and order specifications.'
-                  : 'Review & modify order dates, document type, customer/contact info, addresses, presets, products, transport details, payment terms, or remarks before final dispatch.')}
-            </span>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                <h1 style={{ fontSize: '22px', fontWeight: '900', color: '#FFFFFF', margin: 0, letterSpacing: '-0.3px' }}>
+                  {isCancelled
+                    ? `BOM Order (Cancelled) — ${confirmingBomModal.bomCode}`
+                    : (isAlreadyForwarded ? `BOM Details & Order Summary — ${confirmingBomModal.bomCode}` : `Sales Reconfirmation — ${confirmingBomModal.bomCode}`)}
+                </h1>
+                <span style={{
+                  backgroundColor: isCancelled ? '#FEE2E2' : (isAlreadyForwarded ? '#DCFCE7' : '#FEF3C7'),
+                  color: isCancelled ? '#DC2626' : (isAlreadyForwarded ? '#166534' : '#B45309'),
+                  padding: '4px 12px',
+                  borderRadius: '20px',
+                  fontSize: '11px',
+                  fontWeight: '800'
+                }}>
+                  {confirmingBomModal.status}
+                </span>
+                {(confirmingBomModal.isEdited || (Array.isArray(confirmingBomModal.editHistory) && confirmingBomModal.editHistory.length > 0)) && (
+                  <span style={{
+                    backgroundColor: '#FEF3C7', color: '#B45309',
+                    fontSize: '11px', fontWeight: '800', padding: '3px 10px',
+                    borderRadius: '12px', border: '1px solid #FDE68A',
+                    display: 'inline-flex', alignItems: 'center', gap: '4px'
+                  }}>
+                    Edited{confirmingBomModal.lastEditedBy ? ` • ${confirmingBomModal.lastEditedBy}` : ''}{confirmingBomModal.lastEditedAt ? ` (${new Date(confirmingBomModal.lastEditedAt).toLocaleString('en-IN')})` : ''}
+                  </span>
+                )}
+                {isCeo && (
+                  <span style={{
+                    backgroundColor: 'rgba(255,255,255,0.2)', color: '#FFFFFF',
+                    fontSize: '11px', fontWeight: '800', padding: '3px 10px',
+                    borderRadius: '12px', border: '1px solid rgba(255,255,255,0.4)',
+                    display: 'inline-flex', alignItems: 'center', gap: '4px'
+                  }}>
+                    EXECUTIVE VIEW ONLY
+                  </span>
+                )}
+              </div>
+              <p style={{ fontSize: '13px', color: '#CFFAFE', margin: '4px 0 0 0' }}>
+                {isCancelled
+                  ? 'This BOM was cancelled and reserved stock was released back into inventory.'
+                  : (isAlreadyForwarded
+                    ? 'Review verified bill of materials, product breakdown, and order specifications.'
+                    : 'Verify order details, tick every product item checkbox, and forward to Dispatch.')}
+              </p>
+            </div>
           </div>
 
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-
             {isAlreadyForwarded && !isCeo && ['Partial Paid', 'Partial Payment', 'Payment While Dispatch', 'Credit Payment'].includes(confirmingBomModal.paymentType) && (
               <button
                 type="button"
@@ -1089,8 +1139,8 @@ export default function BomConfirmAuditSection({ ctx }) {
                   setUploadPaymentModal(target);
                 }}
                 style={{
-                  border: 'none',
-                  backgroundColor: '#0E7490',
+                  border: '1px solid rgba(255,255,255,0.35)',
+                  backgroundColor: 'rgba(255,255,255,0.16)',
                   color: 'white',
                   height: '40px',
                   padding: '0 18px',
@@ -1100,8 +1150,7 @@ export default function BomConfirmAuditSection({ ctx }) {
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '6px',
-                  boxShadow: '0 2px 4px rgba(14,116,144,0.3)'
+                  gap: '6px'
                 }}
               >
                 <CreditCard style={{ width: '15px', height: '15px' }} /> Update Payment Details
@@ -1177,25 +1226,21 @@ export default function BomConfirmAuditSection({ ctx }) {
         )}
 
         {/* ORDER DETAILS & ADDRESSES */}
-        <div style={{ backgroundColor: 'white', padding: '24px', borderRadius: '16px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)', display: 'flex', flexDirection: 'column', gap: '18px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #F1F5F9', paddingBottom: '12px' }}>
-            <span style={{ fontSize: '11px', fontWeight: '800', color: '#0E7490', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              {isAlreadyForwarded ? 'BILL OF MATERIALS SUMMARY' : '1. ORDER INFORMATION, CUSTOMER DETAILS & ADDRESSES'}
-            </span>
-            <span style={{
-              backgroundColor: isAlreadyForwarded ? '#DCFCE7' : '#FEF3C7',
-              color: isAlreadyForwarded ? '#166534' : '#B45309',
-              padding: '4px 12px', borderRadius: '12px', fontSize: '11px', fontWeight: '800', display: 'inline-block'
-            }}>
-              {confirmingBomModal.status}
-            </span>
+        {/* SECTION 1: ORDER INFORMATION (Same card format as Create BOM) */}
+        <div style={{ backgroundColor: 'white', padding: '24px', borderRadius: '16px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{ width: '28px', height: '28px', borderRadius: '8px', backgroundColor: '#0E7490', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: '800' }}>
+              1
+            </div>
+            <h3 style={{ fontSize: '14px', fontWeight: '800', color: '#0E7490', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              ORDER INFORMATION
+            </h3>
           </div>
 
-          {/* Row 1: Order Information (Order Date, Delivery Date, Document Type, Order Number, Sales Person) */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '16px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '16px' }}>
             <div>
-              <label htmlFor="reconfirm-bom-order-date" style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', display: 'block', marginBottom: '6px' }}>
-                ORDER DATE
+              <label htmlFor="reconfirm-bom-order-date" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                Order Date
               </label>
               <input
                 id="reconfirm-bom-order-date"
@@ -1203,19 +1248,16 @@ export default function BomConfirmAuditSection({ ctx }) {
                 readOnly
                 disabled
                 value={confirmingBomModal.date || confirmingBomModal.bomDate || (confirmingBomModal.createdAt ? String(confirmingBomModal.createdAt).split('T')[0] : '—')}
-                style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #E2E8F0', padding: '0 12px', fontSize: '13px', fontWeight: '700', color: '#64748B', backgroundColor: '#F1F5F9', cursor: 'not-allowed', boxSizing: 'border-box', outline: 'none' }}
+                style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', fontWeight: '600', color: '#64748B', backgroundColor: '#F1F5F9', cursor: 'not-allowed', boxSizing: 'border-box', outline: 'none' }}
               />
             </div>
 
             <div>
-              <label htmlFor="reconfirm-bom-delivery-date" style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
-                DELIVERY DATE {!isAlreadyForwarded && <span style={{ color: '#2563EB', fontSize: '10px' }}>(Editable)</span>}
-                {confirmingBomModal.editedFields?.deliveryDate && (
-                  <span title={confirmingBomModal.editedFields.deliveryDate} style={{ backgroundColor: '#FEF3C7', color: '#B45309', border: '1px solid #FDE68A', padding: '1px 6px', borderRadius: '8px', fontSize: '10px', fontWeight: '800' }}>Edited</span>
-                )}
+              <label htmlFor="reconfirm-bom-delivery-date" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                Delivery Date <span style={{ color: '#EF4444' }}>*</span>
               </label>
               {isAlreadyForwarded ? (
-                <div style={{ fontSize: '13px', fontWeight: '700', color: '#0F172A', height: '40px', display: 'flex', alignItems: 'center', backgroundColor: '#F8FAFC', padding: '0 12px', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+                <div style={{ fontSize: '13px', fontWeight: '700', color: '#0F172A', height: '42px', display: 'flex', alignItems: 'center', backgroundColor: '#F8FAFC', padding: '0 14px', borderRadius: '10px', border: '1px solid #E2E8F0', boxSizing: 'border-box' }}>
                   {confirmingBomModal.deliveryDate || '—'}
                 </div>
               ) : (
@@ -1226,25 +1268,22 @@ export default function BomConfirmAuditSection({ ctx }) {
                   type="date"
                   value={confirmingBomModal.deliveryDate || ''}
                   onChange={(e) => setConfirmingBomModal({ ...confirmingBomModal, deliveryDate: e.target.value })}
-                  style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', color: '#0F172A', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}
+                  style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none' }}
                 />
               )}
             </div>
 
             <div>
-              <label htmlFor="reconfirm-bom-doc-type" style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
-                DOCUMENT TYPE {!isAlreadyForwarded && <span style={{ color: '#2563EB', fontSize: '10px' }}>(Editable)</span>}
-                {confirmingBomModal.editedFields?.docType && (
-                  <span title={confirmingBomModal.editedFields.docType} style={{ backgroundColor: '#FEF3C7', color: '#B45309', border: '1px solid #FDE68A', padding: '1px 6px', borderRadius: '8px', fontSize: '10px', fontWeight: '800' }}>Edited</span>
-                )}
+              <label htmlFor="reconfirm-bom-doc-type" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                Document Type <span style={{ color: '#EF4444' }}>*</span>
               </label>
               {isAlreadyForwarded ? (
-                <div style={{ height: '40px', display: 'flex', alignItems: 'center' }}>
+                <div style={{ height: '42px', display: 'flex', alignItems: 'center' }}>
                   <span style={{
                     fontSize: '12px',
                     fontWeight: '800',
-                    padding: '5px 12px',
-                    borderRadius: '8px',
+                    padding: '6px 12px',
+                    borderRadius: '10px',
                     backgroundColor: isDcOrder ? '#FFFBEB' : '#F0FDFA',
                     color: isDcOrder ? '#92400E' : '#0E7490',
                     border: isDcOrder ? '1px solid #FCD34D' : '1px solid #99F6E4'
@@ -1278,13 +1317,13 @@ export default function BomConfirmAuditSection({ ctx }) {
                   }}
                   style={{
                     width: '100%',
-                    height: '40px',
-                    borderRadius: '8px',
+                    height: '42px',
+                    borderRadius: '10px',
                     border: isDcOrder ? '1.5px solid #F59E0B' : '1.5px solid #0E7490',
                     backgroundColor: isDcOrder ? '#FFFBEB' : '#F0FDFA',
-                    padding: '0 10px',
+                    padding: '0 14px',
                     fontSize: '13px',
-                    fontWeight: '800',
+                    fontWeight: '700',
                     color: isDcOrder ? '#92400E' : '#0E7490',
                     boxSizing: 'border-box',
                     outline: 'none',
@@ -1317,8 +1356,8 @@ export default function BomConfirmAuditSection({ ctx }) {
             </div>
 
             <div>
-              <label htmlFor="reconfirm-bom-order-number" style={{ fontSize: '11px', fontWeight: '700', color: '#64748B', display: 'block', marginBottom: '6px' }}>
-                ORDER NUMBER
+              <label htmlFor="reconfirm-bom-order-number" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                Order Number
               </label>
               <input
                 id="reconfirm-bom-order-number"
@@ -1326,72 +1365,83 @@ export default function BomConfirmAuditSection({ ctx }) {
                 readOnly
                 disabled
                 value={confirmingBomModal.bomCode || confirmingBomModal.code || '—'}
-                style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #CFFAFE', padding: '0 12px', fontSize: '13px', fontWeight: '800', color: '#0E7490', backgroundColor: '#F0FDFA', cursor: 'not-allowed', boxSizing: 'border-box', outline: 'none' }}
+                style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CCFAFE', padding: '0 14px', fontSize: '13px', fontWeight: '800', color: '#0E7490', backgroundColor: '#F0FDFA', cursor: 'not-allowed', boxSizing: 'border-box', outline: 'none' }}
               />
             </div>
 
             <div>
-              <label style={{ fontSize: '11px', fontWeight: '700', color: '#0E7490', display: 'block', marginBottom: '6px' }}>
-                SALES PERSON / CREATOR
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                Sales Person / Creator <span style={{ color: '#EF4444' }}>*</span>
               </label>
-              <div style={{ fontSize: '13px', fontWeight: '800', color: '#0E7490', height: '40px', display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#F0FDFA', padding: '0 12px', borderRadius: '8px', border: '1px solid #CCFBF1', boxSizing: 'border-box' }}>
-                <User size={14} style={{ color: '#0E7490', flexShrink: 0 }} /> {(confirmingBomModal.salesPerson || confirmingBomModal.createdBy || defaultSalesPersonName).replace(/\s*\([^)]*\)/g, '').trim()}
-              </div>
+              <input
+                type="text"
+                readOnly
+                disabled
+                value={(confirmingBomModal.salesPerson || confirmingBomModal.createdBy || defaultSalesPersonName).replace(/\s*\([^)]*\)/g, '').trim()}
+                style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', fontWeight: '700', color: '#475569', backgroundColor: '#F1F5F9', cursor: 'not-allowed', boxSizing: 'border-box', outline: 'none' }}
+              />
             </div>
           </div>
+        </div>
 
-          {/* Row 2: Customer Name Search + Company Name */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+        {/* SECTION 2: CUSTOMER INFORMATION & ADDRESSES (Same card format as Create BOM) */}
+        <div style={{ backgroundColor: 'white', padding: '24px', borderRadius: '16px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{ width: '28px', height: '28px', borderRadius: '8px', backgroundColor: '#0E7490', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: '800' }}>
+              2
+            </div>
+            <h3 style={{ fontSize: '14px', fontWeight: '800', color: '#0E7490', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              CUSTOMER INFORMATION & ADDRESSES
+            </h3>
+          </div>
+
+          {/* Row 1: 5-Column Customer Contact Details */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
             <div>
-              <label htmlFor="bom-orders-customer-name" style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
-                CUSTOMER NAME {!isAlreadyForwarded && <span style={{ color: '#2563EB', fontSize: '10px' }}>(Editable / Search)</span>}
-                {confirmingBomModal.editedFields?.customerName && (
-                  <span title={confirmingBomModal.editedFields.customerName} style={{ backgroundColor: '#FEF3C7', color: '#B45309', border: '1px solid #FDE68A', padding: '1px 6px', borderRadius: '8px', fontSize: '10px', fontWeight: '800' }}>Edited</span>
-                )}
+              <label htmlFor="bom-orders-company-name" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                Company Name <span style={{ color: '#EF4444' }}>*</span>
               </label>
               {isAlreadyForwarded ? (
-                <div style={{ fontSize: '13px', fontWeight: '700', color: '#0F172A', height: '40px', display: 'flex', alignItems: 'center', backgroundColor: '#F8FAFC', padding: '0 12px', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
-                  {confirmingBomModal.customerName || '—'}
+                <div style={{ fontSize: '13px', fontWeight: '700', color: '#0F172A', height: '42px', display: 'flex', alignItems: 'center', backgroundColor: '#F8FAFC', padding: '0 14px', borderRadius: '10px', border: '1px solid #E2E8F0', boxSizing: 'border-box' }}>
+                  {confirmingBomModal.companyName || confirmingBomModal.customerName || '—'}
                 </div>
               ) : (
                 <>
                   <input
-                    id="bom-orders-customer-name"
-                    name="customerName"
-                    aria-label="CUSTOMER NAME"
+                    id="bom-orders-company-name"
+                    name="companyName"
+                    aria-label="Company Name"
                     type="text"
                     list="reconfirm-bom-customer-suggestions"
-                    placeholder="Type or select customer from list..."
-                    value={confirmingBomModal.customerName || ''}
+                    placeholder="Type or select company..."
+                    value={confirmingBomModal.companyName || confirmingBomModal.customerName || ''}
                     onChange={(e) => {
                       const val = e.target.value;
-                      setConfirmingBomModal(prev => ({ ...prev, customerName: val }));
+                      setConfirmingBomModal(prev => ({ ...prev, companyName: val, customerName: val }));
                       const target = (val || '').toLowerCase().trim();
                       if (!target) return;
 
-                      if (target.length >= 2) {
-                        if (bomCustSearchTimerRef?.current) clearTimeout(bomCustSearchTimerRef.current);
-                        if (bomCustSearchTimerRef) {
-                          bomCustSearchTimerRef.current = setTimeout(async () => {
-                            try {
-                              const matches = await searchCustomers({ query: val, limit: 50 });
-                              if (Array.isArray(matches) && matches.length > 0 && typeof setCustomerList === 'function') {
-                                setCustomerList(prev => {
-                                  const map = new Map();
-                                  (prev || []).forEach(p => {
-                                    const k = (p.customerCode || p.id || p.code || p.companyName || '').toLowerCase().trim();
-                                    if (k) map.set(k, p);
-                                  });
-                                  matches.forEach(m => {
-                                    const k = (m.customerCode || m.id || m.code || m.companyName || '').toLowerCase().trim();
-                                    if (k && !map.has(k)) map.set(k, m);
-                                  });
-                                  return Array.from(map.values());
+                      if (target.length >= 2 && bomCustSearchTimerRef) {
+                        clearTimeout(bomCustSearchTimerRef.current);
+                        bomCustSearchTimerRef.current = setTimeout(async () => {
+                          try {
+                            const matches = await searchCustomers({ query: val, limit: 50 });
+                            if (Array.isArray(matches) && matches.length > 0 && typeof setCustomerList === 'function') {
+                              setCustomerList(prev => {
+                                const map = new Map();
+                                (prev || []).forEach(p => {
+                                  const k = (p.customerCode || p.id || p.code || p.companyName || '').toLowerCase().trim();
+                                  if (k) map.set(k, p);
                                 });
-                              }
-                            } catch (_) {}
-                          }, 250);
-                        }
+                                matches.forEach(m => {
+                                  const k = (m.customerCode || m.id || m.code || m.companyName || '').toLowerCase().trim();
+                                  if (k && !map.has(k)) map.set(k, m);
+                                });
+                                return Array.from(map.values());
+                              });
+                            }
+                          } catch (_) {}
+                        }, 250);
                       }
 
                       const chosen = (customerList || []).find(c => {
@@ -1399,10 +1449,7 @@ export default function BomConfirmAuditSection({ ctx }) {
                         const c2 = (c.c2 || c.companyName || '').toLowerCase().trim();
                         const cName = (c.customerName || '').toLowerCase().trim();
                         const comp = (c.companyName || '').toLowerCase().trim();
-                        return code === target || c2 === target || cName === target || comp === target ||
-                               (code && code.startsWith(target)) || (c2 && c2.startsWith(target)) ||
-                               (cName && cName.startsWith(target)) || (comp && comp.startsWith(target)) ||
-                               (c2 && c2.includes(target)) || (comp && comp.includes(target));
+                        return code === target || c2 === target || cName === target || comp === target;
                       });
 
                       if (chosen) {
@@ -1439,7 +1486,7 @@ export default function BomConfirmAuditSection({ ctx }) {
 
                         setConfirmingBomModal(prev => ({
                           ...prev,
-                          customerName: val,
+                          customerName: nextCompany,
                           companyName: nextCompany,
                           ...(nextContact ? { contactPerson: nextContact } : {}),
                           ...(nextPhone ? { mobile: nextPhone, phone: nextPhone } : {}),
@@ -1459,17 +1506,12 @@ export default function BomConfirmAuditSection({ ctx }) {
                         }));
                       }
                     }}
-                    style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', fontWeight: '700', color: '#0F172A', backgroundColor: '#FFFFFF', outline: 'none', boxSizing: 'border-box' }}
+                    style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', fontWeight: '600', color: '#0F172A', backgroundColor: '#FFFFFF', outline: 'none', boxSizing: 'border-box' }}
                   />
                   <datalist id="reconfirm-bom-customer-suggestions">
                     {(customerList || []).slice(0, 60).map((c, idx) => {
-                      const cVal = c.code || c.customerName || c.companyName;
-                      const label = c.c2 || c.companyName;
-                      return (
-                        <option key={idx} value={cVal}>
-                          {label && label !== cVal ? `${cVal} (${label})` : cVal}
-                        </option>
-                      );
+                      const cVal = c.companyName || c.c2 || c.customerName || c.code;
+                      return <option key={idx} value={cVal}>{cVal}</option>;
                     })}
                   </datalist>
                 </>
@@ -1477,115 +1519,96 @@ export default function BomConfirmAuditSection({ ctx }) {
             </div>
 
             <div>
-              <label style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
-                COMPANY NAME {!isAlreadyForwarded && <span style={{ color: '#2563EB', fontSize: '10px' }}>(Editable)</span>}
-                {confirmingBomModal.editedFields?.companyName && (
-                  <span title={confirmingBomModal.editedFields.companyName} style={{ backgroundColor: '#FEF3C7', color: '#B45309', border: '1px solid #FDE68A', padding: '1px 6px', borderRadius: '8px', fontSize: '10px', fontWeight: '800' }}>Edited</span>
-                )}
+              <label htmlFor="reconfirm-bom-contact-person" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                Customer Name
               </label>
               {isAlreadyForwarded ? (
-                <div style={{ fontSize: '13px', fontWeight: '700', color: '#0F172A', height: '40px', display: 'flex', alignItems: 'center', backgroundColor: '#F8FAFC', padding: '0 12px', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
-                  {confirmingBomModal.companyName || confirmingBomModal.customerName || '—'}
+                <div style={{ fontSize: '13px', fontWeight: '600', color: '#0F172A', height: '42px', display: 'flex', alignItems: 'center', backgroundColor: '#F8FAFC', padding: '0 14px', borderRadius: '10px', border: '1px solid #E2E8F0', boxSizing: 'border-box' }}>
+                  {confirmingBomModal.contactPerson || '—'}
                 </div>
               ) : (
-                <input id="bom-orders-company-name" name="companyName" aria-label="Company Name"
-                  type="text"
-                  placeholder="Company Name..."
-                  value={confirmingBomModal.companyName || ''}
-                  onChange={(e) => setConfirmingBomModal({ ...confirmingBomModal, companyName: e.target.value })}
-                  style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', color: '#0F172A', backgroundColor: '#FFFFFF', outline: 'none', boxSizing: 'border-box' }}
-                 />
-              )}
-            </div>
-          </div>
-
-          {/* Row 3: Contact Details & GSTIN */}
-          {isAlreadyForwarded ? (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', backgroundColor: '#F8FAFC', padding: '12px 14px', borderRadius: '10px', border: '1px solid #E2E8F0' }}>
-              <div>
-                <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', display: 'block', textTransform: 'uppercase', marginBottom: '2px' }}>CONTACT PERSON</span>
-                <strong style={{ fontSize: '12.5px', color: '#0F172A', fontWeight: '700' }}>{confirmingBomModal.contactPerson || '—'}</strong>
-              </div>
-              <div>
-                <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', display: 'block', textTransform: 'uppercase', marginBottom: '2px' }}>PHONE</span>
-                <strong style={{ fontSize: '12.5px', color: '#0F172A', fontWeight: '700' }}>{confirmingBomModal.mobile || confirmingBomModal.phone || '—'}</strong>
-              </div>
-              <div>
-                <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', display: 'block', textTransform: 'uppercase', marginBottom: '2px' }}>EMAIL</span>
-                <strong style={{ fontSize: '12.5px', color: '#0F172A', fontWeight: '700', wordBreak: 'break-all' }}>{confirmingBomModal.email || '—'}</strong>
-              </div>
-              <div>
-                <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748B', display: 'block', textTransform: 'uppercase', marginBottom: '2px' }}>GSTIN</span>
-                <strong style={{ fontSize: '12.5px', color: '#0E7490', fontWeight: '800' }}>{confirmingBomModal.gstNo || confirmingBomModal.gstin || '—'}</strong>
-              </div>
-            </div>
-          ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '16px' }}>
-              <div>
-                <label htmlFor="reconfirm-bom-contact-person" style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
-                  CONTACT PERSON <span style={{ color: '#2563EB', fontSize: '10px' }}>(Editable)</span>
-                </label>
                 <input
                   id="reconfirm-bom-contact-person"
                   name="contactPerson"
-                  aria-label="Contact Person"
+                  aria-label="Customer Name"
                   type="text"
-                  placeholder="Contact Person..."
+                  placeholder="e.g. Rajesh Kannan"
                   value={confirmingBomModal.contactPerson || ''}
                   onChange={(e) => setConfirmingBomModal({ ...confirmingBomModal, contactPerson: e.target.value })}
-                  style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', color: '#0F172A', backgroundColor: '#FFFFFF', outline: 'none', boxSizing: 'border-box' }}
+                  style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: '#FFFFFF', outline: 'none', boxSizing: 'border-box' }}
                 />
-              </div>
-              <div>
-                <label htmlFor="reconfirm-bom-mobile" style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
-                  MOBILE NUMBER <span style={{ color: '#2563EB', fontSize: '10px' }}>(Editable)</span>
-                </label>
+              )}
+            </div>
+
+            <div>
+              <label htmlFor="reconfirm-bom-mobile" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                Phone Number
+              </label>
+              {isAlreadyForwarded ? (
+                <div style={{ fontSize: '13px', fontWeight: '600', color: '#0F172A', height: '42px', display: 'flex', alignItems: 'center', backgroundColor: '#F8FAFC', padding: '0 14px', borderRadius: '10px', border: '1px solid #E2E8F0', boxSizing: 'border-box' }}>
+                  {confirmingBomModal.mobile || confirmingBomModal.phone || '—'}
+                </div>
+              ) : (
                 <input
                   id="reconfirm-bom-mobile"
                   name="mobileNumber"
-                  aria-label="Mobile Number"
+                  aria-label="Phone Number"
                   type="text"
-                  placeholder="Mobile / Phone..."
+                  placeholder="+91 98765 43210"
                   value={confirmingBomModal.mobile || confirmingBomModal.phone || ''}
                   onChange={(e) => setConfirmingBomModal({ ...confirmingBomModal, mobile: e.target.value, phone: e.target.value })}
-                  style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', color: '#0F172A', backgroundColor: '#FFFFFF', outline: 'none', boxSizing: 'border-box' }}
+                  style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: '#FFFFFF', outline: 'none', boxSizing: 'border-box' }}
                 />
-              </div>
-              <div>
-                <label htmlFor="reconfirm-bom-email" style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
-                  EMAIL <span style={{ color: '#2563EB', fontSize: '10px' }}>(Editable)</span>
-                </label>
+              )}
+            </div>
+
+            <div>
+              <label htmlFor="reconfirm-bom-email" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                Email Address
+              </label>
+              {isAlreadyForwarded ? (
+                <div style={{ fontSize: '13px', fontWeight: '600', color: '#0F172A', height: '42px', display: 'flex', alignItems: 'center', backgroundColor: '#F8FAFC', padding: '0 14px', borderRadius: '10px', border: '1px solid #E2E8F0', boxSizing: 'border-box', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {confirmingBomModal.email || '—'}
+                </div>
+              ) : (
                 <input
                   id="reconfirm-bom-email"
                   name="email"
-                  aria-label="Email"
+                  aria-label="Email Address"
                   type="email"
-                  placeholder="Email Address..."
+                  placeholder="accounts@solarclient.com"
                   value={confirmingBomModal.email || ''}
                   onChange={(e) => setConfirmingBomModal({ ...confirmingBomModal, email: e.target.value })}
-                  style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', color: '#0F172A', backgroundColor: '#FFFFFF', outline: 'none', boxSizing: 'border-box' }}
+                  style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', color: '#0F172A', backgroundColor: '#FFFFFF', outline: 'none', boxSizing: 'border-box' }}
                 />
-              </div>
-              <div>
-                <label htmlFor="reconfirm-bom-gstin" style={{ fontSize: '11px', fontWeight: '700', color: '#334155', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
-                  GST NUMBER <span style={{ color: '#2563EB', fontSize: '10px' }}>(Editable)</span>
-                </label>
+              )}
+            </div>
+
+            <div>
+              <label htmlFor="reconfirm-bom-gstin" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                Customer GSTIN
+              </label>
+              {isAlreadyForwarded ? (
+                <div style={{ fontSize: '13px', fontWeight: '700', color: '#0E7490', height: '42px', display: 'flex', alignItems: 'center', backgroundColor: '#F8FAFC', padding: '0 14px', borderRadius: '10px', border: '1px solid #E2E8F0', boxSizing: 'border-box' }}>
+                  {confirmingBomModal.gstNo || confirmingBomModal.gstin || '—'}
+                </div>
+              ) : (
                 <input
                   id="reconfirm-bom-gstin"
                   name="gstNo"
-                  aria-label="GST Number"
+                  aria-label="Customer GSTIN"
                   type="text"
-                  placeholder="GSTIN (e.g. 33AAAAA0000A1Z5)..."
+                  placeholder="e.g. 33AABCV1234F1Z5"
                   value={confirmingBomModal.gstNo || confirmingBomModal.gstin || ''}
                   onChange={(e) => {
                     const up = e.target.value.toUpperCase();
                     setConfirmingBomModal({ ...confirmingBomModal, gstNo: up, gstin: up });
                   }}
-                  style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', color: '#0F172A', backgroundColor: '#FFFFFF', outline: 'none', boxSizing: 'border-box' }}
+                  style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '0 14px', fontSize: '13px', fontWeight: '700', color: '#0F172A', backgroundColor: '#FFFFFF', outline: 'none', boxSizing: 'border-box' }}
                 />
-              </div>
+              )}
             </div>
-          )}
+          </div>
 
           {/* Structured Address Cards */}
           {(() => {
@@ -2252,22 +2275,25 @@ export default function BomConfirmAuditSection({ ctx }) {
         {/* PRODUCT ITEMS TABLE */}
         <div style={{ backgroundColor: 'white', padding: '24px', borderRadius: '16px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)', display: 'flex', flexDirection: 'column', gap: '20px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-            <div>
-              <h3 style={{ fontSize: '15px', fontWeight: '800', color: '#0F172A', margin: 0 }}>
-                {isAlreadyForwarded ? 'Itemized Product & Material Breakdown' : '2. Order Items & Bill of Materials'}
-              </h3>
-              <span style={{ fontSize: '12px', color: '#64748B' }}>
-                {isAlreadyForwarded
-                  ? 'Itemized specifications and rate breakdown passed to Production & Dispatch teams.'
-                  : 'Add preset kits or products, modify specs/quantities/rates, and check every product box before forwarding to Dispatch.'}
-              </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{ width: '28px', height: '28px', borderRadius: '8px', backgroundColor: '#0E7490', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: '800' }}>3</div>
+              <div>
+                <h3 style={{ fontSize: '13px', fontWeight: '800', color: '#0F172A', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  ORDER ITEMS & BILL OF MATERIALS
+                </h3>
+                <span style={{ fontSize: '11.5px', color: '#64748B' }}>
+                  {isAlreadyForwarded
+                    ? 'Itemized specifications and rate breakdown passed to Production & Dispatch teams.'
+                    : 'Tick every product item checkbox before confirming & forwarding to Dispatch.'}
+                </span>
+              </div>
             </div>
 
             {!isAlreadyForwarded && !isSourcePiLocked && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#ECFEFF', padding: '0 12px', borderRadius: '20px', height: '38px', border: '1px solid #CFFAFE' }}>
                   <Layers style={{ width: '14px', height: '14px', color: '#0E7490' }} />
-                  <span style={{ fontSize: '12px', fontWeight: '700', color: '#0E7490' }}>Preset:</span>
+                  <span style={{ fontSize: '12px', fontWeight: '700', color: '#0E7490' }}>Pack:</span>
                 </div>
 
                 <SearchablePresetSelector
@@ -2275,7 +2301,9 @@ export default function BomConfirmAuditSection({ ctx }) {
                   activePresetsMap={activePresetsMap}
                   accentColor="#0E7490"
                   width="320px"
-                  placeholder="Pick a Preset to add..."
+                  placeholder="Pick a Pack to add..."
+                  groupTitleLabel="Packs"
+                  emptyLabel="packs"
                   style={{ height: '38px' }}
                   onChange={(val, targetPreset) => {
                     if (val && targetPreset && targetPreset.items) {
@@ -2518,7 +2546,7 @@ export default function BomConfirmAuditSection({ ctx }) {
                                       letterSpacing: '0.5px'
                                     }}>
                                       <Boxes size={12} />
-                                      {theme.badge}
+                                      {String(theme.badge || 'PRESET 1').replace('PRESET', 'PACK')}
                                     </span>
                                     <strong style={{ fontSize: '13px', color: theme.primary, letterSpacing: '0.2px' }}>
                                       {pInfo.presetName}
@@ -2538,9 +2566,6 @@ export default function BomConfirmAuditSection({ ctx }) {
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                                     <span style={{ fontSize: '11.5px', color: '#475569' }}>
                                       Package Rate: <strong style={{ color: theme.primary }}>₹ {pInfo.kitPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong> / {pInfo.unitType === 'kW' ? 'kW' : 'Set'}
-                                    </span>
-                                    <span style={{ fontSize: '12px', fontWeight: '800', color: theme.primary, backgroundColor: '#FFFFFF', padding: '2px 10px', borderRadius: '6px', border: `1px solid ${theme.border}` }}>
-                                      Kit Subtotal: ₹ {pInfo.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                                     </span>
                                   </div>
                                 </div>
@@ -2597,7 +2622,7 @@ export default function BomConfirmAuditSection({ ctx }) {
                                     gap: '4px'
                                   }}>
                                     <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: theme.primary }} />
-                                    {theme.badge} • Component {meta.itemIndexInGroup} of {pInfo ? pInfo.count : 1}
+                                    {String(theme.badge || 'PRESET 1').replace('PRESET', 'PACK')} • Component {meta.itemIndexInGroup} of {pInfo ? pInfo.count : 1}
                                   </span>
                                 )}
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
@@ -2756,7 +2781,7 @@ export default function BomConfirmAuditSection({ ctx }) {
                                     letterSpacing: '0.5px'
                                   }}>
                                     <Boxes size={12} />
-                                    {theme.badge}
+                                    {String(theme.badge || 'PRESET 1').replace('PRESET', 'PACK')}
                                   </span>
                                   <strong style={{ fontSize: '13px', color: theme.primary, letterSpacing: '0.2px' }}>
                                     {pInfo.presetName}
@@ -2773,13 +2798,30 @@ export default function BomConfirmAuditSection({ ctx }) {
                                     {pInfo.setCount} {pInfo.unitType} • {pInfo.count} Components
                                   </span>
                                 </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                   <span style={{ fontSize: '11.5px', color: '#475569' }}>
                                     Package Rate: <strong style={{ color: theme.primary }}>₹ {pInfo.kitPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong> / {pInfo.unitType === 'kW' ? 'kW' : 'Set'}
                                   </span>
-                                  <span style={{ fontSize: '12px', fontWeight: '800', color: theme.primary, backgroundColor: '#FFFFFF', padding: '2px 10px', borderRadius: '6px', border: `1px solid ${theme.border}` }}>
-                                    Kit Subtotal: ₹ {pInfo.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleAddReconfirmPresetItem(pInfo.groupId)}
+                                    style={{
+                                      padding: '3px 10px',
+                                      fontSize: '11px',
+                                      fontWeight: '700',
+                                      color: theme.primary,
+                                      backgroundColor: '#FFFFFF',
+                                      border: `1px solid ${theme.border}`,
+                                      borderRadius: '6px',
+                                      cursor: 'pointer',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '4px'
+                                    }}
+                                    title={`Add component row to ${String(theme.badge || 'PRESET 1').replace('PRESET', 'PACK')}`}
+                                  >
+                                    + Add to {String(theme.badge || 'PRESET 1').replace('PRESET', 'PACK')}
+                                  </button>
                                 </div>
                               </div>
                             </td>
@@ -2844,7 +2886,7 @@ export default function BomConfirmAuditSection({ ctx }) {
                                   gap: '4px'
                                 }}>
                                   <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: theme.primary }} />
-                                  {theme.badge} • Component {meta.itemIndexInGroup} of {pInfo ? pInfo.count : 1}
+                                  {String(theme.badge || 'PRESET 1').replace('PRESET', 'PACK')} • Component {meta.itemIndexInGroup} of {pInfo ? pInfo.count : 1}
                                 </span>
                               </div>
                             )}
@@ -3429,46 +3471,17 @@ export default function BomConfirmAuditSection({ ctx }) {
               </tbody>
             </table>
           </div>
-
-          {/* Summary Math & Action Block */}
-          <div style={{ borderTop: '1px solid #E2E8F0', paddingTop: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
-            <div>
-              <span style={{ fontSize: '13px', color: '#64748B', display: 'block' }}>
-                Showing {confirmingBomModal.items?.length || 0} itemized BOM components{modalPresetGroups.length > 0 ? ` + ${modalPresetGroups.length} Preset Kit Package` : ''}
-              </span>
-              {modalPresetGroups.length > 0 && (
-                <span style={{ fontSize: '12px', color: '#0E7490', fontWeight: '600', marginTop: '4px', display: 'block' }}>
-                  Hardware components with ₹0.00 rate are physical items included inside the Preset Kit package above.
-                </span>
-              )}
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '24px', flexWrap: 'wrap' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
-                <div style={{ display: 'flex', gap: '14px', fontSize: '12px', color: '#64748B', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                  {presetKitsTotal > 0 && (
-                    <span>Preset Kit(s): <strong style={{ color: '#0E7490', fontWeight: '800' }}>₹ {presetKitsTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
-                  )}
-                  {customItemsTotal > 0 && (
-                    <span>Additional Items: <strong style={{ color: '#0F172A', fontWeight: '800' }}>₹ {customItemsTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
-                  )}
-                  <span>Taxable Subtotal: <strong style={{ color: '#0F172A', fontWeight: '800' }}>₹ {orderSubTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
-                  <span>GST: <strong style={{ color: '#64748B', fontWeight: '700' }}>₹ {orderGstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
-                </div>
-                <div style={{ fontSize: '14px', color: '#334155' }}>
-                  Total Order Value: <strong style={{ color: '#0E7490', fontSize: '17px', fontWeight: '900' }}>₹ {orderGrandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
 
-        {/* SECTION 3: TRANSPORT & LOGISTICS DETAILS */}
-        <div style={{ backgroundColor: 'white', padding: '24px', borderRadius: '16px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)', display: 'flex', flexDirection: 'column', gap: '18px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #F1F5F9', paddingBottom: '12px' }}>
-            <span style={{ fontSize: '11px', fontWeight: '800', color: '#0E7490', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              3. TRANSPORT & LOGISTICS DETAILS
-            </span>
+        {/* SECTION 4: TRANSPORT & LOGISTICS DETAILS */}
+        <div style={{ backgroundColor: 'white', padding: '24px', borderRadius: '16px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{ width: '28px', height: '28px', borderRadius: '8px', backgroundColor: '#0E7490', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: '800' }}>
+              4
+            </div>
+            <h3 style={{ fontSize: '14px', fontWeight: '800', color: '#0E7490', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              TRANSPORT & LOGISTICS DETAILS
+            </h3>
           </div>
 
           {isAlreadyForwarded ? (
@@ -3504,7 +3517,7 @@ export default function BomConfirmAuditSection({ ctx }) {
                   onChange={(e) => setConfirmingBomModal({ ...confirmingBomModal, transportMode: e.target.value })}
                   style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', color: confirmingBomModal.transportMode ? '#0F172A' : '#64748B', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none', cursor: 'pointer' }}
                 >
-                  <option value="">Select Mode Of Transport</option>
+                  <option value="" disabled>Select Mode of Transport</option>
                   <option value="Transport">Transport</option>
                   <option value="Own Vehicle">Own Vehicle</option>
                   <option value="Porter">Porter</option>
@@ -3554,7 +3567,7 @@ export default function BomConfirmAuditSection({ ctx }) {
                   onChange={(e) => setConfirmingBomModal({ ...confirmingBomModal, transportScope: e.target.value })}
                   style={{ width: '100%', height: '40px', borderRadius: '8px', border: '1px solid #CBD5E1', padding: '0 12px', fontSize: '13px', color: confirmingBomModal.transportScope ? '#0F172A' : '#64748B', backgroundColor: '#FFFFFF', boxSizing: 'border-box', outline: 'none', cursor: 'pointer' }}
                 >
-                  <option value="">Select Transport scope</option>
+                  <option value="" disabled>Select Scope of Payment</option>
                   <option value="VRM Structures">VRM Structures</option>
                   <option value="Customer Scope">Customer Scope</option>
                 </select>
@@ -3563,19 +3576,22 @@ export default function BomConfirmAuditSection({ ctx }) {
           )}
         </div>
 
-        {/* SECTION 4: PAYMENT TERMS, CREDIT DAYS, REMARKS & PAYMENT PROOF ATTACHMENTS */}
+        {/* SECTION 5: PAYMENT TERMS & ORDER SUMMARY */}
         <div style={{ backgroundColor: 'white', padding: '24px', borderRadius: '16px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #F1F5F9', paddingBottom: '12px' }}>
-            <span style={{ fontSize: '11px', fontWeight: '800', color: '#0E7490', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              4. PAYMENT TERMS, REMARKS & PAYMENT ATTACHMENTS
-            </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{ width: '28px', height: '28px', borderRadius: '8px', backgroundColor: '#0E7490', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: '800' }}>
+              5
+            </div>
+            <h3 style={{ fontSize: '14px', fontWeight: '800', color: '#0E7490', margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              PAYMENT TERMS & ORDER SUMMARY
+            </h3>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div>
                 <label htmlFor="bom-orders-payment-type-50-advance" style={{ fontSize: '12px', fontWeight: '700', color: '#334155', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
-                  Payment Terms {!isAlreadyForwarded && !isDcOrder && <span style={{ color: '#2563EB', fontSize: '10px' }}>(Editable)</span>}
+                  Payment Terms
                   {confirmingBomModal.editedFields?.paymentType && (
                     <span title={confirmingBomModal.editedFields.paymentType} style={{ backgroundColor: '#FEF3C7', color: '#B45309', border: '1px solid #FDE68A', padding: '1px 6px', borderRadius: '8px', fontSize: '10px', fontWeight: '800' }}>Edited</span>
                   )}
@@ -3906,6 +3922,7 @@ export default function BomConfirmAuditSection({ ctx }) {
             >
               Back to BOM Dashboard
             </button>
+            {!isSalesLoginRole(userRole) && (
             <button
               type="button"
               onClick={() => setPrintingBomRecord(confirmingBomModal)}
@@ -3926,36 +3943,11 @@ export default function BomConfirmAuditSection({ ctx }) {
             >
               Print
             </button>
+            )}
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
             {!isAlreadyForwarded && (
-              <>
-                <button
-                  type="button"
-                  onClick={handleSaveBomChanges}
-                  disabled={isSavingDraft || isConfirmingForward || isUploadingProof}
-                  style={{
-                    backgroundColor: '#FFFFFF',
-                    border: '1.5px solid #0E7490',
-                    color: '#0E7490',
-                    height: '40px',
-                    fontSize: '13px',
-                    fontWeight: '700',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '6px',
-                    padding: '0 18px',
-                    borderRadius: '50px',
-                    cursor: (isSavingDraft || isConfirmingForward || isUploadingProof) ? 'not-allowed' : 'pointer',
-                    flexShrink: 0,
-                    opacity: (isSavingDraft || isConfirmingForward || isUploadingProof) ? 0.65 : 1
-                  }}
-                >
-                  <Save size={15} />
-                  {isSavingDraft ? 'Saving...' : 'Save Changes'}
-                </button>
                 <button
                   type="button"
                   onClick={() => {
@@ -3985,7 +3977,6 @@ export default function BomConfirmAuditSection({ ctx }) {
                 >
                   Confirm and Send
                 </button>
-              </>
             )}
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 18px', backgroundColor: '#F8FAFC', borderRadius: '8px', border: '1px solid #E2E8F0' }}>

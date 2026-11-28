@@ -1,6 +1,9 @@
 // BUSINZ Smart Leads — additive, idempotent schema migration.
 // Runs ONLY when ENABLE_SMART_LEADS=true. Reverse with server/migrations/20261120_smart_leads_down.sql
+import fs from 'fs';
+import path from 'path';
 import { query } from './db.js';
+import { getStoreFilePath } from './runtimePaths.js';
 import {
   mapLegacyStatusToStage, computeLeadScore, DEFAULT_SCORING,
   DEFAULT_STAGE_PROBABILITIES, DEFAULT_SLA, DEFAULT_LOST_REASONS
@@ -227,6 +230,95 @@ export async function ensureSmartLeadsSchema() {
       `INSERT INTO public.lead_lost_reasons (id, label, sort_order) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
       [`LR-${String(i + 1).padStart(2, '0')}`, DEFAULT_LOST_REASONS[i], i + 1]
     );
+  }
+
+  // Merge any legacy Lead Management records (controlroom_store crm_leads + crm_leads.json) into public.leads
+  try {
+    const legacyLeads = [];
+    const storeRes = await query(`SELECT value FROM public.controlroom_store WHERE key IN ('crm_leads', 'leads')`);
+    for (const r of storeRes.rows) {
+      if (Array.isArray(r.value)) legacyLeads.push(...r.value);
+    }
+    const diskPath = getStoreFilePath('crm_leads.json');
+    if (fs.existsSync(diskPath)) {
+      const diskData = JSON.parse(fs.readFileSync(diskPath, 'utf8'));
+      if (Array.isArray(diskData)) legacyLeads.push(...diskData);
+    }
+
+    if (legacyLeads.length > 0) {
+      const existingRes = await query(`SELECT id, lead_number FROM public.leads`);
+      const seenIds = new Set(existingRes.rows.map(r => String(r.id || '').trim()).filter(Boolean));
+      const seenNums = new Set(existingRes.rows.map(r => String(r.lead_number || '').trim().toUpperCase()).filter(Boolean));
+      let mergedCount = 0;
+
+      for (const l of legacyLeads) {
+        if (!l || typeof l !== 'object') continue;
+        const id = String(l.id || l.lead_number || l.leadNumber || '').trim();
+        const leadNum = String(l.lead_number || l.leadNumber || id || '').trim();
+        const companyName = String(l.company_name || l.companyName || l.contact_person || l.contactPerson || 'Unnamed Lead').trim();
+        if (!id || seenIds.has(id) || (leadNum && seenNums.has(leadNum.toUpperCase()))) continue;
+
+        seenIds.add(id);
+        if (leadNum) seenNums.add(leadNum.toUpperCase());
+
+        const status = String(l.status || 'New Lead').trim();
+        const stage = l.pipeline_stage || l.pipelineStage || mapLegacyStatusToStage(status);
+        const assignedName = l.assigned_to_name || l.assignedToName || l.assigned_salesperson || l.assignedSalesperson || null;
+        const assignedId = l.assigned_to_user_id || l.assignedToUserId || null;
+        const estKw = Number(l.estimated_kw ?? l.estimatedKw ?? 0) || 0;
+        const estVal = Number(l.estimated_value ?? l.estimatedValue ?? (estKw > 0 ? estKw * 35000 : 0)) || 0;
+        const createdAt = l.created_at || l.createdAt || new Date().toISOString();
+        const updatedAt = l.updated_at || l.updatedAt || createdAt;
+
+        await query(
+          `INSERT INTO public.leads (
+            id, lead_number, company_name, contact_person, designation, phone, whatsapp, email,
+            source, status, pipeline_stage, priority, assigned_salesperson, assigned_to_user_id,
+            assigned_to_name, estimated_kw, estimated_value, category, location, notes, created_at, updated_at
+          ) VALUES (
+            $1, $2, $3, $4, $5, $6, $7, $8,
+            $9, $10, $11, $12, $13, $14,
+            $15, $16, $17, $18, $19, $20, $21, $22
+          ) ON CONFLICT DO NOTHING`,
+          [
+            id, leadNum || null, companyName,
+            l.contact_person || l.contactPerson || null,
+            l.designation || null,
+            l.phone || null,
+            l.whatsapp || l.phone || null,
+            l.email || null,
+            l.source || 'Manual',
+            status,
+            stage,
+            l.priority || 'Medium',
+            assignedName,
+            assignedId,
+            assignedName,
+            estKw,
+            estVal,
+            l.category || null,
+            l.location || null,
+            typeof l.notes === 'string' ? l.notes : null,
+            createdAt,
+            updatedAt
+          ]
+        );
+        mergedCount++;
+      }
+      if (mergedCount > 0) {
+        console.log(`✅ [Smart Leads] Merged ${mergedCount} legacy Lead Management records into public.leads.`);
+      }
+    }
+
+    await query(
+      `UPDATE public.leads
+          SET assigned_to_name = assigned_salesperson
+        WHERE (assigned_to_name IS NULL OR TRIM(assigned_to_name) = '')
+          AND assigned_salesperson IS NOT NULL
+          AND TRIM(assigned_salesperson) <> ''`
+    );
+  } catch (mergeErr) {
+    console.warn('[Smart Leads] Legacy crm_leads merge notice:', mergeErr.message);
   }
 
   // One-time backfill of pipeline_stage + score for rows that don't have it yet (migration, not normal UI use)

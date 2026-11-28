@@ -1323,40 +1323,44 @@ export default function CrmLeadsView({
           )}
         </div>
 
-        {/* 2. Status Sub-Tabs Row (Exact Design from Stock Status) */}
-        <div style={{ display: 'flex', borderBottom: '1px solid #E2E8F0', padding: '0 20px', gap: '20px', alignItems: 'center', flexWrap: 'wrap', backgroundColor: '#FFFFFF', overflowX: 'auto' }}>
+        {/* 2. Status Filter Pills */}
+        <div style={{ display: 'flex', borderBottom: '1px solid #E2E8F0', padding: '12px 20px', gap: '8px', alignItems: 'center', flexWrap: 'wrap', backgroundColor: '#F8FAFC', overflowX: 'auto' }}>
           {leadTabs.map(tab => {
             const isActive = statusFilter === tab.id;
             return (
               <button
                 key={tab.id}
+                type="button"
                 onClick={() => {
                   setStatusFilter(tab.id);
                   setCurrentPage(1);
                 }}
                 style={{
-                  border: 'none',
-                  background: 'transparent',
-                  padding: '12px 4px',
-                  fontSize: '13px',
-                  fontWeight: 'bold',
-                  color: isActive ? '#0E7490' : '#64748B',
-                  borderBottom: isActive ? '2px solid #0E7490' : '2px solid transparent',
+                  backgroundColor: isActive ? '#0E7490' : '#FFFFFF',
+                  color: isActive ? '#FFFFFF' : '#334155',
+                  border: isActive ? '1px solid #0E7490' : '1px solid #E2E8F0',
+                  borderRadius: '9999px',
+                  padding: '7px 14px',
+                  fontSize: '12.5px',
+                  fontWeight: '700',
                   cursor: 'pointer',
-                  display: 'flex',
+                  display: 'inline-flex',
                   alignItems: 'center',
                   gap: '8px',
+                  boxShadow: isActive ? '0 2px 8px rgba(14, 116, 144, 0.25)' : '0 1px 2px rgba(15, 23, 42, 0.04)',
+                  transition: 'all 0.15s ease',
                   whiteSpace: 'nowrap'
                 }}
               >
-                {tab.label}
+                <span>{tab.label}</span>
                 <span style={{
                   fontSize: '11px',
-                  padding: '2px 8px',
-                  borderRadius: '12px',
-                  backgroundColor: tab.bg,
-                  color: tab.color,
-                  fontWeight: 'bold'
+                  padding: '1px 7px',
+                  borderRadius: '9999px',
+                  backgroundColor: isActive ? 'rgba(255, 255, 255, 0.22)' : (tab.bg || '#F1F5F9'),
+                  color: isActive ? '#FFFFFF' : (tab.color || '#475569'),
+                  fontWeight: '800',
+                  lineHeight: '1.3'
                 }}>
                   {tab.count}
                 </span>

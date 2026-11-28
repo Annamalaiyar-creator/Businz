@@ -333,7 +333,6 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           items: [
             { label: 'Dashboard', icon: LayoutDashboard },
             { label: 'Smart Leads', icon: Sparkles },
-            { label: 'Leads', icon: Users },
             { label: 'Customers', icon: Building2 },
             { label: 'New Monthly Customers', targetTab: 'Monthly Customers by Rep', icon: UserCheck },
             { label: 'WhatsApp Inbox', icon: MessageSquare },
@@ -383,7 +382,6 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           category: 'SUPPORT CHANNELS & CRM',
           items: [
             { label: 'Smart Leads', icon: Sparkles },
-            { label: 'Leads Directory', targetTab: 'Leads', icon: Users },
             { label: 'Customers', targetTab: 'Customers', icon: Building2 },
             { label: 'Proforma Invoices', targetTab: 'Proforma Invoice', icon: Receipt },
             { label: 'WhatsApp Inbox', icon: MessageSquare },
@@ -431,7 +429,6 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
           dashboardSubTab: 'crm-dashboard',
           items: [
             { label: 'Smart Leads', icon: Sparkles },
-            { label: 'All Leads', targetTab: 'Leads', icon: Users },
             { label: 'Customer Management', targetTab: 'Customers', icon: Building2 }
           ]
         },

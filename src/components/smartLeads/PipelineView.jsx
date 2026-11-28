@@ -15,6 +15,8 @@ export default function PipelineView({ meta, onOpenLead, toast }) {
   const [tempFilter, setTempFilter] = useState('');
   const [search, setSearch] = useState('');
   const [stageModalLead, setStageModalLead] = useState(null);
+  const [draggingLead, setDraggingLead] = useState(null);
+  const [dragOverStage, setDragOverStage] = useState('');
 
   const isManager = !!meta?.me?.isManager;
 
@@ -64,6 +66,53 @@ export default function PipelineView({ meta, onOpenLead, toast }) {
       setStageModalLead({ lead, initialStage: next });
     } else {
       setStageModalLead({ lead, initialStage: '' });
+    }
+  };
+
+  const handleDropOnStage = async (e, targetStage) => {
+    e.preventDefault();
+    setDragOverStage('');
+    let payload = draggingLead;
+    try {
+      const raw = e.dataTransfer?.getData('text/plain');
+      if (raw) payload = JSON.parse(raw);
+    } catch (_) {}
+    setDraggingLead(null);
+
+    if (!payload?.id || !targetStage || payload.fromStage === targetStage) return;
+
+    const sourceCol = columns.find(c => c.stage === payload.fromStage);
+    const draggedCard = sourceCol?.cards?.find(c => String(c.id) === String(payload.id));
+    if (!draggedCard) return;
+
+    if (targetStage === 'Lost') {
+      setStageModalLead({ lead: draggedCard, initialStage: 'Lost' });
+      return;
+    }
+
+    // Optimistic UI move
+    setColumns(prev => prev.map(col => {
+      if (col.stage === payload.fromStage) {
+        const nextCards = (col.cards || []).filter(c => String(c.id) !== String(payload.id));
+        const val = nextCards.reduce((s, c) => s + (c.estimated_value || 0), 0);
+        return { ...col, cards: nextCards, count: nextCards.length, value: val };
+      }
+      if (col.stage === targetStage) {
+        const nextCards = [{ ...draggedCard, pipeline_stage: targetStage }, ...(col.cards || [])];
+        const val = nextCards.reduce((s, c) => s + (c.estimated_value || 0), 0);
+        return { ...col, cards: nextCards, count: nextCards.length, value: val };
+      }
+      return col;
+    }));
+
+    try {
+      await slApi.changeStage(payload.id, { stage: targetStage });
+      toast(`Moved to ${targetStage}`);
+      load();
+    } catch (err) {
+      load();
+      if (err?.message) toast(err.message, 'error');
+      setStageModalLead({ lead: draggedCard, initialStage: targetStage });
     }
   };
 
@@ -294,19 +343,32 @@ export default function PipelineView({ meta, onOpenLead, toast }) {
           {filteredColumns.map(col => {
             const isWon = col.stage === 'Won';
             const isLost = col.stage === 'Lost';
+            const isDropTarget = dragOverStage === col.stage && draggingLead?.fromStage !== col.stage;
 
             return (
               <div
                 key={col.stage}
                 className="sl-col"
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+                  if (dragOverStage !== col.stage) setDragOverStage(col.stage);
+                }}
+                onDragLeave={(e) => {
+                  if (!e.currentTarget.contains(e.relatedTarget)) {
+                    setDragOverStage(prev => (prev === col.stage ? '' : prev));
+                  }
+                }}
+                onDrop={(e) => handleDropOnStage(e, col.stage)}
                 style={{
                   flex: '0 0 290px',
-                  background: '#F8FAFC',
-                  border: '1px solid #E2E8F0',
+                  background: isDropTarget ? '#ECFEFF' : '#F8FAFC',
+                  border: isDropTarget ? '2px dashed #0E7490' : '1px solid #E2E8F0',
                   borderRadius: '12px',
                   display: 'flex',
                   flexDirection: 'column',
-                  maxHeight: 'calc(100vh - 220px)'
+                  maxHeight: 'calc(100vh - 220px)',
+                  transition: 'background-color 0.15s ease, border-color 0.15s ease'
                 }}
               >
                 {/* Column Head: Clean & Neutral, NO colored top border */}
@@ -358,6 +420,19 @@ export default function PipelineView({ meta, onOpenLead, toast }) {
                       return (
                         <div
                           key={card.id}
+                          draggable
+                          onDragStart={(e) => {
+                            const payload = { id: card.id, fromStage: col.stage };
+                            if (e.dataTransfer) {
+                              e.dataTransfer.setData('text/plain', JSON.stringify(payload));
+                              e.dataTransfer.effectAllowed = 'move';
+                            }
+                            setDraggingLead(payload);
+                          }}
+                          onDragEnd={() => {
+                            setDraggingLead(null);
+                            setDragOverStage('');
+                          }}
                           onClick={() => onOpenLead(card.id)}
                           role="button"
                           tabIndex={0}
@@ -366,7 +441,8 @@ export default function PipelineView({ meta, onOpenLead, toast }) {
                             border: '1px solid #E2E8F0',
                             borderRadius: '10px',
                             padding: '12px',
-                            cursor: 'pointer',
+                            cursor: 'grab',
+                            opacity: draggingLead?.id === card.id ? 0.55 : 1,
                             boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
                             transition: 'all 0.15s ease',
                             display: 'flex',
