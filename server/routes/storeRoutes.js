@@ -503,6 +503,7 @@ router.post('/api/store/:key', async (req, res) => {
   return enqueueStoreOperation(key, async () => {
     try {
       let finalDataToSave = storeData;
+      let singleBomRecord = null;
 
     // Smart merge for array collections
     if (Array.isArray(storeData) && storeData.length === 0) {
@@ -682,6 +683,7 @@ router.post('/api/store/:key', async (req, res) => {
       } else {
         list.unshift(storeData);
       }
+      if (key === 'bom_store') singleBomRecord = list[existingIdx !== -1 ? existingIdx : 0];
       finalDataToSave = list;
     }
 
@@ -702,7 +704,8 @@ router.post('/api/store/:key', async (req, res) => {
       });
     }
 
-    await saveDatabaseStore(key, finalDataToSave);
+    // Single BOM upsert: persist and broadcast only that BOM, not the whole list (whose first item was broadcast as if changed)
+    await saveDatabaseStore(key, singleBomRecord ? [singleBomRecord] : finalDataToSave);
     if (key === 'notifications_store') {
       const returnedSlice = Array.isArray(storeData)
         ? storeData.slice(0, 50)
