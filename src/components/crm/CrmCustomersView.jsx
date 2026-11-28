@@ -237,6 +237,7 @@ export default function CrmCustomersView({
   const [gstLookupLoading, setGstLookupLoading] = useState(false);
   const [gstLookupNotice, setGstLookupNotice] = useState(null);
   const [gstAddresses, setGstAddresses] = useState([]);
+  const lastAutoFetchedGstRef = useRef('');
 
   const applyGstAddressChoice = (addrObj) => {
     if (!addrObj) return;
@@ -259,8 +260,8 @@ export default function CrmCustomersView({
     }));
   };
 
-  const handleFetchGstDetails = async () => {
-    const cleanGst = String(formCust.gstNumber || '').trim().toUpperCase();
+  const handleFetchGstDetails = async (overrideGst) => {
+    const cleanGst = String(overrideGst ?? formCust.gstNumber ?? '').trim().toUpperCase();
     if (cleanGst.length !== 15) {
       setGstLookupNotice({ ok: false, msg: 'Enter a valid 15-character GSTIN first.' });
       return;
@@ -1301,39 +1302,40 @@ export default function CrmCustomersView({
               <label htmlFor="crm-customers-gstin-tax-id" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                 GSTIN / Tax ID (15 Digits)
               </label>
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                 <input id="crm-customers-gstin-tax-id" name="gSTINTaxID" aria-label="GSTIN / Tax ID (15 Digits)"
                   type="text"
                   placeholder="e.g. 33AABCV1234F1Z5"
                   value={formCust.gstNumber}
                   onChange={(e) => {
                     const val = e.target.value.toUpperCase();
-                    const derivedPan = val.length >= 12 ? val.substring(2, 12) : (formCust.panNumber || '');
+                    const cleanVal = val.trim();
+                    const derivedPan = cleanVal.length >= 12 ? cleanVal.substring(2, 12) : (formCust.panNumber || '');
                     setFormCust({ ...formCust, gstNumber: val, panNumber: derivedPan });
                     validateDuplicates('gstNumber', val, editingCustomer?.id);
+                    if (/^[0-9]{2}[A-Z0-9]{13}$/.test(cleanVal)) {
+                      if (lastAutoFetchedGstRef.current !== cleanVal) {
+                        lastAutoFetchedGstRef.current = cleanVal;
+                        handleFetchGstDetails(cleanVal);
+                      }
+                    } else {
+                      lastAutoFetchedGstRef.current = '';
+                      if (gstLookupNotice) setGstLookupNotice(null);
+                      if (gstAddresses.length > 0) setGstAddresses([]);
+                    }
                   }}
-                  style={{ flex: 1, minWidth: 0, height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', fontFamily: 'monospace', fontWeight: '700', color: '#0F172A', boxSizing: 'border-box', outline: 'none' }}
+                  style={{ width: '100%', height: '42px', borderRadius: '10px', border: gstLookupLoading ? '1px solid #0E7490' : '1px solid #CBD5E1', padding: gstLookupLoading ? '0 105px 0 14px' : '0 14px', fontSize: '13px', fontFamily: 'monospace', fontWeight: '700', color: '#0F172A', boxSizing: 'border-box', outline: 'none' }}
                  />
-                <button
-                  type="button"
-                  onClick={handleFetchGstDetails}
-                  disabled={gstLookupLoading}
-                  style={{
-                    height: '42px',
-                    padding: '0 12px',
-                    borderRadius: '10px',
-                    border: '1px solid #0E7490',
-                    backgroundColor: gstLookupLoading ? '#CBD5E1' : '#ECFEFF',
-                    color: '#0E7490',
-                    fontSize: '12px',
-                    fontWeight: '700',
-                    cursor: gstLookupLoading ? 'not-allowed' : 'pointer',
-                    whiteSpace: 'nowrap',
-                    flexShrink: 0
-                  }}
-                >
-                  {gstLookupLoading ? 'Fetching...' : 'Fetch GST'}
-                </button>
+                {gstLookupLoading && (
+                  <div style={{ position: 'absolute', right: '10px', display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '4px 8px', borderRadius: '6px', backgroundColor: '#ECFEFF', color: '#0E7490', fontSize: '11px', fontWeight: '700', pointerEvents: 'none' }}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                      <path d="M12 2a10 10 0 0 1 10 10">
+                        <animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.75s" repeatCount="indefinite" />
+                      </path>
+                    </svg>
+                    <span>Fetching...</span>
+                  </div>
+                )}
               </div>
               {gstLookupNotice && (
                 <div style={{ marginTop: '5px', fontSize: '11px', fontWeight: '600', color: gstLookupNotice.ok ? '#059669' : '#DC2626' }}>

@@ -172,6 +172,7 @@ export default function PiCreatorEditorSection({ ctx }) {
   const [piGstLoading, setPiGstLoading] = React.useState(false);
   const [piGstNotice, setPiGstNotice] = React.useState(null);
   const [piGstAddresses, setPiGstAddresses] = React.useState([]);
+  const lastAutoFetchedPiGstRef = React.useRef('');
 
   const applyPiGstAddress = (addrObj) => {
     if (!addrObj) return;
@@ -188,8 +189,8 @@ export default function PiCreatorEditorSection({ ctx }) {
     }
   };
 
-  const handleFetchPiGstDetails = async () => {
-    const cleanGst = String(gstNo || '').trim().toUpperCase();
+  const handleFetchPiGstDetails = async (overrideGst) => {
+    const cleanGst = String(overrideGst ?? gstNo ?? '').trim().toUpperCase();
     if (cleanGst.length !== 15) {
       setPiGstNotice({ ok: false, msg: 'Enter a valid 15-character GSTIN first.' });
       return;
@@ -699,30 +700,40 @@ export default function PiCreatorEditorSection({ ctx }) {
                       Customer GSTIN
                     </label>
                   </div>
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                     <input id="performa-invoice-33aabcv1234f1z5" name="33AABCV1234F1Z5" aria-label="33AABCV1234F1Z5"
                       type="text"
                       placeholder="e.g. 33AABCV1234F1Z5"
                       value={gstNo}
                       onChange={(e) => {
                         const val = e.target.value.toUpperCase();
+                        const cleanVal = val.trim();
                         setGstNo(val);
-                        if (val.trim().length >= 2) {
-                          const sCode = val.trim().substring(0, 2);
+                        if (cleanVal.length >= 2) {
+                          const sCode = cleanVal.substring(0, 2);
                           const mappedState = GST_STATE_MAP[sCode];
                           if (mappedState && (!billingState || billingState.trim() === '')) {
                             setBillingState(mappedState);
                             if (sameAsBilling) setDeliveryState(mappedState);
                           }
                         }
+                        if (/^[0-9]{2}[A-Z0-9]{13}$/.test(cleanVal)) {
+                          if (lastAutoFetchedPiGstRef.current !== cleanVal) {
+                            lastAutoFetchedPiGstRef.current = cleanVal;
+                            handleFetchPiGstDetails(cleanVal);
+                          }
+                        } else {
+                          lastAutoFetchedPiGstRef.current = '';
+                          if (piGstNotice) setPiGstNotice(null);
+                          if (piGstAddresses.length > 0) setPiGstAddresses([]);
+                        }
                       }}
                       style={{
-                        flex: 1,
-                        minWidth: 0,
+                        width: '100%',
                         height: '42px',
                         borderRadius: '10px',
-                        border: '1px solid #E2E8F0',
-                        padding: '0 14px',
+                        border: piGstLoading ? '1px solid #0E7490' : '1px solid #E2E8F0',
+                        padding: piGstLoading ? '0 105px 0 14px' : '0 14px',
                         fontSize: '13px',
                         fontWeight: '700',
                         color: '#0F172A',
@@ -730,26 +741,16 @@ export default function PiCreatorEditorSection({ ctx }) {
                         boxSizing: 'border-box'
                       }}
                      />
-                    <button
-                      type="button"
-                      onClick={handleFetchPiGstDetails}
-                      disabled={piGstLoading}
-                      style={{
-                        height: '42px',
-                        padding: '0 12px',
-                        borderRadius: '10px',
-                        border: '1px solid #0E7490',
-                        backgroundColor: piGstLoading ? '#CBD5E1' : '#ECFEFF',
-                        color: '#0E7490',
-                        fontSize: '12px',
-                        fontWeight: '700',
-                        cursor: piGstLoading ? 'not-allowed' : 'pointer',
-                        whiteSpace: 'nowrap',
-                        flexShrink: 0
-                      }}
-                    >
-                      {piGstLoading ? 'Fetching...' : 'Fetch GST'}
-                    </button>
+                    {piGstLoading && (
+                      <div style={{ position: 'absolute', right: '10px', display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '4px 8px', borderRadius: '6px', backgroundColor: '#ECFEFF', color: '#0E7490', fontSize: '11px', fontWeight: '700', pointerEvents: 'none' }}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                          <path d="M12 2a10 10 0 0 1 10 10">
+                            <animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.75s" repeatCount="indefinite" />
+                          </path>
+                        </svg>
+                        <span>Fetching...</span>
+                      </div>
+                    )}
                   </div>
                   {piGstNotice && (
                     <div style={{ marginTop: '5px', fontSize: '11px', fontWeight: '600', color: piGstNotice.ok ? '#059669' : '#DC2626' }}>
