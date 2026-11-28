@@ -996,7 +996,8 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                 const isInvoiceDone = Boolean(b.invoiceConfirmed === true || b.status === 'Invoice Confirmed' || (bRef && confirmedInvoiceBomRefs.has(bRef)));
                 const hasVehicleLoaded = Boolean(b.vehicleLoading?.loadedAt && (b.vehicleLoading?.dispatched || b.vehicleLoading?.completedAt || b.vehicleLoading?.fullyCompleted));
                 const hasLr = Boolean(b.lrCopyDoc || b.vehicleLoading?.lrCopyDoc || (b.lrNo && b.lrNo !== 'N/A' && b.lrNo !== 'Self-Pickup' && b.lrNo !== 'Awaiting LR Copy'));
-                const isDirect = b.deliveryMode === 'direct' || b.transportMode === 'Self-Pickup' || b.transportMode === 'Direct' || b.deliveryMode === 'own_vehicle' || b.transportMode === 'Own Vehicle';
+                const tCombined = [b.deliveryMode, b.transportMode, b.transporterName, b.transporter, b.vehicleLoading?.transporter].filter(Boolean).join(' ').toLowerCase();
+                const isDirect = b.deliveryMode === 'direct' || b.deliveryMode === 'own_vehicle' || /\b(porter|portal|self|direct|pickup|own)\b/.test(tCombined);
 
                 if (isAccountsDone && isInvoiceDone && hasVehicleLoaded && (hasLr || isDirect)) return true;
                 return false;
@@ -1018,7 +1019,8 @@ export function buildProductionConfigs({ bomStore: rawBomStore = [], visibleBomS
                 const isInvoiceDone = Boolean(b.invoiceConfirmed === true || b.status === 'Invoice Confirmed' || (bRef && confirmedInvoiceBomRefs.has(bRef)));
                 const hasVehicleLoaded = Boolean(b.vehicleLoading?.loadedAt && (b.vehicleLoading?.dispatched || b.vehicleLoading?.completedAt));
                 const hasLr = Boolean(b.lrCopyDoc || b.vehicleLoading?.lrCopyDoc || (b.lrNo && b.lrNo !== 'N/A' && b.lrNo !== 'Self-Pickup' && b.lrNo !== 'Awaiting LR Copy'));
-                const isDirect = b.deliveryMode === 'direct' || b.transportMode === 'Self-Pickup' || b.transportMode === 'Direct' || b.deliveryMode === 'own_vehicle' || b.transportMode === 'Own Vehicle';
+                const tCombined = [b.deliveryMode, b.transportMode, b.transporterName, b.transporter, b.vehicleLoading?.transporter].filter(Boolean).join(' ').toLowerCase();
+                const isDirect = b.deliveryMode === 'direct' || b.deliveryMode === 'own_vehicle' || /\b(porter|portal|self|direct|pickup|own)\b/.test(tCombined);
 
                 if (isAccountsDone && isInvoiceDone && hasVehicleLoaded && !hasLr && !isDirect) {
                   return true;

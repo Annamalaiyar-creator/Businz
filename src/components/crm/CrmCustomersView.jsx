@@ -234,6 +234,52 @@ export default function CrmCustomersView({
   };
 
   const [formCust, setFormCust] = useState(initialFormState);
+  const [gstLookupLoading, setGstLookupLoading] = useState(false);
+  const [gstLookupNotice, setGstLookupNotice] = useState(null);
+
+  const handleFetchGstDetails = async () => {
+    const cleanGst = String(formCust.gstNumber || '').trim().toUpperCase();
+    if (cleanGst.length !== 15) {
+      setGstLookupNotice({ ok: false, msg: 'Enter a valid 15-character GSTIN first.' });
+      return;
+    }
+    setGstLookupLoading(true);
+    setGstLookupNotice(null);
+    try {
+      const res = await fetch(`/api/gst-lookup?gstin=${encodeURIComponent(cleanGst)}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.success === false) {
+        setGstLookupNotice({ ok: false, msg: data.error || 'GST lookup failed.' });
+        return;
+      }
+      setFormCust((prev) => ({
+        ...prev,
+        gstNumber: cleanGst,
+        panNumber: data.pan || cleanGst.substring(2, 12),
+        companyName: data.legalName || prev.companyName,
+        customerName: data.tradeName || data.legalName || prev.customerName,
+        address1: data.address1 || data.address || prev.address1,
+        address2: data.address2 || prev.address2,
+        address: data.address || prev.address,
+        city: data.city || prev.city,
+        state: data.state || prev.state,
+        pincode: data.pincode || prev.pincode,
+        ...(prev.sameAsBilling ? {
+          dispatchAddress1: data.address1 || data.address || prev.dispatchAddress1,
+          dispatchAddress2: data.address2 || prev.dispatchAddress2,
+          dispatchAddress: data.address || prev.dispatchAddress,
+          dispatchCity: data.city || prev.dispatchCity,
+          dispatchState: data.state || prev.dispatchState,
+          dispatchPincode: data.pincode || prev.dispatchPincode
+        } : {})
+      }));
+      setGstLookupNotice({ ok: true, msg: `Fetched ${data.legalName || cleanGst} (${data.status || 'Active'})` });
+    } catch (err) {
+      setGstLookupNotice({ ok: false, msg: err?.message || 'Failed to fetch GST details.' });
+    } finally {
+      setGstLookupLoading(false);
+    }
+  };
 
   // Sync with Central Database on component mount & manual trigger
   const handleSyncWithBackend = async (isManual = false) => {
@@ -1226,18 +1272,45 @@ export default function CrmCustomersView({
               <label htmlFor="crm-customers-gstin-tax-id" style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
                 GSTIN / Tax ID (15 Digits)
               </label>
-              <input id="crm-customers-gstin-tax-id" name="gSTINTaxID" aria-label="GSTIN / Tax ID (15 Digits)"
-                type="text"
-                placeholder="e.g. 33AABCV1234F1Z5"
-                value={formCust.gstNumber}
-                onChange={(e) => {
-                  const val = e.target.value.toUpperCase();
-                  const derivedPan = val.length >= 12 ? val.substring(2, 12) : (formCust.panNumber || '');
-                  setFormCust({ ...formCust, gstNumber: val, panNumber: derivedPan });
-                  validateDuplicates('gstNumber', val, editingCustomer?.id);
-                }}
-                style={{ width: '100%', height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', fontFamily: 'monospace', fontWeight: '700', color: '#0F172A', boxSizing: 'border-box', outline: 'none' }}
-               />
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <input id="crm-customers-gstin-tax-id" name="gSTINTaxID" aria-label="GSTIN / Tax ID (15 Digits)"
+                  type="text"
+                  placeholder="e.g. 33AABCV1234F1Z5"
+                  value={formCust.gstNumber}
+                  onChange={(e) => {
+                    const val = e.target.value.toUpperCase();
+                    const derivedPan = val.length >= 12 ? val.substring(2, 12) : (formCust.panNumber || '');
+                    setFormCust({ ...formCust, gstNumber: val, panNumber: derivedPan });
+                    validateDuplicates('gstNumber', val, editingCustomer?.id);
+                  }}
+                  style={{ flex: 1, minWidth: 0, height: '42px', borderRadius: '10px', border: '1px solid #CBD5E1', padding: '0 14px', fontSize: '13px', fontFamily: 'monospace', fontWeight: '700', color: '#0F172A', boxSizing: 'border-box', outline: 'none' }}
+                 />
+                <button
+                  type="button"
+                  onClick={handleFetchGstDetails}
+                  disabled={gstLookupLoading}
+                  style={{
+                    height: '42px',
+                    padding: '0 12px',
+                    borderRadius: '10px',
+                    border: '1px solid #0E7490',
+                    backgroundColor: gstLookupLoading ? '#CBD5E1' : '#ECFEFF',
+                    color: '#0E7490',
+                    fontSize: '12px',
+                    fontWeight: '700',
+                    cursor: gstLookupLoading ? 'not-allowed' : 'pointer',
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0
+                  }}
+                >
+                  {gstLookupLoading ? 'Fetching...' : 'Fetch GST'}
+                </button>
+              </div>
+              {gstLookupNotice && (
+                <div style={{ marginTop: '5px', fontSize: '11px', fontWeight: '600', color: gstLookupNotice.ok ? '#059669' : '#DC2626' }}>
+                  {gstLookupNotice.msg}
+                </div>
+              )}
             </div>
           </div>
         </div>

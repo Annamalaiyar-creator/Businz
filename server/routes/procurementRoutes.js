@@ -224,12 +224,91 @@ router.get('/api/vendors/:id', async (req, res) => {
   }
 });
 
-// GSTIN Lookup & Verification Endpoint from BUSINZ local stores (Native BUSINZ Store)
+// GSTIN Lookup & Verification Endpoint (Sandbox.co.in live GSTN + BUSINZ local stores fallback)
+let cachedSandboxToken = '';
+let cachedSandboxTokenExp = 0;
+
+async function getSandboxAccessToken(apiKey, apiSecret) {
+  if (cachedSandboxToken && Date.now() < cachedSandboxTokenExp - 60000) {
+    return cachedSandboxToken;
+  }
+  const authRes = await fetch('https://api.sandbox.co.in/authenticate', {
+    method: 'POST',
+    headers: {
+      'x-api-key': apiKey,
+      'x-api-secret': apiSecret,
+      'x-api-version': '1.0'
+    }
+  });
+  const authData = await authRes.json().catch(() => ({}));
+  const token = authData?.access_token || authData?.data?.access_token || '';
+  if (!authRes.ok || !token) {
+    throw new Error(authData?.message || 'Sandbox.co.in authentication failed');
+  }
+  cachedSandboxToken = token;
+  cachedSandboxTokenExp = Date.now() + 20 * 60 * 60 * 1000;
+  return token;
+}
+
+async function lookupGstinSandbox(rawGst, stateMap) {
+  const apiKey = String(process.env.SANDBOX_API_KEY || '').trim();
+  const apiSecret = String(process.env.SANDBOX_API_SECRET || '').trim();
+  if (!apiKey || !apiSecret) return { configured: false };
+
+  const token = await getSandboxAccessToken(apiKey, apiSecret);
+  const res = await fetch('https://api.sandbox.co.in/gst/compliance/public/gstin/search', {
+    method: 'POST',
+    headers: {
+      Authorization: token,
+      'x-api-key': apiKey,
+      'x-api-version': '1.0',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ gstin: rawGst })
+  });
+  const payload = await res.json().catch(() => ({}));
+  const d = payload?.data?.data || payload?.data || {};
+  if (!res.ok || (!d.lgnm && !d.tradeNam && !d.gstin)) {
+    throw new Error(payload?.message || d?.error?.message || 'GSTIN not found in Sandbox.co.in');
+  }
+
+  const addr = d?.pradr?.addr || {};
+  const line1Parts = [addr.bno, addr.flno, addr.bnm].map(x => String(x || '').trim()).filter(Boolean);
+  const line2Parts = [addr.st, addr.loc].map(x => String(x || '').trim()).filter(Boolean);
+  const address1 = line1Parts.join(', ');
+  const address2 = line2Parts.join(', ');
+  const city = String(addr.dst || addr.loc || '').trim();
+  const stateCode = rawGst.substring(0, 2);
+  const state = String(addr.stcd || stateMap[stateCode] || '').trim();
+  const pincode = String(addr.pncd || '').trim();
+  const fullAddress = [address1, address2, city, state, pincode].filter(Boolean).join(', ');
+
+  return {
+    configured: true,
+    data: {
+      success: true,
+      source: 'sandbox.co.in',
+      gstin: rawGst,
+      pan: rawGst.substring(2, 12),
+      state,
+      legalName: d.lgnm || d.tradeNam || '',
+      tradeName: d.tradeNam || d.lgnm || '',
+      address1,
+      address2,
+      address: fullAddress,
+      city,
+      pincode,
+      status: d.sts || 'Active',
+      taxpayerType: d.dty || 'Regular'
+    }
+  };
+}
+
 router.get('/api/gst-lookup', async (req, res) => {
   try {
     const rawGst = (req.query.gstin || '').trim().toUpperCase();
     if (!rawGst || rawGst.length !== 15) {
-      return res.status(400).json({ error: 'Please enter a valid 15-character Indian GSTIN.' });
+      return res.status(400).json({ success: false, error: 'Please enter a valid 15-character Indian GSTIN.' });
     }
 
     const stateMap = {
@@ -242,85 +321,83 @@ router.get('/api/gst-lookup', async (req, res) => {
       '32': 'Kerala', '33': 'Tamil Nadu', '36': 'Telangana', '37': 'Andhra Pradesh'
     };
 
+    // 1. Live Sandbox.co.in lookup when API credentials are configured
+    const sandboxResult = await lookupGstinSandbox(rawGst, stateMap).catch((err) => ({ configured: true, error: err.message }));
+    if (sandboxResult.configured && sandboxResult.data) {
+      return res.json(sandboxResult.data);
+    }
+
     const stateCode = rawGst.substring(0, 2);
     const pan = rawGst.substring(2, 12);
     const stateName = stateMap[stateCode] || 'Tamil Nadu';
 
-    // 1. Search local verified vendors
+    // 2. Search local verified vendors
     const localVendors = loadLocalVendors();
-    const matchedVendor = localVendors.find(v => 
-      (v.gstin || '').toUpperCase().trim() === rawGst || 
+    const matchedVendor = localVendors.find(v =>
+      (v.gstin || '').toUpperCase().trim() === rawGst ||
       (v.pan || '').toUpperCase().trim() === pan
     );
 
     if (matchedVendor) {
       return res.json({
         success: true,
+        source: 'local_vendor',
         gstin: rawGst,
-        pan: pan,
+        pan,
         state: stateName,
         legalName: matchedVendor.companyName || matchedVendor.name,
         tradeName: matchedVendor.name,
-        email: matchedVendor.email && matchedVendor.email !== '—' ? matchedVendor.email : `contact@${(matchedVendor.name || 'vendor').toLowerCase().replace(/[^a-z0-9]/g, '')}.com`,
-        phone: matchedVendor.phone && matchedVendor.phone !== '—' ? matchedVendor.phone : (matchedVendor.mobile && matchedVendor.mobile !== '—' ? matchedVendor.mobile : '9840012345'),
-        address: matchedVendor.address && matchedVendor.address !== '—' ? matchedVendor.address : `Industrial Estate, Main Road, ${stateName}`,
-        city: matchedVendor.city || 'Chennai',
-        pincode: matchedVendor.pincode || '600001',
+        email: matchedVendor.email && matchedVendor.email !== '—' ? matchedVendor.email : '',
+        phone: matchedVendor.phone && matchedVendor.phone !== '—' ? matchedVendor.phone : (matchedVendor.mobile && matchedVendor.mobile !== '—' ? matchedVendor.mobile : ''),
+        address: matchedVendor.address && matchedVendor.address !== '—' ? matchedVendor.address : '',
+        city: matchedVendor.city || '',
+        pincode: matchedVendor.pincode || '',
         status: 'Active',
-        taxpayerType: 'Regular',
-        companyReg: `U${Math.floor(10000 + Math.random()*90000)}${stateCode}2018PTC098412`
+        taxpayerType: 'Regular'
       });
     }
 
-    // 2. Search local verified customers
+    // 3. Search local verified customers
     const localCustomers = loadLocalCustomers();
-    const matchedCustomer = localCustomers.find(c => 
-      (c.gstNumber || c.gstin || '').toUpperCase().trim() === rawGst || 
+    const matchedCustomer = localCustomers.find(c =>
+      (c.gstNumber || c.gstin || '').toUpperCase().trim() === rawGst ||
       (c.panNumber || c.pan || '').toUpperCase().trim() === pan
     );
 
     if (matchedCustomer) {
       return res.json({
         success: true,
+        source: 'local_customer',
         gstin: rawGst,
-        pan: pan,
+        pan,
         state: stateName,
         legalName: matchedCustomer.companyName || matchedCustomer.customerName,
         tradeName: matchedCustomer.customerName || matchedCustomer.companyName,
         email: matchedCustomer.email && matchedCustomer.email !== '—' ? matchedCustomer.email : (matchedCustomer.primaryContact?.email || ''),
         phone: matchedCustomer.phone && matchedCustomer.phone !== '—' ? matchedCustomer.phone : (matchedCustomer.primaryContact?.phone || ''),
-        address: matchedCustomer.address || matchedCustomer.billingAddress || `Industrial Road, ${stateName}`,
-        city: matchedCustomer.city || 'Chennai',
-        pincode: matchedCustomer.pincode || '600001',
+        address1: matchedCustomer.address1 || '',
+        address2: matchedCustomer.address2 || '',
+        address: matchedCustomer.address || matchedCustomer.billingAddress || '',
+        city: matchedCustomer.city || '',
+        pincode: matchedCustomer.pincode || '',
         status: 'Active',
-        taxpayerType: 'Regular',
-        companyReg: `U${Math.floor(10000 + Math.random()*90000)}${stateCode}2018PTC098412`
+        taxpayerType: 'Regular'
       });
     }
 
-    const pTypeChar = pan.charAt(3);
-    let businessType = 'Supplier / Manufacturer';
-    if (pTypeChar === 'C') businessType = 'Private Limited Company';
-    else if (pTypeChar === 'F') businessType = 'Partnership Firm';
+    if (sandboxResult.error) {
+      return res.status(404).json({ success: false, error: sandboxResult.error });
+    }
 
-    res.json({
-      success: true,
-      gstin: rawGst,
-      pan: pan,
+    return res.status(400).json({
+      success: false,
+      needsApiKey: true,
+      pan,
       state: stateName,
-      legalName: `BUSINZ REGISTERED ENTITY (${pan})`,
-      tradeName: `BUSINZ Industrial Partner`,
-      email: `contact@entity-${pan.toLowerCase()}.com`,
-      phone: `9440${Math.floor(10005 + Math.random()*89995)}`,
-      address: `Door No. 12/484, Industrial Complex, Highway Road, ${stateName}`,
-      city: stateCode === '33' ? 'Chennai' : (stateCode === '37' ? 'Nellore' : (stateCode === '36' ? 'Hyderabad' : 'Bangalore')),
-      pincode: stateCode === '33' ? '600001' : (stateCode === '37' ? '524002' : '600028'),
-      status: 'Active',
-      taxpayerType: 'Regular',
-      companyReg: `U28112${stateCode}2016PTC098412`
+      error: 'Sandbox.co.in API credentials (SANDBOX_API_KEY & SANDBOX_API_SECRET) are not configured in server .env.'
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 

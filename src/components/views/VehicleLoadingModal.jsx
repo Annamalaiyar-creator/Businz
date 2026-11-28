@@ -213,7 +213,14 @@ export default function VehicleLoadingModal({
   const [localMediaPreviewModal, setLocalMediaPreviewModal] = useState(null);
 
   const salesTransportMode = (() => {
-    const raw = bom.transportMode || bom.deliveryMode || existingLoading.deliveryMode || '';
+    const raw = [
+      bom.transportMode,
+      bom.deliveryMode,
+      existingLoading.deliveryMode,
+      bom.transporterName,
+      bom.transporter,
+      existingLoading.transporter
+    ].filter(Boolean).join(' ');
     const str = String(raw).trim().toLowerCase();
     if (str.includes('own')) return 'Own Vehicle';
     if (str.includes('porter') || str.includes('portal') || str.includes('self') || str.includes('direct') || str.includes('pickup') || str.includes('customer')) return 'Porter';
