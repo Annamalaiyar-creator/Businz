@@ -224,7 +224,8 @@ router.get('/api/vendors/:id', async (req, res) => {
   }
 });
 
-// GSTIN Lookup & Verification Endpoint (Sandbox.co.in live GSTN + BUSINZ local stores fallback)
+// GSTIN Lookup & Verification Endpoint (Local Cache & BUSINZ DB first -> Sandbox.co.in only for brand-new GSTINs)
+const gstLookupCache = new Map();
 let cachedSandboxToken = '';
 let cachedSandboxTokenExp = 0;
 
@@ -267,21 +268,34 @@ async function lookupGstinSandbox(rawGst, stateMap) {
     body: JSON.stringify({ gstin: rawGst })
   });
   const payload = await res.json().catch(() => ({}));
-  const d = payload?.data?.data || payload?.data || {};
-  if (!res.ok || (!d.lgnm && !d.tradeNam && !d.gstin)) {
+  const d = payload?.data?.data || payload?.data || payload || {};
+  const info = d?.taxpayerInfo || d;
+  const legalName = String(info.lgnm || info.legalName || info.legal_name || info.name || info.tradeNam || info.tradeName || info.trade_name || '').trim();
+  const tradeName = String(info.tradeNam || info.tradeName || info.trade_name || legalName).trim();
+
+  if (!res.ok || (!legalName && !tradeName && !info.gstin)) {
     throw new Error(payload?.message || d?.error?.message || 'GSTIN not found in Sandbox.co.in');
   }
 
-  const addr = d?.pradr?.addr || {};
-  const line1Parts = [addr.bno, addr.flno, addr.bnm].map(x => String(x || '').trim()).filter(Boolean);
-  const line2Parts = [addr.st, addr.loc].map(x => String(x || '').trim()).filter(Boolean);
-  const address1 = line1Parts.join(', ');
-  const address2 = line2Parts.join(', ');
-  const city = String(addr.dst || addr.loc || '').trim();
   const stateCode = rawGst.substring(0, 2);
-  const state = String(addr.stcd || stateMap[stateCode] || '').trim();
-  const pincode = String(addr.pncd || '').trim();
-  const fullAddress = [address1, address2, city, state, pincode].filter(Boolean).join(', ');
+  const formatGstAddr = (addrObj = {}, label = 'Principal') => {
+    const a = addrObj?.addr || addrObj || {};
+    const line1Parts = [a.bno, a.flno, a.bnm].map(x => String(x || '').trim()).filter(Boolean);
+    const line2Parts = [a.st, a.loc].map(x => String(x || '').trim()).filter(Boolean);
+    const address1 = line1Parts.join(', ');
+    const address2 = line2Parts.join(', ');
+    const city = String(a.dst || a.loc || '').trim();
+    const state = String(a.stcd || stateMap[stateCode] || '').trim();
+    const pincode = String(a.pncd || '').trim();
+    const fullAddress = [address1, address2, city, state, pincode].filter(Boolean).join(', ');
+    return { label, address1, address2, address: fullAddress, city, state, pincode };
+  };
+
+  const principal = formatGstAddr(info?.pradr, 'Principal Place of Business');
+  const additionalList = Array.isArray(info?.adadr)
+    ? info.adadr.map((entry, idx) => formatGstAddr(entry, `Additional Place ${idx + 1}`)).filter(x => x.address)
+    : [];
+  const allAddresses = [principal, ...additionalList].filter(x => x.address || x.city || x.state);
 
   return {
     configured: true,
@@ -290,16 +304,17 @@ async function lookupGstinSandbox(rawGst, stateMap) {
       source: 'sandbox.co.in',
       gstin: rawGst,
       pan: rawGst.substring(2, 12),
-      state,
-      legalName: d.lgnm || d.tradeNam || '',
-      tradeName: d.tradeNam || d.lgnm || '',
-      address1,
-      address2,
-      address: fullAddress,
-      city,
-      pincode,
-      status: d.sts || 'Active',
-      taxpayerType: d.dty || 'Regular'
+      state: principal.state,
+      legalName: legalName || tradeName,
+      tradeName: tradeName || legalName,
+      address1: principal.address1,
+      address2: principal.address2,
+      address: principal.address,
+      city: principal.city,
+      pincode: principal.pincode,
+      addresses: allAddresses,
+      status: info.sts || 'Active',
+      taxpayerType: info.dty || 'Regular'
     }
   };
 }
@@ -321,25 +336,63 @@ router.get('/api/gst-lookup', async (req, res) => {
       '32': 'Kerala', '33': 'Tamil Nadu', '36': 'Telangana', '37': 'Andhra Pradesh'
     };
 
-    // 1. Live Sandbox.co.in lookup when API credentials are configured
-    const sandboxResult = await lookupGstinSandbox(rawGst, stateMap).catch((err) => ({ configured: true, error: err.message }));
-    if (sandboxResult.configured && sandboxResult.data) {
-      return res.json(sandboxResult.data);
-    }
-
     const stateCode = rawGst.substring(0, 2);
     const pan = rawGst.substring(2, 12);
     const stateName = stateMap[stateCode] || 'Tamil Nadu';
 
-    // 2. Search local verified vendors
-    const localVendors = loadLocalVendors();
-    const matchedVendor = localVendors.find(v =>
-      (v.gstin || '').toUpperCase().trim() === rawGst ||
-      (v.pan || '').toUpperCase().trim() === pan
+    // 1. Check in-memory GST lookup cache first (0 Sandbox API calls)
+    if (gstLookupCache.has(rawGst)) {
+      return res.json(gstLookupCache.get(rawGst));
+    }
+
+    // 2. Search local verified customers first (0 Sandbox API calls)
+    const localCustomers = loadLocalCustomers();
+    const matchedCustomer = localCustomers.find(c =>
+      (c.gstNumber || c.gstin || c.gstNo || '').toUpperCase().trim() === rawGst
     );
 
-    if (matchedVendor) {
-      return res.json({
+    if (matchedCustomer && (matchedCustomer.companyName || matchedCustomer.customerName)) {
+      const principalAddr = {
+        label: 'Principal Place of Business',
+        address1: matchedCustomer.address1 || '',
+        address2: matchedCustomer.address2 || '',
+        address: matchedCustomer.address || matchedCustomer.billingAddress || '',
+        city: matchedCustomer.city || '',
+        state: matchedCustomer.state || stateName,
+        pincode: matchedCustomer.pincode || ''
+      };
+      const extraAddrs = Array.isArray(matchedCustomer.additionalAddresses) ? matchedCustomer.additionalAddresses : [];
+      const payload = {
+        success: true,
+        source: 'local_customer',
+        gstin: rawGst,
+        pan,
+        state: matchedCustomer.state || stateName,
+        legalName: matchedCustomer.companyName || matchedCustomer.customerName,
+        tradeName: matchedCustomer.customerName || matchedCustomer.companyName,
+        email: matchedCustomer.email && matchedCustomer.email !== '—' ? matchedCustomer.email : (matchedCustomer.primaryContact?.email || ''),
+        phone: matchedCustomer.phone && matchedCustomer.phone !== '—' ? matchedCustomer.phone : (matchedCustomer.primaryContact?.phone || ''),
+        address1: principalAddr.address1,
+        address2: principalAddr.address2,
+        address: principalAddr.address,
+        city: principalAddr.city,
+        pincode: principalAddr.pincode,
+        addresses: extraAddrs.length > 0 ? extraAddrs : [principalAddr],
+        status: 'Active',
+        taxpayerType: 'Regular'
+      };
+      gstLookupCache.set(rawGst, payload);
+      return res.json(payload);
+    }
+
+    // 3. Search local verified vendors (0 Sandbox API calls)
+    const localVendors = loadLocalVendors();
+    const matchedVendor = localVendors.find(v =>
+      (v.gstin || v.gstNo || '').toUpperCase().trim() === rawGst
+    );
+
+    if (matchedVendor && (matchedVendor.companyName || matchedVendor.name)) {
+      const payload = {
         success: true,
         source: 'local_vendor',
         gstin: rawGst,
@@ -354,35 +407,16 @@ router.get('/api/gst-lookup', async (req, res) => {
         pincode: matchedVendor.pincode || '',
         status: 'Active',
         taxpayerType: 'Regular'
-      });
+      };
+      gstLookupCache.set(rawGst, payload);
+      return res.json(payload);
     }
 
-    // 3. Search local verified customers
-    const localCustomers = loadLocalCustomers();
-    const matchedCustomer = localCustomers.find(c =>
-      (c.gstNumber || c.gstin || '').toUpperCase().trim() === rawGst ||
-      (c.panNumber || c.pan || '').toUpperCase().trim() === pan
-    );
-
-    if (matchedCustomer) {
-      return res.json({
-        success: true,
-        source: 'local_customer',
-        gstin: rawGst,
-        pan,
-        state: stateName,
-        legalName: matchedCustomer.companyName || matchedCustomer.customerName,
-        tradeName: matchedCustomer.customerName || matchedCustomer.companyName,
-        email: matchedCustomer.email && matchedCustomer.email !== '—' ? matchedCustomer.email : (matchedCustomer.primaryContact?.email || ''),
-        phone: matchedCustomer.phone && matchedCustomer.phone !== '—' ? matchedCustomer.phone : (matchedCustomer.primaryContact?.phone || ''),
-        address1: matchedCustomer.address1 || '',
-        address2: matchedCustomer.address2 || '',
-        address: matchedCustomer.address || matchedCustomer.billingAddress || '',
-        city: matchedCustomer.city || '',
-        pincode: matchedCustomer.pincode || '',
-        status: 'Active',
-        taxpayerType: 'Regular'
-      });
+    // 4. Live Sandbox.co.in lookup only for brand-new GSTINs not yet in BUSINZ
+    const sandboxResult = await lookupGstinSandbox(rawGst, stateMap).catch((err) => ({ configured: true, error: err.message }));
+    if (sandboxResult.configured && sandboxResult.data) {
+      gstLookupCache.set(rawGst, sandboxResult.data);
+      return res.json(sandboxResult.data);
     }
 
     if (sandboxResult.error) {

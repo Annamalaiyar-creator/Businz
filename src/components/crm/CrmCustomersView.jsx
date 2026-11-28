@@ -236,6 +236,28 @@ export default function CrmCustomersView({
   const [formCust, setFormCust] = useState(initialFormState);
   const [gstLookupLoading, setGstLookupLoading] = useState(false);
   const [gstLookupNotice, setGstLookupNotice] = useState(null);
+  const [gstAddresses, setGstAddresses] = useState([]);
+
+  const applyGstAddressChoice = (addrObj) => {
+    if (!addrObj) return;
+    setFormCust((prev) => ({
+      ...prev,
+      address1: addrObj.address1 || addrObj.address || prev.address1,
+      address2: addrObj.address2 || '',
+      address: addrObj.address || prev.address,
+      city: addrObj.city || prev.city,
+      state: addrObj.state || prev.state,
+      pincode: addrObj.pincode || prev.pincode,
+      ...(prev.sameAsBilling ? {
+        dispatchAddress1: addrObj.address1 || addrObj.address || prev.dispatchAddress1,
+        dispatchAddress2: addrObj.address2 || '',
+        dispatchAddress: addrObj.address || prev.dispatchAddress,
+        dispatchCity: addrObj.city || prev.dispatchCity,
+        dispatchState: addrObj.state || prev.dispatchState,
+        dispatchPincode: addrObj.pincode || prev.dispatchPincode
+      } : {})
+    }));
+  };
 
   const handleFetchGstDetails = async () => {
     const cleanGst = String(formCust.gstNumber || '').trim().toUpperCase();
@@ -252,12 +274,16 @@ export default function CrmCustomersView({
         setGstLookupNotice({ ok: false, msg: data.error || 'GST lookup failed.' });
         return;
       }
+      const addrs = Array.isArray(data.addresses) && data.addresses.length > 0 ? data.addresses : [];
+      setGstAddresses(addrs);
+      const resolvedName = data.legalName || data.tradeName || '';
       setFormCust((prev) => ({
         ...prev,
         gstNumber: cleanGst,
         panNumber: data.pan || cleanGst.substring(2, 12),
-        companyName: data.legalName || prev.companyName,
-        customerName: data.tradeName || data.legalName || prev.customerName,
+        companyName: resolvedName || prev.companyName,
+        customerName: data.tradeName || resolvedName || prev.customerName,
+        additionalAddresses: addrs.length > 0 ? addrs : prev.additionalAddresses,
         address1: data.address1 || data.address || prev.address1,
         address2: data.address2 || prev.address2,
         address: data.address || prev.address,
@@ -273,7 +299,10 @@ export default function CrmCustomersView({
           dispatchPincode: data.pincode || prev.dispatchPincode
         } : {})
       }));
-      setGstLookupNotice({ ok: true, msg: `Fetched ${data.legalName || cleanGst} (${data.status || 'Active'})` });
+      setGstLookupNotice({
+        ok: true,
+        msg: `Fetched ${resolvedName || cleanGst} (${data.status || 'Active'})${addrs.length > 1 ? ` · ${addrs.length} addresses found` : ''}`
+      });
     } catch (err) {
       setGstLookupNotice({ ok: false, msg: err?.message || 'Failed to fetch GST details.' });
     } finally {
@@ -1310,6 +1339,19 @@ export default function CrmCustomersView({
                 <div style={{ marginTop: '5px', fontSize: '11px', fontWeight: '600', color: gstLookupNotice.ok ? '#059669' : '#DC2626' }}>
                   {gstLookupNotice.msg}
                 </div>
+              )}
+              {gstAddresses.length > 1 && (
+                <select
+                  onChange={(e) => {
+                    const chosen = gstAddresses[Number(e.target.value)];
+                    if (chosen) applyGstAddressChoice(chosen);
+                  }}
+                  style={{ marginTop: '6px', width: '100%', height: '36px', borderRadius: '8px', border: '1px solid #BAE6FD', backgroundColor: '#F0F9FF', padding: '0 10px', fontSize: '11.5px', fontWeight: '600', color: '#0369A1' }}
+                >
+                  {gstAddresses.map((a, idx) => (
+                    <option key={idx} value={idx}>{a.label}: {a.address}</option>
+                  ))}
+                </select>
               )}
             </div>
           </div>

@@ -169,6 +169,57 @@ export default function PiCreatorEditorSection({ ctx }) {
     };
   }, [draggedItemIndex]);
 
+  const [piGstLoading, setPiGstLoading] = React.useState(false);
+  const [piGstNotice, setPiGstNotice] = React.useState(null);
+  const [piGstAddresses, setPiGstAddresses] = React.useState([]);
+
+  const applyPiGstAddress = (addrObj) => {
+    if (!addrObj) return;
+    const streetVal = [addrObj.address1, addrObj.address2].filter(Boolean).join(', ') || addrObj.address || '';
+    if (streetVal) setBillingStreet(streetVal);
+    if (addrObj.city) setBillingCity(addrObj.city);
+    if (addrObj.state) setBillingState(addrObj.state);
+    if (addrObj.pincode) setBillingPincode(addrObj.pincode);
+    if (sameAsBilling) {
+      if (streetVal) setDeliveryStreet(streetVal);
+      if (addrObj.city) setDeliveryCity(addrObj.city);
+      if (addrObj.state) setDeliveryState(addrObj.state);
+      if (addrObj.pincode) setDeliveryPincode(addrObj.pincode);
+    }
+  };
+
+  const handleFetchPiGstDetails = async () => {
+    const cleanGst = String(gstNo || '').trim().toUpperCase();
+    if (cleanGst.length !== 15) {
+      setPiGstNotice({ ok: false, msg: 'Enter a valid 15-character GSTIN first.' });
+      return;
+    }
+    setPiGstLoading(true);
+    setPiGstNotice(null);
+    try {
+      const res = await fetch(`/api/gst-lookup?gstin=${encodeURIComponent(cleanGst)}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.success === false) {
+        setPiGstNotice({ ok: false, msg: data.error || 'GST lookup failed.' });
+        return;
+      }
+      setGstNo(cleanGst);
+      const resolvedName = data.legalName || data.tradeName || '';
+      if (resolvedName) setVendorName(resolvedName);
+      const addrs = Array.isArray(data.addresses) && data.addresses.length > 0 ? data.addresses : [];
+      setPiGstAddresses(addrs);
+      applyPiGstAddress(addrs[0] || data);
+      setPiGstNotice({
+        ok: true,
+        msg: `Fetched ${resolvedName || cleanGst} (${data.status || 'Active'})${addrs.length > 1 ? ` · ${addrs.length} addresses found` : ''}`
+      });
+    } catch (err) {
+      setPiGstNotice({ ok: false, msg: err?.message || 'Failed to fetch GST details.' });
+    } finally {
+      setPiGstLoading(false);
+    }
+  };
+
   return (
     <>
       {/* ==================== VIEW 2: DEDICATED FULL-PAGE CREATOR/EDITOR VIEW ==================== */}
@@ -648,35 +699,76 @@ export default function PiCreatorEditorSection({ ctx }) {
                       Customer GSTIN
                     </label>
                   </div>
-                  <input id="performa-invoice-33aabcv1234f1z5" name="33AABCV1234F1Z5" aria-label="33AABCV1234F1Z5"
-                    type="text"
-                    placeholder="e.g. 33AABCV1234F1Z5"
-                    value={gstNo}
-                    onChange={(e) => {
-                      const val = e.target.value.toUpperCase();
-                      setGstNo(val);
-                      if (val.trim().length >= 2) {
-                        const sCode = val.trim().substring(0, 2);
-                        const mappedState = GST_STATE_MAP[sCode];
-                        if (mappedState && (!billingState || billingState.trim() === '')) {
-                          setBillingState(mappedState);
-                          if (sameAsBilling) setDeliveryState(mappedState);
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <input id="performa-invoice-33aabcv1234f1z5" name="33AABCV1234F1Z5" aria-label="33AABCV1234F1Z5"
+                      type="text"
+                      placeholder="e.g. 33AABCV1234F1Z5"
+                      value={gstNo}
+                      onChange={(e) => {
+                        const val = e.target.value.toUpperCase();
+                        setGstNo(val);
+                        if (val.trim().length >= 2) {
+                          const sCode = val.trim().substring(0, 2);
+                          const mappedState = GST_STATE_MAP[sCode];
+                          if (mappedState && (!billingState || billingState.trim() === '')) {
+                            setBillingState(mappedState);
+                            if (sameAsBilling) setDeliveryState(mappedState);
+                          }
                         }
-                      }
-                    }}
-                    style={{
-                      width: '100%',
-                      height: '42px',
-                      borderRadius: '10px',
-                      border: '1px solid #E2E8F0',
-                      padding: '0 14px',
-                      fontSize: '13px',
-                      fontWeight: '700',
-                      color: '#0F172A',
-                      outline: 'none',
-                      boxSizing: 'border-box'
-                    }}
-                   />
+                      }}
+                      style={{
+                        flex: 1,
+                        minWidth: 0,
+                        height: '42px',
+                        borderRadius: '10px',
+                        border: '1px solid #E2E8F0',
+                        padding: '0 14px',
+                        fontSize: '13px',
+                        fontWeight: '700',
+                        color: '#0F172A',
+                        outline: 'none',
+                        boxSizing: 'border-box'
+                      }}
+                     />
+                    <button
+                      type="button"
+                      onClick={handleFetchPiGstDetails}
+                      disabled={piGstLoading}
+                      style={{
+                        height: '42px',
+                        padding: '0 12px',
+                        borderRadius: '10px',
+                        border: '1px solid #0E7490',
+                        backgroundColor: piGstLoading ? '#CBD5E1' : '#ECFEFF',
+                        color: '#0E7490',
+                        fontSize: '12px',
+                        fontWeight: '700',
+                        cursor: piGstLoading ? 'not-allowed' : 'pointer',
+                        whiteSpace: 'nowrap',
+                        flexShrink: 0
+                      }}
+                    >
+                      {piGstLoading ? 'Fetching...' : 'Fetch GST'}
+                    </button>
+                  </div>
+                  {piGstNotice && (
+                    <div style={{ marginTop: '5px', fontSize: '11px', fontWeight: '600', color: piGstNotice.ok ? '#059669' : '#DC2626' }}>
+                      {piGstNotice.msg}
+                    </div>
+                  )}
+                  {piGstAddresses.length > 1 && (
+                    <select
+                      onChange={(e) => {
+                        const chosen = piGstAddresses[Number(e.target.value)];
+                        if (chosen) applyPiGstAddress(chosen);
+                      }}
+                      style={{ marginTop: '6px', width: '100%', height: '36px', borderRadius: '8px', border: '1px solid #BAE6FD', backgroundColor: '#F0F9FF', padding: '0 10px', fontSize: '11.5px', fontWeight: '600', color: '#0369A1' }}
+                    >
+                      {piGstAddresses.map((a, idx) => (
+                        <option key={idx} value={idx}>{a.label}: {a.address}</option>
+                      ))}
+                    </select>
+                  )}
                 </div>
               </div>
 
