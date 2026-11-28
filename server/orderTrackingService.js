@@ -1100,10 +1100,10 @@ export async function getTrackingByToken(rawToken, { clientIp = '', userAgent = 
     if (!bom) {
       try {
         const crRes = await query(
-          `SELECT value FROM public.controlroom_store WHERE key = 'bom_store' LIMIT 1`
+          `SELECT data FROM public.controlroom_store WHERE key = 'bom_store' LIMIT 1`
         ).catch(() => ({ rows: [] }));
-        if (crRes.rows && crRes.rows.length > 0 && Array.isArray(crRes.rows[0].value)) {
-          const boms = crRes.rows[0].value;
+        if (crRes.rows && crRes.rows.length > 0 && Array.isArray(crRes.rows[0].data)) {
+          const boms = crRes.rows[0].data;
           const matched = boms.find(b => {
             if (!b) return false;
             const bCode = String(b.bomCode || b.bom_code || b.code || b.id || '').toUpperCase();

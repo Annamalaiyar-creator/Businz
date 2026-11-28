@@ -235,9 +235,9 @@ export async function ensureSmartLeadsSchema() {
   // Merge any legacy Lead Management records (controlroom_store crm_leads + crm_leads.json) into public.leads
   try {
     const legacyLeads = [];
-    const storeRes = await query(`SELECT value FROM public.controlroom_store WHERE key IN ('crm_leads', 'leads')`);
+    const storeRes = await query(`SELECT data FROM public.controlroom_store WHERE key IN ('crm_leads', 'leads')`);
     for (const r of storeRes.rows) {
-      if (Array.isArray(r.value)) legacyLeads.push(...r.value);
+      if (Array.isArray(r.data)) legacyLeads.push(...r.data);
     }
     const diskPath = getStoreFilePath('crm_leads.json');
     if (fs.existsSync(diskPath)) {
