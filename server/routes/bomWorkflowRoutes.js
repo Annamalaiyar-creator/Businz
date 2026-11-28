@@ -1095,20 +1095,23 @@ router.post('/api/boms', async (req, res) => {
 
         console.log(`[BOM Store] BOM ${finalCode} transaction-safely committed to PostgreSQL (isNew: ${shouldAssignNewCode}).`);
 
-        // 4. Post-commit inventory reconciliation
+        // 4. Real-time sub-second push to all connected browsers/devices immediately
+        try {
+          broadcastRealtimeEvent('bom_updated', {
+            action: shouldAssignNewCode ? 'create' : 'update',
+            recordId: persistedBom?.bomCode || persistedBom?.code || persistedBom?.id,
+            bom: persistedBom
+          });
+        } catch (_) {}
+
+        // 5. Post-commit inventory reconciliation
         try {
           await reconcileServerInventoryWithBoms(fullStoreList);
         } catch (rErr) {
           console.error('Error reconciling inventory after BOM save:', rErr);
         }
 
-        // 5. Real-time sub-second push to all connected browsers/devices immediately
         try {
-          broadcastRealtimeEvent('bom_updated', {
-            action: isExisting ? 'update' : 'create',
-            recordId: persistedBom?.bomCode || persistedBom?.code || persistedBom?.id,
-            bom: persistedBom
-          });
           broadcastRealtimeEvent('inventory_updated', {
             action: 'update',
             reason: 'bom_stock_deduction',

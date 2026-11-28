@@ -357,7 +357,8 @@ router.post('/api/invoices/complete', async (req, res) => {
 
       try {
         invalidateBomsRouterCache();
-        broadcastRealtimeEvent('bom_updated', { action: 'update', recordId: targetBomCode });
+        const updatedBom = (supabaseMemoryStore.bom_store || []).find(b => b && (b.bomCode === targetBomCode || b.code === targetBomCode || b.id === targetBomCode));
+        broadcastRealtimeEvent('bom_updated', { action: 'update', recordId: targetBomCode, bom: updatedBom });
       } catch (_) {}
     }
 

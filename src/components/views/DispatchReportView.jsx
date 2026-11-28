@@ -5,6 +5,7 @@ import CeoKpiGrid from '../ceoDashboard/CeoKpiGrid';
 import { getItems } from '../../services/businzDataService';
 import { centralInventoryStore } from '../../utils/centralInventoryStore';
 import { syncPresetsWithCloud, getAllActivePresets } from '../../vrmHdgProposalPresets';
+import { calculateTotalDispatchQty } from '../../utils/vrmProductsData';
 
 // Dispatch Report (Dispatch login): BOMs received / cancelled / invoiced / dispatched for a day, month or custom range,
 // plus product-wise quantities that actually went out (items and preset kits).
@@ -45,6 +46,13 @@ const cancelledDate = (b) => b.cancelledAt || b.updatedAt || '';
 const invoicedDate = (b) => b.invoiceConfirmedAt || b.updatedAt || '';
 const dispatchedDate = (b) => b.vehicleLoading?.loadedAt || b.dispatchedAt || b.completedAt || b.updatedAt || '';
 
+// Total ordered qty of a BOM line: kit items are stored per set, so use the same rule as Dispatch packing
+const orderedQtyOf = (b, it) => {
+  if (!it.presetGroupId) return num(it.qty);
+  const groups = Array.isArray(b.presetGroups) ? b.presetGroups : Object.values(b.presetGroups || {});
+  const g = groups.find(x => (x?.groupId || x?.id) === it.presetGroupId) || {};
+  return num(calculateTotalDispatchQty(it, num(g.setCount ?? g.sets ?? 1) || 1, g.presetName || it.presetName || '', g.category || '', g.unitType || g.unit || ''));
+};
 // Quantities that actually left: packed quantities when packing exists, otherwise the BOM quantity
 const goneOutItems = (b) => {
   const packing = Array.isArray(b.dispatchPacking) && b.dispatchPacking.length > 0 ? b.dispatchPacking : null;
@@ -57,7 +65,7 @@ const goneOutItems = (b) => {
         : (it.packed ? num(it.qty || it.bomQty) : 0)
     }));
   }
-  return (Array.isArray(b.items) ? b.items : []).map(it => ({ name: it.name || it.code || 'Item', uom: it.uom || it.unit || 'NOS', qty: num(it.qty) }));
+  return (Array.isArray(b.items) ? b.items : []).map(it => ({ name: it.name || it.code || 'Item', uom: it.uom || it.unit || 'NOS', qty: orderedQtyOf(b, it) }));
 };
 const kitsOf = (b) => {
   const groups = Array.isArray(b.presetGroups) ? b.presetGroups : Object.values(b.presetGroups || {});
@@ -179,6 +187,141 @@ function ProductFilter({ label, options, selected, onChange, formatOption = (o) 
   );
 }
 
+// ---------- Drill-down popups ----------
+const repOf = (b) => String(b?.salesPerson || b?.createdBy || b?.assignedSalesperson || '—').replace(/\s*\([^)]*\)/g, '').trim() || '—';
+const EVENT_LABEL = { received: 'Received', cancelled: 'Cancelled', invoiced: 'Invoiced', dispatched: 'Dispatched' };
+const statusBadge = (text) => (
+  <span style={{ fontSize: '11px', fontWeight: '700', padding: '3px 9px', borderRadius: '999px', border: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', color: '#475569', whiteSpace: 'nowrap' }}>{text || '—'}</span>
+);
+const codeLink = (code, onClick) => (
+  <button type="button" onClick={onClick} title="Open BOM details"
+    style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer', fontWeight: '800', color: '#0E7490', textDecoration: 'underline', textUnderlineOffset: '2px', fontSize: '12.5px', whiteSpace: 'nowrap' }}>
+    {code}
+  </button>
+);
+
+function ReportModal({ title, subtitle, onClose, onBack, children }) {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  return (
+    <div role="dialog" aria-modal="true" aria-label={title} onClick={onClose}
+      style={{ position: 'fixed', inset: 0, zIndex: 1000, backgroundColor: 'rgba(15, 23, 42, 0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+      <div onClick={(e) => e.stopPropagation()}
+        style={{ width: '100%', maxWidth: '980px', maxHeight: '86vh', display: 'flex', flexDirection: 'column', backgroundColor: '#F8FAFC', border: '1px solid #EAEFEF', borderRadius: '16px', boxShadow: '0 24px 60px rgba(15, 23, 42, 0.25)', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', padding: '12px 18px', backgroundColor: '#FFFFFF', borderBottom: '1px solid #EAEFEF' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+            {onBack && <button type="button" onClick={onBack} style={btn}>← Back</button>}
+            <div style={{ minWidth: 0 }}>
+              <h3 style={{ margin: 0, fontSize: '14px', fontWeight: '800', color: '#0F172A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</h3>
+              {subtitle && <div style={{ fontSize: '11.5px', color: '#64748B', fontWeight: '600', marginTop: '2px' }}>{subtitle}</div>}
+            </div>
+          </div>
+          <button type="button" aria-label="Close" onClick={onClose} style={{ ...btn, padding: '0 8px' }}><X size={14} /></button>
+        </div>
+        <div style={{ padding: '14px', overflowY: 'auto' }}>{children}</div>
+      </div>
+    </div>
+  );
+}
+
+// BOMs behind a date / product / kit row: BOM code, customer, sales person, status, allocated qty or event
+function BomListTable({ rows, onOpenBom, qtyLabel, showEvent }) {
+  if (!rows.length) return <Empty text="No BOMs for this selection." />;
+  return (
+    <div style={tableWrap}>
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <thead><tr style={theadRow}>
+          <th style={th}>BOM Code</th><th style={th}>Customer</th><th style={th}>Sales Person</th>
+          {showEvent && <th style={th}>What happened</th>}
+          <th style={th}>Current Status</th>
+          {qtyLabel && <th style={th}>{qtyLabel}</th>}
+        </tr></thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={`${r.bom.bomCode || r.bom.code}-${i}`}>
+              <td style={td}>{codeLink(r.bom.bomCode || r.bom.code, () => onOpenBom(r.bom))}</td>
+              <td style={td}>{r.bom.customerName || r.bom.companyName || '—'}</td>
+              <td style={{ ...td, fontWeight: '700' }}>{repOf(r.bom)}</td>
+              {showEvent && <td style={td}>{EVENT_LABEL[r.event] || r.event}</td>}
+              <td style={td}>{statusBadge(r.bom.status)}</td>
+              {qtyLabel && <td style={{ ...td, fontWeight: '800' }}>{Number(r.qty || 0).toLocaleString('en-IN')}</td>}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// One BOM: header facts, preset kits, and every product with ordered / packed qty
+function BomDetail({ bom }) {
+  const packing = Array.isArray(bom.dispatchPacking) ? bom.dispatchPacking : [];
+  const packKey = (it) => `${it.presetGroupId || ''}|${String(it.name || '').trim().toLowerCase()}`;
+  const packedMap = new Map(packing.map(p => [packKey(p), p]));
+  const items = Array.isArray(bom.items) ? bom.items : [];
+  const kits = kitsOf(bom);
+  const groups = Array.isArray(bom.presetGroups) ? bom.presetGroups : Object.values(bom.presetGroups || {});
+  const groupName = (id) => groups.find(g => (g?.groupId || g?.id) === id)?.presetName || '';
+  const packedQtyOf = (it) => {
+    const p = packedMap.get(packKey(it));
+    if (!p) return packing.length ? 0 : null;
+    if (p.packedQty !== undefined && p.packedQty !== null && p.packedQty !== '') return num(p.packedQty);
+    return p.packed ? num(p.qty || p.bomQty) : 0;
+  };
+  const facts = [
+    ['Customer', bom.customerName || bom.companyName || '—'],
+    ['Sales Person', repOf(bom)],
+    ['Status', statusBadge(bom.status)],
+    ['Payment Type', bom.paymentType || bom.paymentTerms || '—'],
+    ['Document', String(bom.docType || '').toUpperCase() === 'DC' ? 'DC (Delivery Challan)' : 'Invoice'],
+    ['Invoice No', bom.invoiceNo || '—'],
+    ['Order Value', `₹${num(bom.grandTotal).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`],
+    ['Sent to Dispatch', fmtDay(dayKey(receivedDate(bom)))]
+  ];
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px' }}>
+        {facts.map(([k, v]) => (
+          <div key={k} style={{ backgroundColor: '#FFFFFF', border: '1px solid #EAEFEF', borderRadius: '12px', padding: '10px 12px' }}>
+            <div style={{ fontSize: '10.5px', fontWeight: '800', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{k}</div>
+            <div style={{ fontSize: '13px', fontWeight: '700', color: '#0F172A', marginTop: '4px' }}>{v}</div>
+          </div>
+        ))}
+      </div>
+      {kits.length > 0 && (
+        <div style={tableWrap}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead><tr style={theadRow}><th style={th}>Preset Kit</th><th style={th}>Qty</th></tr></thead>
+            <tbody>{kits.map((k, i) => <tr key={i}><td style={td}>{k.name}</td><td style={{ ...td, fontWeight: '800', whiteSpace: 'nowrap' }}>{k.qty} {k.unit}</td></tr>)}</tbody>
+          </table>
+        </div>
+      )}
+      <div style={tableWrap}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead><tr style={theadRow}><th style={th}>Product</th><th style={th}>Kit</th><th style={th}>UOM</th><th style={th}>Ordered Qty</th><th style={th}>Packed Qty</th></tr></thead>
+          <tbody>
+            {items.length === 0 ? <tr><td colSpan={5}><Empty text="No products on this BOM." /></td></tr> : items.map((it, i) => {
+              const packed = packedQtyOf(it);
+              return (
+                <tr key={i}>
+                  <td style={td}>{it.name || it.code || 'Item'}</td>
+                  <td style={{ ...td, color: '#64748B' }}>{it.presetGroupId ? (groupName(it.presetGroupId) || it.presetName || 'Preset Kit') : 'Standalone'}</td>
+                  <td style={td}>{String(it.uom || it.unit || 'NOS').toUpperCase()}</td>
+                  <td style={{ ...td, fontWeight: '800' }}>{orderedQtyOf(bom, it).toLocaleString('en-IN')}</td>
+                  <td style={td}>{packed === null ? 'Not packed yet' : packed.toLocaleString('en-IN')}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 export default function DispatchReportView(props) {
   const [boms, setBoms] = useState(Array.isArray(props.bomStore) ? props.bomStore : []);
   const [loading, setLoading] = useState(false);
@@ -193,6 +336,9 @@ export default function DispatchReportView(props) {
   const [exporting, setExporting] = useState('');
   const [productBasis, setProductBasis] = useState('goneout'); // goneout | received
   const [dayFilter, setDayFilter] = useState([]); // picked dates (YYYY-MM-DD) for the Day-wise Summary
+  const [popup, setPopup] = useState(null); // { type: 'bom' | 'day' | 'item' | 'kit', ..., back }
+  const openBom = (bom, back = null) => setPopup({ type: 'bom', bom, back });
+  const clickableRow = { cursor: 'pointer' };
 
   const load = async () => {
     setLoading(true);
@@ -253,11 +399,11 @@ export default function DispatchReportView(props) {
     const dispatched = boms.filter(b => isDispatchedBom(b) && inPeriod(dispatchedDate(b)));
 
     const days = {};
-    const bump = (k, field) => { if (!k) return; days[k] = days[k] || { received: 0, cancelled: 0, invoiced: 0, dispatched: 0 }; days[k][field] += 1; };
-    received.forEach(b => bump(dayKey(receivedDate(b)), 'received'));
-    cancelled.forEach(b => bump(dayKey(cancelledDate(b)), 'cancelled'));
-    invoiced.forEach(b => bump(dayKey(invoicedDate(b)), 'invoiced'));
-    dispatched.forEach(b => bump(dayKey(dispatchedDate(b)), 'dispatched'));
+    const bump = (k, field, b) => { if (!k) return; days[k] = days[k] || { received: 0, cancelled: 0, invoiced: 0, dispatched: 0, list: [] }; days[k][field] += 1; days[k].list.push({ bom: b, event: field }); };
+    received.forEach(b => bump(dayKey(receivedDate(b)), 'received', b));
+    cancelled.forEach(b => bump(dayKey(cancelledDate(b)), 'cancelled', b));
+    invoiced.forEach(b => bump(dayKey(invoicedDate(b)), 'invoiced', b));
+    dispatched.forEach(b => bump(dayKey(dispatchedDate(b)), 'dispatched', b));
     const dayRows = Object.entries(days).sort(([a], [b]) => a.localeCompare(b));
 
     // Products: "gone out" = packed qty of dispatched orders; "received" = ordered qty of BOMs received
@@ -268,14 +414,16 @@ export default function DispatchReportView(props) {
       itemsFn(b).forEach(it => {
         if (!it.qty) return;
         const key = `${it.name.trim().toLowerCase()}|${String(it.uom).toUpperCase()}`;
-        const cur = itemMap.get(key) || { name: it.name.trim(), uom: String(it.uom).toUpperCase(), qty: 0, orders: new Set() };
-        cur.qty += it.qty; cur.orders.add(b.bomCode || b.code);
+        const cur = itemMap.get(key) || { name: it.name.trim(), uom: String(it.uom).toUpperCase(), qty: 0, orders: new Map() };
+        const oc = b.bomCode || b.code;
+        cur.qty += it.qty; cur.orders.set(oc, { bom: b, qty: (cur.orders.get(oc)?.qty || 0) + it.qty });
         itemMap.set(key, cur);
       });
       kitsOf(b).forEach(k => {
         const key = `${k.name.trim().toLowerCase()}|${k.unit}`;
-        const cur = kitMap.get(key) || { name: k.name.trim(), unit: k.unit, qty: 0, orders: new Set() };
-        cur.qty += k.qty; cur.orders.add(b.bomCode || b.code);
+        const cur = kitMap.get(key) || { name: k.name.trim(), unit: k.unit, qty: 0, orders: new Map() };
+        const oc = b.bomCode || b.code;
+        cur.qty += k.qty; cur.orders.set(oc, { bom: b, qty: (cur.orders.get(oc)?.qty || 0) + k.qty });
         kitMap.set(key, cur);
       });
     });
@@ -284,14 +432,14 @@ export default function DispatchReportView(props) {
       kits: [...kitMap.values()].sort((a, b) => b.qty - a.qty)
     };
     };
-    const orderedItems = (b) => (Array.isArray(b.items) ? b.items : []).map(it => ({ name: it.name || it.code || 'Item', uom: it.uom || it.unit || 'NOS', qty: num(it.qty) }));
+    const orderedItems = (b) => (Array.isArray(b.items) ? b.items : []).map(it => ({ name: it.name || it.code || 'Item', uom: it.uom || it.unit || 'NOS', qty: orderedQtyOf(b, it) }));
     const goneOut = aggregate(dispatched, goneOutItems);
     const ordered = aggregate(received, orderedItems);
 
     const bomMap = new Map();
     const add = (list, event, dateFn) => list.forEach(b => {
       const code = b.bomCode || b.code;
-      const row = bomMap.get(code) || { code, customer: b.customerName || b.companyName || '—', status: b.status || '—', invoiceNo: b.invoiceNo || '', value: num(b.grandTotal), events: [] };
+      const row = bomMap.get(code) || { bom: b, code, customer: b.customerName || b.companyName || '—', status: b.status || '—', invoiceNo: b.invoiceNo || '', value: num(b.grandTotal), events: [] };
       row.events.push(`${event} ${fmtDay(dayKey(dateFn(b)))}`);
       bomMap.set(code, row);
     });
@@ -315,13 +463,13 @@ export default function DispatchReportView(props) {
   const shownItems = activeItemFilter.length
     ? activeItemFilter.flatMap(n => {
         const rows = products.items.filter(i => i.name === n);
-        return rows.length ? rows : [{ name: n, uom: masterItems.find(m => m.name === n)?.uom || 'NOS', qty: 0, orders: new Set() }];
+        return rows.length ? rows : [{ name: n, uom: masterItems.find(m => m.name === n)?.uom || 'NOS', qty: 0, orders: new Map() }];
       })
     : products.items;
   const shownKits = activeKitFilter.length
     ? activeKitFilter.flatMap(n => {
         const rows = products.kits.filter(k => k.name === n);
-        return rows.length ? rows : [{ name: n, unit: 'Sets', qty: 0, orders: new Set() }];
+        return rows.length ? rows : [{ name: n, unit: 'Sets', qty: 0, orders: new Map() }];
       })
     : products.kits;
   const shownBoms = report.bomRows.filter(r => {
@@ -338,7 +486,7 @@ export default function DispatchReportView(props) {
     return out;
   }, [start, end]);
   const activeDayFilter = dayFilter.filter(k => k >= start && k <= end);
-  const zeroDay = { received: 0, cancelled: 0, invoiced: 0, dispatched: 0 };
+  const zeroDay = { received: 0, cancelled: 0, invoiced: 0, dispatched: 0, list: [] };
   const shownDayRows = activeDayFilter.length
     ? [...activeDayFilter].sort().map(k => [k, (report.dayRows.find(([d]) => d === k) || [k, zeroDay])[1]])
     : report.dayRows;
@@ -509,7 +657,7 @@ export default function DispatchReportView(props) {
               {shownDayRows.length === 0 ? (
                 <tr><td colSpan={5}><Empty text="No BOM activity in this period." /></td></tr>
               ) : dayPaged.visible.map(([k, v]) => (
-                <tr key={k}><td style={{ ...td, fontWeight: '700' }}>{fmtDay(k)}</td><td style={td}>{v.received}</td><td style={td}>{v.cancelled}</td><td style={td}>{v.invoiced}</td><td style={td}>{v.dispatched}</td></tr>
+                <tr key={k} style={clickableRow} title="Click to see the BOMs for this date" onClick={() => setPopup({ type: 'day', key: k, data: v })}><td style={{ ...td, fontWeight: '700', color: '#0E7490' }}>{fmtDay(k)}</td><td style={td}>{v.received}</td><td style={td}>{v.cancelled}</td><td style={td}>{v.invoiced}</td><td style={td}>{v.dispatched}</td></tr>
               ))}
               {shownDayRows.length > 0 && (
                 <tr style={{ backgroundColor: '#F8FAFC' }}>
@@ -532,7 +680,7 @@ export default function DispatchReportView(props) {
                 {shownItems.length === 0 ? (
                   <tr><td colSpan={4}><Empty text={productBasis === 'received' ? 'No BOMs received in this period.' : 'No dispatched orders in this period.'} /></td></tr>
                 ) : itemPaged.visible.map(it => (
-                  <tr key={`${it.name}|${it.uom}`}><td style={td}>{it.name}</td><td style={td}>{it.uom}</td><td style={{ ...td, fontWeight: '800' }}>{it.qty.toLocaleString('en-IN')}</td><td style={td}>{it.orders.size}</td></tr>
+                  <tr key={`${it.name}|${it.uom}`} style={clickableRow} title="Click to see the BOMs and quantities" onClick={() => setPopup({ type: 'item', row: it })}><td style={{ ...td, color: '#0E7490', fontWeight: '700' }}>{it.name}</td><td style={td}>{it.uom}</td><td style={{ ...td, fontWeight: '800' }}>{it.qty.toLocaleString('en-IN')}</td><td style={td}>{it.orders.size}</td></tr>
                 ))}
               </tbody>
             </table>
@@ -549,7 +697,7 @@ export default function DispatchReportView(props) {
                 {shownKits.length === 0 ? (
                   <tr><td colSpan={3}><Empty text={productBasis === 'received' ? 'No preset kits in BOMs received this period.' : 'No preset kits dispatched in this period.'} /></td></tr>
                 ) : kitPaged.visible.map(k => (
-                  <tr key={`${k.name}|${k.unit}`}><td style={td}>{k.name}</td><td style={{ ...td, fontWeight: '800', whiteSpace: 'nowrap' }}>{k.qty.toLocaleString('en-IN')} {k.unit}</td><td style={td}>{k.orders.size}</td></tr>
+                  <tr key={`${k.name}|${k.unit}`} style={clickableRow} title="Click to see the BOMs and quantities" onClick={() => setPopup({ type: 'kit', row: k })}><td style={{ ...td, color: '#0E7490', fontWeight: '700' }}>{k.name}</td><td style={{ ...td, fontWeight: '800', whiteSpace: 'nowrap' }}>{k.qty.toLocaleString('en-IN')} {k.unit}</td><td style={td}>{k.orders.size}</td></tr>
                 ))}
               </tbody>
             </table>
@@ -576,7 +724,7 @@ export default function DispatchReportView(props) {
                 <tr><td colSpan={6}><Empty text="No BOMs in this period." /></td></tr>
               ) : bomPaged.visible.map(r => (
                 <tr key={r.code}>
-                  <td style={{ ...td, fontWeight: '800', color: '#0E7490', whiteSpace: 'nowrap' }}>{r.code}</td>
+                  <td style={td}>{codeLink(r.code, () => openBom(r.bom))}</td>
                   <td style={td}>{r.customer}</td>
                   <td style={td}>{r.events.join(' · ')}</td>
                   <td style={td}>
@@ -591,6 +739,33 @@ export default function DispatchReportView(props) {
           {shownBoms.length > 0 && bomPaged.footer}
         </div>
       </BusinzSectionCard>
+      {popup && (() => {
+        const close = () => setPopup(null);
+        const back = popup.back ? () => setPopup(popup.back) : null;
+        if (popup.type === 'bom') {
+          return (
+            <ReportModal title={`BOM ${popup.bom.bomCode || popup.bom.code}`} subtitle={`${popup.bom.customerName || popup.bom.companyName || ''} · ${repOf(popup.bom)}`} onClose={close} onBack={back}>
+              <BomDetail bom={popup.bom} />
+            </ReportModal>
+          );
+        }
+        if (popup.type === 'day') {
+          const rows = (popup.data?.list || []).map(x => ({ bom: x.bom, event: x.event }));
+          return (
+            <ReportModal title={`BOMs on ${fmtDay(popup.key)}`} subtitle={`${rows.length} ${rows.length === 1 ? 'entry' : 'entries'}`} onClose={close}>
+              <BomListTable rows={rows} showEvent onOpenBom={(bom) => openBom(bom, popup)} />
+            </ReportModal>
+          );
+        }
+        const isKit = popup.type === 'kit';
+        const r = popup.row;
+        const rows = [...(r.orders?.values() || [])].map(o => ({ bom: o.bom, qty: o.qty }));
+        return (
+          <ReportModal title={r.name} subtitle={`${basisLabel} · ${periodLabel} · ${r.qty.toLocaleString('en-IN')} ${isKit ? r.unit : r.uom} in ${rows.length} ${rows.length === 1 ? 'BOM' : 'BOMs'}`} onClose={close}>
+            <BomListTable rows={rows} qtyLabel={isKit ? `Qty (${r.unit})` : `Qty Allocated (${r.uom})`} onOpenBom={(bom) => openBom(bom, popup)} />
+          </ReportModal>
+        );
+      })()}
     </div>
   );
 }
