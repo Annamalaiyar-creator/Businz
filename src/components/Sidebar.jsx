@@ -277,7 +277,7 @@ export default function Sidebar({ collapsed, onToggle, activeTab, onChangeTab, u
         {
           category: 'WORKSPACE & REPORTS',
           items: [
-            { label: 'Production Reports', icon: BarChart3 }
+            { label: 'Dispatch Report', icon: BarChart3 }
           ]
         }
       ];

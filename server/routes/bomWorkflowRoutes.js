@@ -470,6 +470,8 @@ router.post('/api/repair-bom-sequences', async (req, res) => {
 // Recursive helper to sanitize heavy base64 data URLs & redundant snapshots from list items
 const deepStripDataUrls = (val, depth = 0) => {
   if (!val || depth > 8) return val;
+  // Dates from PostgreSQL (e.g. sales_confirmed_at) have no own keys; rebuilding them below turned them into {}
+  if (val instanceof Date) return Number.isNaN(val.getTime()) ? null : val.toISOString();
   if (typeof val === 'string') {
     if (val.startsWith('data:') && val.length > 200) {
       const mime = val.slice(5, val.indexOf(';')) || 'image/jpeg';

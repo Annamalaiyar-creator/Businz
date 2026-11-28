@@ -16,6 +16,7 @@ const ItemsDirectoryView = lazy(() => import('./views/ItemsDirectoryView'));
 const ProcurementReportsView = lazy(() => import('./views/ProcurementReportsView'));
 const CeoMonthlyCustomersByRepView = lazy(() => import('./views/CeoMonthlyCustomersByRepView'));
 const DispatchDashboardView = lazy(() => import('./views/DispatchDashboardView'));
+const DispatchReportView = lazy(() => import('./views/DispatchReportView'));
 const ProductionViewsEngine = lazy(() => import('./views/ProductionViewsEngine'));
 const BomOrdersView = lazy(() => import('./views/BomOrdersView'));
 const PresetManagementView = lazy(() => import('./views/PresetManagementView'));
@@ -196,6 +197,7 @@ export default function OtherViews(props) {
           )
         )}
         {(activeTab === 'Dispatch Dashboard' || (userRole === 'Dispatch Head' && activeTab === 'Dashboard')) && <DispatchDashboardView {...props} />}
+        {activeTab === 'Dispatch Report' && <DispatchReportView {...props} />}
 
         {/* Sales CRM Master Engine (Individual Dedicated Tabs) */}
         {['Sales CRM', 'CRM', 'Sales & CRM', 'Leads', 'Leads Directory', 'Customers', 'Customer Management', 'Opportunities', 'Follow-ups', 'WhatsApp Inbox', 'Quotations', 'Product Catalog', 'Sales Reports', 'IndiaMART', 'IndiaMART Integration', 'IndiaMART CRM Integration'].includes(activeTab) && (
@@ -262,7 +264,7 @@ export default function OtherViews(props) {
           'Vendor Performance', 'Spend Analytics', 'Material Reorder',
           'Stock Status', 'Price Comparison', 'Items Directory',
           'Procurement Reports', 'Spend Reports', 'Supplier Reports',
-          'Dispatch Dashboard', 'BOM Orders', 'BOM', 'Sales BOM', 'BOM / Routing',
+          'Dispatch Dashboard', 'Dispatch Report', 'BOM Orders', 'BOM', 'Sales BOM', 'BOM / Routing',
           'Preset Management', 'Presets', 'BOM Presets',
           'Backup & Vault', 'Backup & Restore', 'System Backup', 'Disaster Recovery', 'Backup Vault',
           'Sales CRM', 'CRM', 'Sales & CRM', 'Leads', 'Leads Directory', 'Customers', 'Customer Management', 'Opportunities', 'Follow-ups', 'WhatsApp Inbox', 'Quotations', 'Product Catalog', 'Sales Reports', 'IndiaMART', 'IndiaMART Integration', 'IndiaMART CRM Integration',

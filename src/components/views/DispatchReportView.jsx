@@ -1,0 +1,510 @@
+import React, { useEffect, useMemo, useState } from 'react';
+import { Download, FileSpreadsheet, FileText, Filter, RefreshCw, Search, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { fetchCloudStore } from '../../utils/supabaseDataSync';
+import CeoKpiGrid from '../ceoDashboard/CeoKpiGrid';
+
+// Dispatch Report (Dispatch login): BOMs received / cancelled / invoiced / dispatched for a day, month or custom range,
+// plus product-wise quantities that actually went out (items and preset kits).
+
+const pad = (n) => String(n).padStart(2, '0');
+// Local calendar day key YYYY-MM-DD
+const dayKey = (value) => {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
+const todayKey = () => dayKey(new Date());
+const fmtDay = (key) => {
+  if (!key) return '—';
+  const [y, m, d] = key.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+};
+const num = (v) => {
+  const n = parseFloat(String(v ?? '').replace(/[^0-9.-]/g, ''));
+  return Number.isFinite(n) ? n : 0;
+};
+
+const isCancelledBom = (b) => Boolean(b.cancelled || /cancel/i.test(String(b.status || '')));
+const isDispatchedBom = (b) => !isCancelledBom(b) && /complet|dispatched|delivered|closed/i.test(String(b.status || '')) && !/sent to dispatch/i.test(String(b.status || ''));
+const isSentToDispatch = (b) => Boolean(
+  b.salesConfirmed || b.salesReconfirmed || b.salesConfirmedAt ||
+  /sent to dispatch|packed|accounts|invoice|loading|dispatched|complet/i.test(String(b.status || ''))
+) && !/^(draft|pending confirmation)$/i.test(String(b.status || '').trim());
+
+// Event dates used by the report
+// First time the BOM reached Dispatch: the earlier valid one of the two "sent" timestamps
+const receivedDate = (b) => {
+  const valid = [b.salesConfirmedAt, b.reconfirmedAt].filter(v => v && typeof v !== 'object' && !Number.isNaN(new Date(v).getTime()));
+  return valid.sort((x, y) => new Date(x) - new Date(y))[0] || '';
+};
+const cancelledDate = (b) => b.cancelledAt || b.updatedAt || '';
+const invoicedDate = (b) => b.invoiceConfirmedAt || b.updatedAt || '';
+const dispatchedDate = (b) => b.vehicleLoading?.loadedAt || b.dispatchedAt || b.completedAt || b.updatedAt || '';
+
+// Quantities that actually left: packed quantities when packing exists, otherwise the BOM quantity
+const goneOutItems = (b) => {
+  const packing = Array.isArray(b.dispatchPacking) && b.dispatchPacking.length > 0 ? b.dispatchPacking : null;
+  if (packing) {
+    return packing.map(it => ({
+      name: it.name || it.itemName || it.code || 'Item',
+      uom: it.uom || it.unit || 'NOS',
+      qty: it.packedQty !== undefined && it.packedQty !== null && it.packedQty !== ''
+        ? num(it.packedQty)
+        : (it.packed ? num(it.qty || it.bomQty) : 0)
+    }));
+  }
+  return (Array.isArray(b.items) ? b.items : []).map(it => ({ name: it.name || it.code || 'Item', uom: it.uom || it.unit || 'NOS', qty: num(it.qty) }));
+};
+const kitsOf = (b) => {
+  const groups = Array.isArray(b.presetGroups) ? b.presetGroups : Object.values(b.presetGroups || {});
+  return groups.filter(Boolean).map(g => ({
+    name: g.presetName || g.name || 'Preset Kit',
+    unit: String(g.unitType || g.unit || '').toLowerCase() === 'kw' ? 'kW' : 'Sets',
+    qty: num(g.setCount ?? g.sets ?? 1) || 1
+  }));
+};
+
+// ---------- BUSINZ design system pieces (same look as the CEO dashboards) ----------
+const BusinzSectionCard = ({ title, rightNode, children }) => (
+  <div style={{ backgroundColor: '#F8FAFC', border: '1px solid #EAEFEF', borderRadius: '16px', overflow: 'visible', boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)' }}>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', padding: '12px 18px', backgroundColor: '#FFFFFF', borderBottom: '1px solid #EAEFEF', borderRadius: '16px 16px 0 0' }}>
+      <h3 style={{ margin: 0, fontSize: '14px', fontWeight: '800', color: '#0F172A', letterSpacing: '-0.2px' }}>{title}</h3>
+      {rightNode}
+    </div>
+    <div style={{ padding: '14px' }}>{children}</div>
+  </div>
+);
+
+const tableWrap = { backgroundColor: '#FFFFFF', border: '1px solid #EAEFEF', borderRadius: '12px', overflowX: 'auto' };
+const theadRow = { backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0', color: '#64748B', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.04em' };
+const th = { textAlign: 'left', padding: '10px 14px', whiteSpace: 'nowrap' };
+const td = { padding: '10px 14px', borderBottom: '1px solid #F1F5F9', color: '#0F172A', fontSize: '12.5px' };
+const pill = (active) => ({
+  padding: '5px 12px', borderRadius: '999px', fontSize: '11.5px', fontWeight: '700', cursor: 'pointer',
+  border: active ? '1px solid #0E7490' : '1px solid #E2E8F0', backgroundColor: active ? '#ECFEFF' : '#FFFFFF', color: active ? '#0E7490' : '#475569'
+});
+const ctrl = { height: '32px', borderRadius: '8px', border: '1px solid #E2E8F0', backgroundColor: '#FFFFFF', padding: '0 10px', fontSize: '12px', color: '#0F172A', boxSizing: 'border-box' };
+const btn = { ...ctrl, display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontWeight: '700', color: '#334155' };
+
+const Empty = ({ text }) => (
+  <div style={{ padding: '18px', textAlign: 'center', fontSize: '12.5px', color: '#94A3B8' }}>{text}</div>
+);
+
+// "Showing x–y of n" footer with 5 / 10 per page (BUSINZ table standard)
+function usePaged(rows, resetKey) {
+  const [page, setPage] = useState(1);
+  const [size, setSize] = useState(10);
+  useEffect(() => { setPage(1); }, [resetKey, size]);
+  const total = rows.length;
+  const pages = Math.max(1, Math.ceil(total / size));
+  const safe = Math.min(page, pages);
+  const visible = rows.slice((safe - 1) * size, safe * size);
+  const footer = (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', padding: '10px 14px', borderTop: '1px solid #F1F5F9', fontSize: '11.5px', color: '#64748B', fontWeight: '600' }}>
+      <span>Showing {total === 0 ? 0 : (safe - 1) * size + 1}–{Math.min(safe * size, total)} of {total}</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+        <select aria-label="Rows per page" value={size} onChange={(e) => setSize(Number(e.target.value))} style={{ ...ctrl, height: '26px', padding: '0 6px', fontSize: '11.5px' }}>
+          <option value={5}>5 / page</option>
+          <option value={10}>10 / page</option>
+        </select>
+        <button type="button" aria-label="Previous page" disabled={safe <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}
+          style={{ border: '1px solid #E2E8F0', backgroundColor: '#FFFFFF', borderRadius: '6px', padding: '3px 7px', cursor: safe <= 1 ? 'not-allowed' : 'pointer', opacity: safe <= 1 ? 0.45 : 1 }}>
+          <ChevronLeft size={13} />
+        </button>
+        <span style={{ color: '#0F172A', fontWeight: '800' }}>{safe} / {pages}</span>
+        <button type="button" aria-label="Next page" disabled={safe >= pages} onClick={() => setPage(p => Math.min(pages, p + 1))}
+          style={{ border: '1px solid #E2E8F0', backgroundColor: '#FFFFFF', borderRadius: '6px', padding: '3px 7px', cursor: safe >= pages ? 'not-allowed' : 'pointer', opacity: safe >= pages ? 0.45 : 1 }}>
+          <ChevronRight size={13} />
+        </button>
+      </div>
+    </div>
+  );
+  return { visible, footer };
+}
+
+// Product filter: pick products to show; each pick shows as a chip that can be removed again. Nothing picked = all.
+function ProductFilter({ label, options, selected, onChange }) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState('');
+  const shown = options.filter(o => o.toLowerCase().includes(q.trim().toLowerCase()));
+  const toggle = (name) => onChange(selected.includes(name) ? selected.filter(s => s !== name) : [...selected, name]);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
+      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+        <button type="button" onClick={() => setOpen(o => !o)} style={btn} aria-expanded={open}>
+          <Filter size={13} /> {label}{selected.length ? ` (${selected.length})` : ''}
+        </button>
+        {selected.length > 0 && (
+          <button type="button" onClick={() => onChange([])} style={{ ...pill(false), border: 'none', color: '#DC2626', backgroundColor: 'transparent' }}>Clear all</button>
+        )}
+        {open && (
+          <div style={{ position: 'absolute', top: '36px', left: 0, zIndex: 30, width: '340px', maxWidth: '90vw', backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '12px', boxShadow: '0 12px 32px rgba(15, 23, 42, 0.12)', padding: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '7px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '5px 10px', marginBottom: '8px' }}>
+              <Search size={13} color="#94A3B8" />
+              <input autoFocus type="text" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search product name"
+                style={{ border: 'none', outline: 'none', backgroundColor: 'transparent', fontSize: '12px', color: '#0F172A', width: '100%' }} />
+            </div>
+            <div style={{ maxHeight: '240px', overflowY: 'auto' }}>
+              {shown.length === 0 ? <Empty text="No matching products" /> : shown.map(name => (
+                <label key={name} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 4px', fontSize: '12.5px', color: '#0F172A', cursor: 'pointer', borderRadius: '6px' }}>
+                  <input type="checkbox" checked={selected.includes(name)} onChange={() => toggle(name)} />
+                  <span>{name}</span>
+                </label>
+              ))}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
+              <button type="button" onClick={() => setOpen(false)} style={{ ...btn, backgroundColor: '#0E7490', color: '#FFFFFF', border: 'none' }}>Done</button>
+            </div>
+          </div>
+        )}
+      </div>
+      {selected.length > 0 && (
+        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+          {selected.map(name => (
+            <span key={name} style={{ ...pill(true), display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: 'default' }}>
+              {name}
+              <button type="button" aria-label={`Remove ${name}`} onClick={() => toggle(name)}
+                style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer', color: '#0E7490', display: 'inline-flex' }}>
+                <X size={12} />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function DispatchReportView(props) {
+  const [boms, setBoms] = useState(Array.isArray(props.bomStore) ? props.bomStore : []);
+  const [loading, setLoading] = useState(false);
+  const [mode, setMode] = useState('month'); // day | month | custom
+  const [day, setDay] = useState(todayKey());
+  const [month, setMonth] = useState(todayKey().slice(0, 7));
+  const [from, setFrom] = useState(`${todayKey().slice(0, 7)}-01`);
+  const [to, setTo] = useState(todayKey());
+  const [itemFilter, setItemFilter] = useState([]);
+  const [kitFilter, setKitFilter] = useState([]);
+  const [bomSearch, setBomSearch] = useState('');
+  const [exporting, setExporting] = useState('');
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const sid = localStorage.getItem('controlroom_device_session_id') || '';
+      const res = await fetch('/api/boms', { headers: sid ? { 'x-session-id': sid } : {} });
+      const json = res.ok ? await res.json() : null;
+      let list = Array.isArray(json) ? json : (json?.data || json?.boms || []);
+      if (!Array.isArray(list) || list.length === 0) list = await fetchCloudStore('bom_store', []);
+      if (Array.isArray(list) && list.length > 0) setBoms(list.filter(Boolean));
+    } catch (_) {
+      // keep whatever we already have
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => { load(); }, []);
+
+  // Selected period as inclusive [start, end] day keys
+  const [start, end] = useMemo(() => {
+    if (mode === 'day') return [day, day];
+    if (mode === 'month') {
+      const [y, m] = month.split('-').map(Number);
+      const last = new Date(y, m, 0).getDate();
+      return [`${month}-01`, `${month}-${pad(last)}`];
+    }
+    return from <= to ? [from, to] : [to, from];
+  }, [mode, day, month, from, to]);
+  const periodLabel = start === end ? fmtDay(start) : `${fmtDay(start)} – ${fmtDay(end)}`;
+
+  const report = useMemo(() => {
+    const inPeriod = (value) => { const k = dayKey(value); return Boolean(k) && k >= start && k <= end; };
+    const received = boms.filter(b => isSentToDispatch(b) && inPeriod(receivedDate(b)));
+    const cancelled = boms.filter(b => isCancelledBom(b) && inPeriod(cancelledDate(b)));
+    const invoiced = boms.filter(b => !isCancelledBom(b) && b.invoiceConfirmed && inPeriod(invoicedDate(b)));
+    const dispatched = boms.filter(b => isDispatchedBom(b) && inPeriod(dispatchedDate(b)));
+
+    const days = {};
+    const bump = (k, field) => { if (!k) return; days[k] = days[k] || { received: 0, cancelled: 0, invoiced: 0, dispatched: 0 }; days[k][field] += 1; };
+    received.forEach(b => bump(dayKey(receivedDate(b)), 'received'));
+    cancelled.forEach(b => bump(dayKey(cancelledDate(b)), 'cancelled'));
+    invoiced.forEach(b => bump(dayKey(invoicedDate(b)), 'invoiced'));
+    dispatched.forEach(b => bump(dayKey(dispatchedDate(b)), 'dispatched'));
+    const dayRows = Object.entries(days).sort(([a], [b]) => a.localeCompare(b));
+
+    const itemMap = new Map();
+    const kitMap = new Map();
+    dispatched.forEach(b => {
+      goneOutItems(b).forEach(it => {
+        if (!it.qty) return;
+        const key = `${it.name.trim().toLowerCase()}|${String(it.uom).toUpperCase()}`;
+        const cur = itemMap.get(key) || { name: it.name.trim(), uom: String(it.uom).toUpperCase(), qty: 0, orders: new Set() };
+        cur.qty += it.qty; cur.orders.add(b.bomCode || b.code);
+        itemMap.set(key, cur);
+      });
+      kitsOf(b).forEach(k => {
+        const key = `${k.name.trim().toLowerCase()}|${k.unit}`;
+        const cur = kitMap.get(key) || { name: k.name.trim(), unit: k.unit, qty: 0, orders: new Set() };
+        cur.qty += k.qty; cur.orders.add(b.bomCode || b.code);
+        kitMap.set(key, cur);
+      });
+    });
+    const items = [...itemMap.values()].sort((a, b) => b.qty - a.qty);
+    const kits = [...kitMap.values()].sort((a, b) => b.qty - a.qty);
+
+    const bomMap = new Map();
+    const add = (list, event, dateFn) => list.forEach(b => {
+      const code = b.bomCode || b.code;
+      const row = bomMap.get(code) || { code, customer: b.customerName || b.companyName || '—', status: b.status || '—', invoiceNo: b.invoiceNo || '', value: num(b.grandTotal), events: [] };
+      row.events.push(`${event} ${fmtDay(dayKey(dateFn(b)))}`);
+      bomMap.set(code, row);
+    });
+    add(received, 'Received', receivedDate);
+    add(cancelled, 'Cancelled', cancelledDate);
+    add(invoiced, 'Invoiced', invoicedDate);
+    add(dispatched, 'Dispatched', dispatchedDate);
+    const bomRows = [...bomMap.values()].sort((a, b) => String(b.code).localeCompare(String(a.code)));
+
+    return { received, cancelled, invoiced, dispatched, dayRows, items, kits, bomRows };
+  }, [boms, start, end]);
+
+  // Product filters (drop picks that no longer exist in the selected period)
+  const itemNames = useMemo(() => [...new Set(report.items.map(i => i.name))].sort((a, b) => a.localeCompare(b)), [report.items]);
+  const kitNames = useMemo(() => [...new Set(report.kits.map(k => k.name))].sort((a, b) => a.localeCompare(b)), [report.kits]);
+  const activeItemFilter = itemFilter.filter(n => itemNames.includes(n));
+  const activeKitFilter = kitFilter.filter(n => kitNames.includes(n));
+  const shownItems = activeItemFilter.length ? report.items.filter(i => activeItemFilter.includes(i.name)) : report.items;
+  const shownKits = activeKitFilter.length ? report.kits.filter(k => activeKitFilter.includes(k.name)) : report.kits;
+  const shownBoms = report.bomRows.filter(r => {
+    const q = bomSearch.trim().toLowerCase();
+    return !q || String(r.code).toLowerCase().includes(q) || String(r.customer).toLowerCase().includes(q) || String(r.invoiceNo).toLowerCase().includes(q);
+  });
+
+  const dayPaged = usePaged(report.dayRows, `${start}${end}`);
+  const itemPaged = usePaged(shownItems, `${start}${end}${activeItemFilter.join('|')}`);
+  const kitPaged = usePaged(shownKits, `${start}${end}${activeKitFilter.join('|')}`);
+  const bomPaged = usePaged(shownBoms, `${start}${end}${bomSearch}`);
+
+  // ---------- Downloads (what is on screen: selected period + product filters) ----------
+  const sections = () => ([
+    { title: 'Summary', head: ['Metric', 'Count'], rows: [
+      ['BOMs Received', report.received.length], ['BOMs Cancelled', report.cancelled.length],
+      ['Completed - Invoiced', report.invoiced.length], ['Completed - Dispatched', report.dispatched.length]
+    ] },
+    { title: 'Day-wise Summary', head: ['Date', 'Received', 'Cancelled', 'Invoiced', 'Dispatched'], rows: report.dayRows.map(([k, v]) => [fmtDay(k), v.received, v.cancelled, v.invoiced, v.dispatched]) },
+    { title: 'Product-wise Gone Out - Items', head: ['Item', 'UOM', 'Qty', 'Orders'], rows: shownItems.map(i => [i.name, i.uom, i.qty, i.orders.size]) },
+    { title: 'Product-wise Gone Out - Preset Kits', head: ['Preset Kit', 'Qty', 'Unit', 'Orders'], rows: shownKits.map(k => [k.name, k.qty, k.unit, k.orders.size]) },
+    { title: 'BOMs in this Period', head: ['BOM Code', 'Customer', 'What happened', 'Current Status', 'Invoice No', 'Value (Rs)'], rows: shownBoms.map(r => [r.code, r.customer, r.events.join('; '), r.status, r.invoiceNo || '-', Math.round(r.value * 100) / 100]) }
+  ]);
+  const fileBase = `Dispatch_Report_${start}_to_${end}`;
+  const download = (blob, name) => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  };
+
+  const exportCsv = () => {
+    const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const lines = [esc(`Dispatch Report - ${periodLabel}`), ''];
+    sections().forEach(s => {
+      lines.push(esc(s.title));
+      lines.push(s.head.map(esc).join(','));
+      s.rows.forEach(r => lines.push(r.map(esc).join(',')));
+      lines.push('');
+    });
+    download(new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' }), `${fileBase}.csv`);
+  };
+
+  const exportExcel = async () => {
+    setExporting('excel');
+    try {
+      const XLSX = await import('xlsx');
+      const wb = XLSX.utils.book_new();
+      sections().forEach(s => {
+        const ws = XLSX.utils.aoa_to_sheet([[`${s.title} (${periodLabel})`], [], s.head, ...s.rows]);
+        ws['!cols'] = s.head.map((h, i) => ({ wch: Math.min(60, Math.max(String(h).length, ...s.rows.map(r => String(r[i] ?? '').length)) + 2) }));
+        XLSX.utils.book_append_sheet(wb, ws, s.title.replace(/[^A-Za-z0-9 -]/g, '').slice(0, 31));
+      });
+      XLSX.writeFile(wb, `${fileBase}.xlsx`);
+    } finally {
+      setExporting('');
+    }
+  };
+
+  const exportPdf = async () => {
+    setExporting('pdf');
+    try {
+      const { jsPDF } = await import('jspdf');
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+      const pageW = doc.internal.pageSize.getWidth();
+      const pageH = doc.internal.pageSize.getHeight();
+      const margin = 36;
+      let y = margin;
+      const newPageIfNeeded = (h) => { if (y + h > pageH - margin) { doc.addPage(); y = margin; } };
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.setTextColor(15, 23, 42);
+      doc.text('Dispatch Report', margin, y + 4);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(100, 116, 139);
+      doc.text(periodLabel, margin, y + 20);
+      y += 40;
+      sections().forEach(s => {
+        const colW = (pageW - margin * 2) / s.head.length;
+        newPageIfNeeded(50);
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(11.5); doc.setTextColor(15, 23, 42);
+        doc.text(s.title, margin, y); y += 10;
+        const drawHead = () => {
+          doc.setFillColor(248, 250, 252); doc.setDrawColor(226, 232, 240);
+          doc.rect(margin, y, pageW - margin * 2, 20, 'FD');
+          doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(100, 116, 139);
+          s.head.forEach((h, i) => doc.text(String(h).toUpperCase(), margin + 6 + i * colW, y + 13));
+          y += 20;
+        };
+        drawHead();
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(15, 23, 42);
+        if (s.rows.length === 0) { doc.text('No records', margin + 6, y + 14); y += 22; }
+        s.rows.forEach(r => {
+          const cells = r.map(c => doc.splitTextToSize(String(c ?? ''), colW - 10));
+          const h = Math.max(...cells.map(c => c.length)) * 11 + 8;
+          if (y + h > pageH - margin) { doc.addPage(); y = margin; drawHead(); doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(15, 23, 42); }
+          cells.forEach((c, i) => doc.text(c, margin + 6 + i * colW, y + 12));
+          doc.setDrawColor(241, 245, 249); doc.line(margin, y + h, pageW - margin, y + h);
+          y += h;
+        });
+        y += 18;
+      });
+      doc.save(`${fileBase}.pdf`);
+    } finally {
+      setExporting('');
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%', minWidth: 0, boxSizing: 'border-box' }}>
+      {/* Header: title, period picker, downloads */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', backgroundColor: '#FFFFFF', border: '1px solid #EAEFEF', borderRadius: '16px', padding: '14px 18px', boxShadow: '0 4px 18px rgba(15, 23, 42, 0.03)' }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: '18px', fontWeight: '800', color: '#0F172A', letterSpacing: '-0.3px' }}>Dispatch Report</h2>
+          <div style={{ fontSize: '12px', color: '#64748B', marginTop: '2px', fontWeight: '600' }}>{periodLabel}</div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          {[['day', 'Day'], ['month', 'Month'], ['custom', 'Custom']].map(([m, lbl]) => (
+            <button key={m} type="button" onClick={() => setMode(m)} style={pill(mode === m)}>{lbl}</button>
+          ))}
+          {mode === 'day' && <input aria-label="Report day" type="date" value={day} onChange={(e) => setDay(e.target.value || todayKey())} style={ctrl} />}
+          {mode === 'month' && <input aria-label="Report month" type="month" value={month} onChange={(e) => setMonth(e.target.value || todayKey().slice(0, 7))} style={ctrl} />}
+          {mode === 'custom' && (
+            <>
+              <input aria-label="Report from date" type="date" value={from} onChange={(e) => setFrom(e.target.value || todayKey())} style={ctrl} />
+              <span style={{ fontSize: '12px', color: '#64748B' }}>to</span>
+              <input aria-label="Report to date" type="date" value={to} onChange={(e) => setTo(e.target.value || todayKey())} style={ctrl} />
+            </>
+          )}
+          <button type="button" onClick={load} style={btn} title="Refresh"><RefreshCw size={13} /> {loading ? 'Loading…' : 'Refresh'}</button>
+          <button type="button" onClick={exportPdf} disabled={Boolean(exporting)} style={btn}><FileText size={13} /> {exporting === 'pdf' ? 'Preparing…' : 'PDF'}</button>
+          <button type="button" onClick={exportExcel} disabled={Boolean(exporting)} style={btn}><FileSpreadsheet size={13} /> {exporting === 'excel' ? 'Preparing…' : 'Excel'}</button>
+          <button type="button" onClick={exportCsv} disabled={Boolean(exporting)} style={btn}><Download size={13} /> CSV</button>
+        </div>
+      </div>
+
+      <CeoKpiGrid kpis={[
+        { title: 'BOMs Received', value: `${report.received.length}`, valColor: '#0E7490', trend: 'Sent to Dispatch', trendNeutral: true, hideTrendIcon: true, bottomPrefix: 'Reached Dispatch ', bottomHighlight: 'in this period', bottomHighlightColor: '#0E7490' },
+        { title: 'BOMs Cancelled', value: `${report.cancelled.length}`, valColor: '#DC2626', highlightCard: report.cancelled.length > 0, trend: 'Cancelled', trendNeutral: true, hideTrendIcon: true, bottomPrefix: 'Cancelled and ', bottomHighlight: 'stock restored', bottomHighlightColor: '#DC2626' },
+        { title: 'Completed — Invoiced', value: `${report.invoiced.length}`, valColor: '#6D28D9', trend: 'Invoice', trendNeutral: true, hideTrendIcon: true, bottomPrefix: 'Tax invoice ', bottomHighlight: 'confirmed by Billing', bottomHighlightColor: '#6D28D9' },
+        { title: 'Completed — Dispatched', value: `${report.dispatched.length}`, valColor: '#059669', trend: 'Gone out', trendUp: true, hideTrendIcon: true, bottomPrefix: 'Vehicle loaded and ', bottomHighlight: 'dispatched', bottomHighlightColor: '#059669' }
+      ]} />
+
+      <BusinzSectionCard title="Day-wise Summary">
+        <div style={tableWrap}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead><tr style={theadRow}><th style={th}>Date</th><th style={th}>Received</th><th style={th}>Cancelled</th><th style={th}>Invoiced</th><th style={th}>Dispatched</th></tr></thead>
+            <tbody>
+              {report.dayRows.length === 0 ? (
+                <tr><td colSpan={5}><Empty text="No BOM activity in this period." /></td></tr>
+              ) : dayPaged.visible.map(([k, v]) => (
+                <tr key={k}><td style={{ ...td, fontWeight: '700' }}>{fmtDay(k)}</td><td style={td}>{v.received}</td><td style={td}>{v.cancelled}</td><td style={td}>{v.invoiced}</td><td style={td}>{v.dispatched}</td></tr>
+              ))}
+              {report.dayRows.length > 0 && (
+                <tr style={{ backgroundColor: '#F8FAFC' }}>
+                  <td style={{ ...td, fontWeight: '800' }}>Total</td><td style={{ ...td, fontWeight: '800' }}>{report.received.length}</td><td style={{ ...td, fontWeight: '800' }}>{report.cancelled.length}</td><td style={{ ...td, fontWeight: '800' }}>{report.invoiced.length}</td><td style={{ ...td, fontWeight: '800' }}>{report.dispatched.length}</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+          {report.dayRows.length > 0 && dayPaged.footer}
+        </div>
+      </BusinzSectionCard>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '16px', minWidth: 0 }}>
+        <BusinzSectionCard title={`Product-wise Gone Out — Items (${shownItems.length})`}>
+          <ProductFilter label="Filter products" options={itemNames} selected={activeItemFilter} onChange={setItemFilter} />
+          <div style={tableWrap}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead><tr style={theadRow}><th style={th}>Item</th><th style={th}>UOM</th><th style={th}>Qty</th><th style={th}>Orders</th></tr></thead>
+              <tbody>
+                {shownItems.length === 0 ? (
+                  <tr><td colSpan={4}><Empty text="No dispatched orders in this period." /></td></tr>
+                ) : itemPaged.visible.map(it => (
+                  <tr key={`${it.name}|${it.uom}`}><td style={td}>{it.name}</td><td style={td}>{it.uom}</td><td style={{ ...td, fontWeight: '800' }}>{it.qty.toLocaleString('en-IN')}</td><td style={td}>{it.orders.size}</td></tr>
+                ))}
+              </tbody>
+            </table>
+            {shownItems.length > 0 && itemPaged.footer}
+          </div>
+        </BusinzSectionCard>
+
+        <BusinzSectionCard title={`Product-wise Gone Out — Preset Kits (${shownKits.length})`}>
+          <ProductFilter label="Filter kits" options={kitNames} selected={activeKitFilter} onChange={setKitFilter} />
+          <div style={tableWrap}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead><tr style={theadRow}><th style={th}>Preset Kit</th><th style={th}>Qty</th><th style={th}>Orders</th></tr></thead>
+              <tbody>
+                {shownKits.length === 0 ? (
+                  <tr><td colSpan={3}><Empty text="No preset kits dispatched in this period." /></td></tr>
+                ) : kitPaged.visible.map(k => (
+                  <tr key={`${k.name}|${k.unit}`}><td style={td}>{k.name}</td><td style={{ ...td, fontWeight: '800', whiteSpace: 'nowrap' }}>{k.qty.toLocaleString('en-IN')} {k.unit}</td><td style={td}>{k.orders.size}</td></tr>
+                ))}
+              </tbody>
+            </table>
+            {shownKits.length > 0 && kitPaged.footer}
+          </div>
+        </BusinzSectionCard>
+      </div>
+
+      <BusinzSectionCard
+        title={`BOMs in this Period (${shownBoms.length})`}
+        rightNode={
+          <div style={{ display: 'flex', alignItems: 'center', gap: '7px', backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '5px 10px', minWidth: '230px' }}>
+            <Search size={13} color="#94A3B8" />
+            <input type="text" value={bomSearch} onChange={(e) => setBomSearch(e.target.value)} placeholder="Search BOM, customer or invoice"
+              style={{ border: 'none', outline: 'none', backgroundColor: 'transparent', fontSize: '12px', color: '#0F172A', width: '100%' }} />
+          </div>
+        }
+      >
+        <div style={tableWrap}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead><tr style={theadRow}><th style={th}>BOM Code</th><th style={th}>Customer</th><th style={th}>What happened</th><th style={th}>Current Status</th><th style={th}>Invoice No</th><th style={th}>Value</th></tr></thead>
+            <tbody>
+              {shownBoms.length === 0 ? (
+                <tr><td colSpan={6}><Empty text="No BOMs in this period." /></td></tr>
+              ) : bomPaged.visible.map(r => (
+                <tr key={r.code}>
+                  <td style={{ ...td, fontWeight: '800', color: '#0E7490', whiteSpace: 'nowrap' }}>{r.code}</td>
+                  <td style={td}>{r.customer}</td>
+                  <td style={td}>{r.events.join(' · ')}</td>
+                  <td style={td}>
+                    <span style={{ fontSize: '11px', fontWeight: '700', padding: '3px 9px', borderRadius: '999px', border: '1px solid #E2E8F0', backgroundColor: '#F8FAFC', color: '#475569', whiteSpace: 'nowrap' }}>{r.status}</span>
+                  </td>
+                  <td style={{ ...td, whiteSpace: 'nowrap' }}>{r.invoiceNo || '—'}</td>
+                  <td style={{ ...td, fontWeight: '700', whiteSpace: 'nowrap' }}>₹{r.value.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {shownBoms.length > 0 && bomPaged.footer}
+        </div>
+      </BusinzSectionCard>
+    </div>
+  );
+}
